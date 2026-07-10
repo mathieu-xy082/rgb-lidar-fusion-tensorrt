@@ -1,0 +1,31 @@
+image: python:3.11-slim
+
+stages:
+  - validate
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PDM_CHECK_UPDATE: "false"
+  PDM_CACHE_DIR: "$CI_PROJECT_DIR/.pdm-cache"
+  PDM_VENV_IN_PROJECT: "1"
+
+cache:
+  key:
+    files:
+      - pdm.lock
+  paths:
+    - .pdm-cache/
+    - .venv/
+
+validate:
+  stage: validate
+  before_script:
+    - python --version
+    - python -m pip install --upgrade pip pdm
+    - pdm --version
+  script:
+    - PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev
+    - PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH

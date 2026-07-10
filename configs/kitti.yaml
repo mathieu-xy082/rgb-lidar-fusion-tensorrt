@@ -1,0 +1,22 @@
+dataset:
+  name: kitti
+  root: data/kitti
+  camera: image_2
+  lidar: velodyne
+  calibration: calib
+
+projection:
+  image_width: 1242
+  image_height: 375
+  max_depth_m: 80.0
+  channels:
+    - depth
+    - x_vehicle
+    - y_vehicle
+    - z_vehicle
+    - intensity
+    - mask
+
+model:
+  input_channels: 9 # RGB + depth/x/y/z/intensity/mask
+  target_runtime: tensorrt_fp16

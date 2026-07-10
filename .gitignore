@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Data and generated outputs
+data/kitti/
+data/raw/
+data/processed/
+results/**/*.png
+results/**/*.jpg
+results/**/*.mp4
+results/**/*.onnx
+results/**/*.engine
+results/**/*.plan
+*.pt
+*.pth
+*.ckpt
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

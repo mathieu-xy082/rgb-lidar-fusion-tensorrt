@@ -6,7 +6,9 @@ This repository starts with a deliberately small PDM environment so the geometry
 
 ### Default dependencies
 
-- `numpy` — geometry, projection, sparse maps.
+- `numpy` — geometry, projection, sparse maps, and lightweight synthetic dataset fixtures.
+
+Milestone 2 dataset work stays PyTorch-free for now: `KittiSparseLidarDataset` implements the Python sequence protocol and returns NumPy arrays (`image`, `lidar_maps`, `target`, `meta`). Add a PyTorch adapter only when training/data-loader integration starts.
 
 ### `dev` group
 

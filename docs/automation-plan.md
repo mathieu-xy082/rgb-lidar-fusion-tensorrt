@@ -1,0 +1,58 @@
+# Automation plan
+
+Ce fichier documente les tâches Hermes planifiées pour le projet RGB-LiDAR Fusion TensorRT.
+
+Repository local :
+
+```text
+/root/ai-projects/rgb-lidar-fusion-tensorrt
+```
+
+Repository GitLab :
+
+```text
+git@gitlab.com:zeratulakek/rgb-lidar-fusion-tensorrt.git
+https://gitlab.com/zeratulakek/rgb-lidar-fusion-tensorrt
+```
+
+## Règle générale
+
+- `main` reste stable.
+- Chaque tâche secondaire travaille sur sa branche dédiée.
+- Les branches secondaires doivent être reviewées avec Mathieu avant intégration.
+- Une branche prête doit alerter explicitement : `BRANCHE PRÊTE POUR REVIEW: <branch>`.
+- Les tâches ne doivent pas fusionner dans `main` sans instruction explicite.
+
+## Tâche maîtresse
+
+| Job ID | Nom | Cadence | Répétitions | Rôle |
+|---|---|---:|---:|---|
+| `5cb7256a80fb` | RGB-LiDAR master roadmap coordinator | 12h | 60 | Surveille les branches, agrège les outputs des tâches secondaires, recommande reviews/intégrations |
+
+La tâche maîtresse reçoit comme contexte les derniers outputs des tâches secondaires via `context_from`.
+
+## Tâches secondaires
+
+| Job ID | Nom | Branche | Cadence | Répétitions | Objectif |
+|---|---|---|---:|---:|---|
+| `7ba3e771823b` | RGB-LiDAR CI workstream | `ci/gitlab-pipeline` | 8h | 10 | CI GitLab PDM minimale |
+| `4e740e9f0926` | RGB-LiDAR KITTI projection workstream | `feature/kitti-calibration-projection` | 12h | 14 | Calibration/projection KITTI + visualisation |
+| `c14fc66ace0b` | RGB-LiDAR dataset workstream | `feature/kitti-dataset-lidar-maps` | 12h | 14 | Dataset RGB + cartes LiDAR sparse |
+| `5ba77d52d513` | RGB-LiDAR baseline model workstream | `feature/baseline-fusion-model` | 24h | 10 | Baseline PyTorch simple |
+| `3b5996eb00b6` | RGB-LiDAR ONNX export workstream | `feature/onnx-export-validation` | 24h | 10 | Export ONNX + validation |
+| `cbba862ccdfb` | RGB-LiDAR TensorRT benchmark planning workstream | `feature/tensorrt-benchmark-plan` | 48h | 6 | Plan/scripts TensorRT FP16 benchmark |
+
+## Ordre recommandé de review
+
+1. `ci/gitlab-pipeline`
+2. `feature/kitti-calibration-projection`
+3. `feature/kitti-dataset-lidar-maps`
+4. `feature/baseline-fusion-model`
+5. `feature/onnx-export-validation`
+6. `feature/tensorrt-benchmark-plan`
+
+## Commande de validation locale
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
+```

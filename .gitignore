@@ -7,6 +7,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+.pdm-python
 
 # Data and generated outputs
 data/kitti/

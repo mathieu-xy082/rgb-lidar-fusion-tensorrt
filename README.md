@@ -96,12 +96,22 @@ scripts/                     Commandes utilitaires
 
 ## Installation dev
 
+Ce projet utilise **PDM**, comme XoloLingua, pour garder un environnement reproductible et des commandes standardisées.
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-pytest
+pdm install -G dev
+pdm run validate
 ```
+
+Commandes utiles :
+
+```bash
+pdm run test      # lance pytest
+pdm run smoke     # lance le smoke test de projection synthétique
+pdm run validate  # test + smoke
+```
+
+Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## Dataset
 

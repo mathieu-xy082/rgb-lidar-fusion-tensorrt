@@ -1,35 +1,30 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [project]
 name = "rgb-lidar-fusion-tensorrt"
 version = "0.1.0"
 description = "Camera-LiDAR fusion prototype with PyTorch, ONNX, and TensorRT deployment path."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Mathieu" }]
 dependencies = [
   "numpy>=1.24",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest>=8",
 ]
-ml = [
-  "torch",
-  "torchvision",
-  "onnx",
-  "onnxruntime",
-]
-visualization = [
-  "opencv-python",
-  "matplotlib",
-]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.pdm]
+distribution = true
+
+[tool.pdm.scripts]
+test = "pytest"
+smoke = "python scripts/smoke_project_lidar.py"
+validate = { composite = ["test", "smoke"] }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

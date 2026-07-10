@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -27,6 +28,17 @@ def _as_lidar_array(points: np.ndarray) -> np.ndarray:
         intensity = np.ones((arr.shape[0], 1), dtype=np.float32)
         arr = np.concatenate([arr, intensity], axis=1)
     return arr
+
+
+def load_velodyne_bin(path: str | Path) -> np.ndarray:
+    """Load a KITTI Velodyne ``.bin`` file as ``[N, 4]`` float32 XYZI points."""
+
+    values = np.fromfile(Path(path), dtype=np.float32)
+    if values.size % 4 != 0:
+        raise ValueError(
+            f"KITTI Velodyne file must contain a multiple of 4 float32 values, got {values.size}."
+        )
+    return values.reshape(-1, 4)
 
 
 def project_lidar_to_image(
@@ -71,7 +83,10 @@ def project_lidar_to_image(
             intensity=np.empty((0,), dtype=np.float32),
         )
 
-    projected = (calibration.k @ camera_xyz.T).T
+    if calibration.projection_matrix is None:
+        projected = (calibration.k @ camera_xyz.T).T
+    else:
+        projected = (calibration.projection_matrix @ camera_h[positive_depth].T).T
     pixels = projected[:, :2] / projected[:, 2:3]
 
     inside = (

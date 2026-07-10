@@ -121,4 +121,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. Première cible : projection géométrique LiDAR → image et génération de cartes sparse depth/geometry.
+Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image et génère des cartes sparse synthétiques. Prochaine cible : générer un overlay image visualisable à partir d'un petit échantillon KITTI local non committé.

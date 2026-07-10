@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from rgb_lidar_fusion import calibration as calibration_module
+from rgb_lidar_fusion import project_lidar as project_lidar_module
 from rgb_lidar_fusion.calibration import CameraCalibration, make_identity_calibration
 from rgb_lidar_fusion.project_lidar import build_sparse_lidar_maps, project_lidar_to_image
 
@@ -54,3 +56,68 @@ def test_sparse_maps_keep_nearest_point_when_pixels_collide():
     assert maps[5].sum() == 1.0
     assert maps[0, 5, 5] == pytest.approx(0.1)  # 10m / 100m, nearest point wins
     assert maps[4, 5, 5] == pytest.approx(0.8)
+
+
+def test_parse_kitti_calibration_file_builds_rectified_velodyne_to_camera_transform(tmp_path):
+    calib_file = tmp_path / "000000.txt"
+    calib_file.write_text(
+        "\n".join(
+            [
+                "P2: 7.0 0.0 6.0 0.0 0.0 8.0 5.0 0.0 0.0 0.0 1.0 0.0",
+                "R0_rect: 0.0 -1.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0",
+                "Tr_velo_to_cam: 1.0 0.0 0.0 1.0 0.0 1.0 0.0 2.0 0.0 0.0 1.0 3.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    calibration = calibration_module.parse_kitti_calibration_file(calib_file)
+
+    np.testing.assert_allclose(
+        calibration.k,
+        [[7.0, 0.0, 6.0], [0.0, 8.0, 5.0], [0.0, 0.0, 1.0]],
+    )
+    expected_transform = np.array(
+        [
+            [0.0, -1.0, 0.0, -2.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 3.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_allclose(calibration.t_camera_from_vehicle, expected_transform)
+
+
+def test_load_velodyne_bin_reads_kitti_float32_xyzi_points(tmp_path):
+    velodyne_file = tmp_path / "000000.bin"
+    expected_points = np.array(
+        [[1.0, 2.0, 3.0, 0.5], [4.0, 5.0, 6.0, 0.25]],
+        dtype=np.float32,
+    )
+    expected_points.tofile(velodyne_file)
+
+    points = project_lidar_module.load_velodyne_bin(velodyne_file)
+
+    assert points.dtype == np.float32
+    np.testing.assert_allclose(points, expected_points)
+
+
+def test_kitti_projection_uses_full_p2_projection_matrix_translation(tmp_path):
+    calib_file = tmp_path / "000001.txt"
+    calib_file.write_text(
+        "\n".join(
+            [
+                "P2: 1.0 0.0 0.0 10.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0",
+                "R0_rect: 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0",
+                "Tr_velo_to_cam: 1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    calibration = calibration_module.parse_kitti_calibration_file(calib_file)
+    points = np.array([[0.0, 0.0, 10.0, 1.0]], dtype=np.float32)
+
+    projected = project_lidar_to_image(points, calibration, image_shape=(10, 10))
+
+    np.testing.assert_allclose(projected.pixels, [[1.0, 0.0]], atol=1e-6)

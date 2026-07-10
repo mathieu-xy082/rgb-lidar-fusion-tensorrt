@@ -54,7 +54,8 @@ La tâche maîtresse reçoit comme contexte les derniers outputs des tâches sec
 | `7ba3e771823b` | RGB-LiDAR CI workstream | `ci/gitlab-pipeline` | 8h | 10 | CI GitLab PDM minimale | intégrée dans `main` |
 | `47faa6f33ca9` | RGB-LiDAR CI staged pipeline workstream | `ci/expand-pipeline-stages` | 12h | 8 | CI multi-stages/jobs | active |
 | `4e740e9f0926` | RGB-LiDAR KITTI projection workstream | `feature/kitti-calibration-projection` | 12h | 14 | Calibration/projection KITTI + visualisation | active |
-| `c14fc66ace0b` | RGB-LiDAR dataset workstream | `feature/kitti-dataset-lidar-maps` | 12h | 14 | Dataset RGB + cartes LiDAR sparse | active |
+| `PENDING` | RGB-LiDAR surface splatting workstream | `feature/lidar-surface-splatting` | 12h | 12 | Niveau 1 : splatting local simple + cartes `depth_expanded`/`confidence` | à créer |
+| `c14fc66ace0b` | RGB-LiDAR dataset workstream | `feature/kitti-dataset-lidar-maps` | 12h | 14 | Dataset RGB + cartes LiDAR sparse/expanded | active |
 | `5ba77d52d513` | RGB-LiDAR baseline model workstream | `feature/baseline-fusion-model` | 24h | 10 | Baseline PyTorch simple | active |
 | `3b5996eb00b6` | RGB-LiDAR ONNX export workstream | `feature/onnx-export-validation` | 24h | 10 | Export ONNX + validation | active |
 | `cbba862ccdfb` | RGB-LiDAR TensorRT benchmark planning workstream | `feature/tensorrt-benchmark-plan` | 48h | 6 | Plan/scripts TensorRT FP16 benchmark | active |
@@ -63,10 +64,11 @@ La tâche maîtresse reçoit comme contexte les derniers outputs des tâches sec
 
 1. `ci/expand-pipeline-stages`
 2. `feature/kitti-calibration-projection`
-3. `feature/kitti-dataset-lidar-maps`
-4. `feature/baseline-fusion-model`
-5. `feature/onnx-export-validation`
-6. `feature/tensorrt-benchmark-plan`
+3. `feature/lidar-surface-splatting`
+4. `feature/kitti-dataset-lidar-maps`
+5. `feature/baseline-fusion-model`
+6. `feature/onnx-export-validation`
+7. `feature/tensorrt-benchmark-plan`
 
 ## Commande de validation locale
 

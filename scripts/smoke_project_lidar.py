@@ -10,13 +10,28 @@ import argparse
 
 import numpy as np
 
-from rgb_lidar_fusion.calibration import make_identity_calibration
+from rgb_lidar_fusion.calibration import make_identity_calibration, parse_kitti_calibration_file
 from rgb_lidar_fusion.project_lidar import (
     build_sparse_lidar_maps,
+    load_velodyne_bin,
     project_lidar_to_image,
     render_lidar_overlay,
     write_ppm_image,
 )
+
+
+def _parse_image_size(value: str) -> tuple[int, int]:
+    """Parse CLI image size as HEIGHTxWIDTH."""
+
+    try:
+        height_text, width_text = value.lower().split("x", maxsplit=1)
+        height = int(height_text)
+        width = int(width_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("image size must use HEIGHTxWIDTH, e.g. 375x1242") from exc
+    if height <= 0 or width <= 0:
+        raise argparse.ArgumentTypeError("image size dimensions must be positive")
+    return height, width
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -25,18 +40,35 @@ def main(argv: list[str] | None = None) -> None:
         "--overlay-output",
         help="Optional path for an ASCII PPM LiDAR overlay generated from synthetic points.",
     )
+    parser.add_argument("--calib-file", help="Optional KITTI calibration .txt file to project.")
+    parser.add_argument("--velodyne-file", help="Optional KITTI Velodyne .bin file to project.")
+    parser.add_argument(
+        "--image-size",
+        type=_parse_image_size,
+        default=(360, 640),
+        help="Image canvas size as HEIGHTxWIDTH (default: 360x640).",
+    )
     args = parser.parse_args(argv)
 
-    image_shape = (360, 640)
-    calibration = make_identity_calibration(fx=100, fy=100, cx=320, cy=180)
-    points = np.array(
-        [
-            [0.0, 0.0, 10.0, 0.9],
-            [1.0, 0.5, 20.0, 0.6],
-            [-1.0, 0.2, 15.0, 0.7],
-        ],
-        dtype=np.float32,
-    )
+    image_shape = args.image_size
+    if bool(args.calib_file) != bool(args.velodyne_file):
+        parser.error("--calib-file and --velodyne-file must be provided together")
+    if args.calib_file:
+        calibration = parse_kitti_calibration_file(args.calib_file)
+        points = load_velodyne_bin(args.velodyne_file)
+        print("mode=kitti")
+        print(f"loaded_points={points.shape[0]}")
+    else:
+        calibration = make_identity_calibration(fx=100, fy=100, cx=320, cy=180)
+        points = np.array(
+            [
+                [0.0, 0.0, 10.0, 0.9],
+                [1.0, 0.5, 20.0, 0.6],
+                [-1.0, 0.2, 15.0, 0.7],
+            ],
+            dtype=np.float32,
+        )
+        print("mode=synthetic")
     projected = project_lidar_to_image(points, calibration, image_shape=image_shape)
     maps = build_sparse_lidar_maps(projected, image_shape=image_shape)
     print(f"projected_points={projected.pixels.shape[0]}")

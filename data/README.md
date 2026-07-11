@@ -60,3 +60,14 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
 
 Garder les sorties sous `/tmp`, `results/` local ignoré, ou un autre dossier de
 travail hors Git.
+
+Avec un petit échantillon KITTI local, la même commande peut charger les fichiers
+calibration/Velodyne et écrire un PPM sur fond noir à la résolution de l'image :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --calib-file data/kitti/training/calib/000000.txt \
+  --velodyne-file data/kitti/training/velodyne/000000.bin \
+  --image-size 375x1242 \
+  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
+```

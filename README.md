@@ -122,6 +122,22 @@ Le fichier produit est un PPM ASCII (`P3`) ouvrable avec la plupart des viewers
 image ou convertible localement. Les overlays générés et données KITTI restent
 hors Git.
 
+Pour projeter un petit échantillon KITTI local déjà téléchargé sans committer les
+données, fournir la calibration, le Velodyne `.bin` et la taille image
+`HAUTEURxLARGEUR` :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --calib-file data/kitti/training/calib/000000.txt \
+  --velodyne-file data/kitti/training/velodyne/000000.bin \
+  --image-size 375x1242 \
+  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
+```
+
+La commande écrit l'overlay sur un fond noir de même résolution que l'image KITTI
+et affiche le nombre de points chargés/projetés. Garder le PPM généré sous
+`/tmp`, `results/` local ignoré, ou un autre dossier hors Git.
+
 Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## Dataset
@@ -132,4 +148,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse, et produit un overlay PPM synthétique visualisable sans dépendance lourde. Prochaine cible : adapter la commande d'overlay à un petit échantillon KITTI local non committé.
+Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse, et produit un overlay PPM synthétique ou KITTI local visualisable sans dépendance lourde. Prochaine cible : rendre l'overlay optionnellement basé sur l'image RGB réelle via une dépendance image légère ou un groupe PDM dédié.

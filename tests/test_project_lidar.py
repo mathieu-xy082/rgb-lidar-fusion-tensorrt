@@ -173,3 +173,50 @@ def test_smoke_script_can_generate_synthetic_overlay_ppm(tmp_path):
     assert completed.returncode == 0, completed.stderr
     assert "overlay_output=" in completed.stdout
     assert output_file.read_text(encoding="ascii").startswith("P3\n640 360\n255\n")
+
+
+def test_smoke_script_can_project_local_kitti_calib_and_velodyne_sample(tmp_path):
+    calib_file = tmp_path / "000000.txt"
+    calib_file.write_text(
+        "\n".join(
+            [
+                "P2: 10.0 0.0 15.0 0.0 0.0 10.0 10.0 0.0 0.0 0.0 1.0 0.0",
+                "R0_rect: 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0",
+                "Tr_velo_to_cam: 1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    velodyne_file = tmp_path / "000000.bin"
+    np.array(
+        [
+            [0.0, 0.0, 10.0, 0.9],
+            [100.0, 0.0, 10.0, 0.1],
+        ],
+        dtype=np.float32,
+    ).tofile(velodyne_file)
+    output_file = tmp_path / "kitti_overlay.ppm"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_project_lidar.py",
+            "--calib-file",
+            str(calib_file),
+            "--velodyne-file",
+            str(velodyne_file),
+            "--image-size",
+            "20x30",
+            "--overlay-output",
+            str(output_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "mode=kitti" in completed.stdout
+    assert "loaded_points=2" in completed.stdout
+    assert "projected_points=1" in completed.stdout
+    assert output_file.read_text(encoding="ascii").startswith("P3\n30 20\n255\n")

@@ -50,3 +50,13 @@ PY
 ```
 
 Pour une première visualisation sans données KITTI, `PDM_IGNORE_ACTIVE_VENV=1 pdm run smoke` génère la projection synthétique et les cartes LiDAR sparse en mémoire.
+
+Pour écrire un overlay synthétique visualisable sans committer d'image générée :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --overlay-output /tmp/rgb_lidar_synthetic_overlay.ppm
+```
+
+Garder les sorties sous `/tmp`, `results/` local ignoré, ou un autre dossier de
+travail hors Git.

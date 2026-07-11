@@ -111,6 +111,17 @@ pdm run smoke     # lance le smoke test de projection synthétique
 pdm run validate  # test + smoke
 ```
 
+Pour générer une visualisation synthétique sans dépendance image externe :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --overlay-output /tmp/rgb_lidar_synthetic_overlay.ppm
+```
+
+Le fichier produit est un PPM ASCII (`P3`) ouvrable avec la plupart des viewers
+image ou convertible localement. Les overlays générés et données KITTI restent
+hors Git.
+
 Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## Dataset
@@ -121,4 +132,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image et génère des cartes sparse synthétiques. Prochaine cible : générer un overlay image visualisable à partir d'un petit échantillon KITTI local non committé.
+Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse, et produit un overlay PPM synthétique visualisable sans dépendance lourde. Prochaine cible : adapter la commande d'overlay à un petit échantillon KITTI local non committé.

@@ -145,3 +145,63 @@ def build_sparse_lidar_maps(
         maps[5, v, u] = 1.0
 
     return maps
+
+
+def _as_rgb_image(image: np.ndarray) -> np.ndarray:
+    arr = np.asarray(image)
+    if arr.ndim != 3 or arr.shape[2] != 3:
+        raise ValueError("RGB image must have shape [H, W, 3].")
+    if arr.dtype != np.uint8:
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return arr
+
+
+def render_lidar_overlay(
+    image: np.ndarray,
+    projected: ProjectedLidar,
+    max_depth_m: float = 80.0,
+    point_radius: int = 1,
+) -> np.ndarray:
+    """Draw projected LiDAR points over an RGB image.
+
+    Points are colored by camera depth with a simple red-to-blue ramp: near
+    points are red, far points are blue. The input image is never mutated.
+    """
+
+    if max_depth_m <= 0:
+        raise ValueError("max_depth_m must be positive.")
+    if point_radius < 0:
+        raise ValueError("point_radius must be non-negative.")
+
+    base = _as_rgb_image(image)
+    overlay = base.copy()
+    height, width = overlay.shape[:2]
+
+    if projected.pixels.shape[0] == 0:
+        return overlay
+
+    uv = np.rint(projected.pixels).astype(np.int32)
+    depth_ratio = np.clip(projected.camera_points[:, 2] / max_depth_m, 0.0, 1.0)
+
+    red = np.floor((1.0 - depth_ratio) * 255.0).astype(np.uint8)
+    blue = np.rint(depth_ratio * 255.0).astype(np.uint8)
+
+    for idx, (u, v) in enumerate(uv):
+        color = np.array([red[idx], 0, blue[idx]], dtype=np.uint8)
+        u_min = max(0, u - point_radius)
+        u_max = min(width - 1, u + point_radius)
+        v_min = max(0, v - point_radius)
+        v_max = min(height - 1, v + point_radius)
+        overlay[v_min : v_max + 1, u_min : u_max + 1] = color
+
+    return overlay
+
+
+def write_ppm_image(path: str | Path, image: np.ndarray) -> None:
+    """Write an RGB image as ASCII PPM for dependency-free visual checks."""
+
+    rgb = _as_rgb_image(image)
+    height, width = rgb.shape[:2]
+    flat_values = " ".join(str(int(value)) for value in rgb.reshape(-1, 3).ravel())
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(f"P3\n{width} {height}\n255\n{flat_values}\n", encoding="ascii")

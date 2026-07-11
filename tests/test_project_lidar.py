@@ -1,10 +1,18 @@
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
 from rgb_lidar_fusion import calibration as calibration_module
 from rgb_lidar_fusion import project_lidar as project_lidar_module
 from rgb_lidar_fusion.calibration import CameraCalibration, make_identity_calibration
-from rgb_lidar_fusion.project_lidar import build_sparse_lidar_maps, project_lidar_to_image
+from rgb_lidar_fusion.project_lidar import (
+    build_sparse_lidar_maps,
+    project_lidar_to_image,
+    render_lidar_overlay,
+    write_ppm_image,
+)
 
 
 def test_identity_projection_keeps_points_in_front_and_inside_image():
@@ -121,3 +129,47 @@ def test_kitti_projection_uses_full_p2_projection_matrix_translation(tmp_path):
     projected = project_lidar_to_image(points, calibration, image_shape=(10, 10))
 
     np.testing.assert_allclose(projected.pixels, [[1.0, 0.0]], atol=1e-6)
+
+
+def test_render_lidar_overlay_draws_depth_colored_points_without_mutating_image():
+    image = np.zeros((5, 6, 3), dtype=np.uint8)
+    calibration = make_identity_calibration(fx=1, fy=1, cx=2, cy=2)
+    points = np.array(
+        [
+            [0.0, 0.0, 5.0, 1.0],
+            [20.0, 0.0, 10.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+    projected = project_lidar_to_image(points, calibration, image_shape=(5, 6))
+
+    overlay = render_lidar_overlay(image, projected, max_depth_m=10.0, point_radius=0)
+
+    assert overlay.dtype == np.uint8
+    assert image.sum() == 0
+    np.testing.assert_array_equal(overlay[2, 2], [127, 0, 128])
+    np.testing.assert_array_equal(overlay[2, 2 + 20 // 10], [0, 0, 255])
+
+
+def test_write_ppm_image_saves_ascii_visualization(tmp_path):
+    output_file = tmp_path / "overlay.ppm"
+    image = np.array([[[255, 0, 0], [0, 128, 255]]], dtype=np.uint8)
+
+    write_ppm_image(output_file, image)
+
+    assert output_file.read_text(encoding="ascii") == "P3\n2 1\n255\n255 0 0 0 128 255\n"
+
+
+def test_smoke_script_can_generate_synthetic_overlay_ppm(tmp_path):
+    output_file = tmp_path / "synthetic_overlay.ppm"
+
+    completed = subprocess.run(
+        [sys.executable, "scripts/smoke_project_lidar.py", "--overlay-output", str(output_file)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "overlay_output=" in completed.stdout
+    assert output_file.read_text(encoding="ascii").startswith("P3\n640 360\n255\n")

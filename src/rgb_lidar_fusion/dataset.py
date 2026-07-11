@@ -39,6 +39,7 @@ class KittiSparseLidarDataset:
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         sample = self.samples[index]
+        self._validate_sample(sample, index)
         image_path = self.root / sample["image"]
         lidar_path = self.root / sample["lidar"]
         self._ensure_exists(image_path)
@@ -64,6 +65,14 @@ class KittiSparseLidarDataset:
                 "image_shape": [image_shape[0], image_shape[1]],
             },
         }
+
+    @staticmethod
+    def _validate_sample(sample: dict[str, Any], index: int) -> None:
+        required = ("id", "image", "lidar", "calibration")
+        missing = [field for field in required if field not in sample]
+        if missing:
+            sample_id = sample.get("id", f"at index {index}")
+            raise ValueError(f"Manifest sample {sample_id} is missing required field(s): {', '.join(missing)}")
 
     @staticmethod
     def _ensure_exists(path: Path) -> None:

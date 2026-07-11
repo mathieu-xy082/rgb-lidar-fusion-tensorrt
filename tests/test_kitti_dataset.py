@@ -31,3 +31,10 @@ def test_dataset_rejects_missing_sample_files():
 
     with pytest.raises(FileNotFoundError, match="missing-image.npy"):
         _ = dataset[0]
+
+
+def test_dataset_reports_missing_required_manifest_fields():
+    dataset = KittiSparseLidarDataset(FIXTURE_ROOT, manifest_name="missing-field-manifest.json")
+
+    with pytest.raises(ValueError, match="sample 000002.*lidar"):
+        _ = dataset[0]

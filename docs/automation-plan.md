@@ -39,6 +39,14 @@ ci/expand-pipeline-stages
 
 Objectif : faire évoluer la CI vers plusieurs stages/jobs utiles sans sur-engineering.
 
+La pipeline cible reste légère et explicite :
+
+- `quality` vérifie que le lockfile PDM reste cohérent avec `pyproject.toml`.
+- `test` installe les dépendances de développement puis lance la suite `pytest`.
+- `smoke` réinstalle depuis le cache PDM et exécute le smoke test synthétique de projection LiDAR.
+
+Le script local de référence reste `PDM_IGNORE_ACTIVE_VENV=1 pdm run validate`, qui agrège `test` et `smoke` sans ajouter de dépendances lourdes PyTorch / ONNX / TensorRT.
+
 ## Tâche maîtresse
 
 | Job ID | Nom | Cadence | Répétitions | Rôle |

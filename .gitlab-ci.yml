@@ -1,7 +1,9 @@
 image: python:3.11-slim
 
 stages:
-  - validate
+  - quality
+  - test
+  - smoke
 
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -17,15 +19,37 @@ cache:
     - .pdm-cache/
     - .venv/
 
-validate:
-  stage: validate
+.pdm-job:
   before_script:
     - python --version
     - python -m pip install --upgrade pip pdm
     - pdm --version
+
+dependency-check:
+  stage: quality
+  extends: .pdm-job
+  script:
+    - pdm lock --check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+test:
+  stage: test
+  extends: .pdm-job
   script:
     - PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev
-    - PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
+    - PDM_IGNORE_ACTIVE_VENV=1 pdm run test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+smoke:
+  stage: smoke
+  extends: .pdm-job
+  script:
+    - PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev
+    - PDM_IGNORE_ACTIVE_VENV=1 pdm run smoke
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH

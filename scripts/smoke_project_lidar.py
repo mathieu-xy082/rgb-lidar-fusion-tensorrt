@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from rgb_lidar_fusion.calibration import make_identity_calibration, parse_kitti_calibration_file
+from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
 from rgb_lidar_fusion.project_lidar import (
     build_sparse_lidar_maps,
     load_velodyne_bin,
@@ -105,6 +106,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         image_shape = (360, 640) if args.image_size is None else args.image_size
     print(f"image_shape={image_shape[0]}x{image_shape[1]}")
+
     if bool(args.calib_file) != bool(args.velodyne_file):
         parser.error("--calib-file and --velodyne-file must be provided together")
     if args.calib_file:
@@ -116,11 +118,21 @@ def main(argv: list[str] | None = None) -> None:
         calibration = make_identity_calibration(fx=100, fy=100, cx=320, cy=180)
         points = SYNTHETIC_POINTS
         print("mode=synthetic")
+
     projected = project_lidar_to_image(points, calibration, image_shape=image_shape)
     maps = build_sparse_lidar_maps(projected, image_shape=image_shape)
+    splat = splat_sparse_depth(
+        sparse_depth=maps[0],
+        sparse_mask=maps[5] > 0.0,
+        config=SplattingConfig(radius_px=2, sigma_px=1.0),
+    )
+
     print(f"projected_points={projected.pixels.shape[0]}")
     print(f"lidar_maps_shape={maps.shape}")
     print(f"occupied_pixels={int(maps[5].sum())}")
+    print(f"splatted_pixels={int((splat.confidence > 0.0).sum())}")
+    print(f"splat_max_confidence={float(splat.confidence.max()):.3f}")
+
     if args.sparse_output:
         np.savez_compressed(args.sparse_output, lidar_maps=maps)
         print(f"sparse_output={args.sparse_output}")

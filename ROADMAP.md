@@ -75,6 +75,8 @@ Règles de conception :
 
 Évolutions possibles après review : propagation image-guidée / edge-aware, puis plan local, puis surface locale plus expressive.
 
+Statut branche `feature/lidar-surface-splatting` : API niveau 1 ajoutée dans `rgb_lidar_fusion.lidar_splatting` avec tests synthétiques. Les cartes sparse restent exposées séparément dans le résultat `SplattedDepth`; la stratégie de conflit documentée est `nearest_depth_then_confidence`.
+
 ## Tâche maîtresse
 
 La tâche maîtresse ne doit pas coder à la place des branches secondaires. Elle doit :

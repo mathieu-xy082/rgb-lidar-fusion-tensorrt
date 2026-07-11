@@ -169,6 +169,26 @@ future optionnelle.
 
 Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
+## LiDAR local surface splatting — niveau 1
+
+Le module `rgb_lidar_fusion.lidar_splatting` ajoute une représentation séparée des cartes sparse brutes :
+
+```python
+from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
+
+splat = splat_sparse_depth(
+    sparse_depth=lidar_maps[0],
+    sparse_mask=lidar_maps[5] > 0,
+    config=SplattingConfig(radius_px=2, sigma_px=1.0),
+)
+depth_expanded = splat.depth_expanded
+confidence = splat.confidence
+```
+
+Règle volontairement simple : chaque point LiDAR valide est copié dans un voisinage carré de rayon `radius_px`; la confiance suit une décroissance gaussienne `exp(-distance_px² / (2 * sigma_px²))`. En cas de chevauchement, la résolution est déterministe : la profondeur la plus proche gagne, puis la confiance la plus forte, puis l'ordre source row-major.
+
+Limites assumées pour cette étape : pas de propagation image-guidée/edge-aware, pas d'estimation de plan local, pas de surface concave, et aucune dépendance PyTorch/ONNX/TensorRT. Les sorties `depth_expanded` et `confidence` complètent les cartes sparse, elles ne les remplacent pas.
+
 ## Dataset
 
 Dataset recommandé pour démarrer : **KITTI object detection**.

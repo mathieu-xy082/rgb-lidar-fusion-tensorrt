@@ -1,0 +1,44 @@
+"""Minimal PyTorch baseline for RGB + sparse LiDAR map fusion.
+
+Shape contract:
+    rgb: Tensor[B, 3, H, W]
+    lidar_maps: Tensor[B, L, H, W], where L defaults to 6 channels from
+        ``build_sparse_lidar_maps`` (normalized depth, xyz, intensity, mask).
+    output: Tensor[B, output_dim]
+"""
+
+from __future__ import annotations
+
+import torch
+from torch import nn
+
+
+class BaselineFusionModel(nn.Module):
+    """Small early-fusion CNN consuming RGB and sparse LiDAR maps."""
+
+    def __init__(self, lidar_channels: int = 6, output_dim: int = 1) -> None:
+        super().__init__()
+        input_channels = 3 + lidar_channels
+        self.features = nn.Sequential(
+            nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        self.head = nn.Linear(32, output_dim)
+
+    def forward(self, rgb: torch.Tensor, lidar_maps: torch.Tensor) -> torch.Tensor:
+        """Run a forward pass.
+
+        Args:
+            rgb: RGB image batch with shape ``[B, 3, H, W]``.
+            lidar_maps: Sparse LiDAR maps with shape ``[B, L, H, W]``.
+
+        Returns:
+            Prediction tensor with shape ``[B, output_dim]``.
+        """
+
+        fused = torch.cat([rgb, lidar_maps], dim=1)
+        features = self.features(fused).flatten(1)
+        return self.head(features)

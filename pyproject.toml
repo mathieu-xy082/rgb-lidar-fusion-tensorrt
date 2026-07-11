@@ -17,6 +17,9 @@ dependencies = [
 dev = [
   "pytest>=8",
 ]
+ml = [
+  "torch>=2.3",
+]
 
 [tool.pdm]
 distribution = true

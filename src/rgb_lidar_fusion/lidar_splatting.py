@@ -130,6 +130,58 @@ def splat_sparse_depth(
     )
 
 
+def splat_projected_depth(
+    pixels: np.ndarray,
+    depths: np.ndarray,
+    image_shape: tuple[int, int],
+    config: SplattingConfig | None = None,
+) -> SplattedDepth:
+    """Rasterize projected LiDAR points, then run local depth splatting.
+
+    Args:
+        pixels: Projected image coordinates as ``[N, 2]`` with columns ``u, v``.
+        depths: Positive depth values for each projected point as ``[N]``.
+        image_shape: Output image shape as ``(height, width)``.
+        config: Splatting radius, confidence decay, and conflict rule.
+
+    Returns:
+        ``SplattedDepth`` where ``sparse_depth``/``sparse_mask`` are the raw
+        nearest-depth rasterization of the projected points, and
+        ``depth_expanded``/``confidence`` are the separate splatted maps.
+
+    Notes:
+        Points are rounded to the nearest pixel and clipped to the image bounds.
+        If several projected points land on one sparse pixel, the nearest
+        positive depth is kept before splatting.
+    """
+
+    height, width = image_shape
+    pixel_array = np.asarray(pixels, dtype=np.float32)
+    depth_array = np.asarray(depths, dtype=np.float32)
+    if pixel_array.ndim != 2 or pixel_array.shape[1] != 2:
+        raise ValueError("pixels must have shape [N, 2].")
+    if depth_array.ndim != 1 or depth_array.shape[0] != pixel_array.shape[0]:
+        raise ValueError("depths must have shape [N] matching pixels.")
+
+    sparse_depth = np.zeros((height, width), dtype=np.float32)
+    sparse_mask = np.zeros((height, width), dtype=bool)
+    if pixel_array.shape[0] == 0:
+        return splat_sparse_depth(sparse_depth, sparse_mask, config=config)
+
+    uv = np.rint(pixel_array).astype(np.int32)
+    uv[:, 0] = np.clip(uv[:, 0], 0, width - 1)
+    uv[:, 1] = np.clip(uv[:, 1], 0, height - 1)
+
+    for (u, v), depth in zip(uv, depth_array, strict=True):
+        if depth <= 0.0:
+            continue
+        if not sparse_mask[v, u] or depth < sparse_depth[v, u]:
+            sparse_depth[v, u] = depth
+            sparse_mask[v, u] = True
+
+    return splat_sparse_depth(sparse_depth, sparse_mask, config=config)
+
+
 def _candidate_wins(
     *,
     candidate_depth: float,

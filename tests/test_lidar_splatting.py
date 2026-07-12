@@ -100,3 +100,30 @@ def test_splatting_preserves_sparse_inputs_as_separate_outputs():
     assert splat.depth_expanded[2, 3] == pytest.approx(9.0)
     assert sparse_depth[2, 3] == pytest.approx(0.0)
     assert not sparse_mask[2, 3]
+
+
+def test_projected_points_input_builds_sparse_map_before_splatting():
+    from rgb_lidar_fusion.lidar_splatting import splat_projected_depth
+
+    pixels = np.array(
+        [
+            [1.2, 2.0],
+            [1.4, 2.2],
+            [4.0, 4.0],
+        ],
+        dtype=np.float32,
+    )
+    depths = np.array([8.0, 5.0, 9.0], dtype=np.float32)
+
+    splat = splat_projected_depth(
+        pixels=pixels,
+        depths=depths,
+        image_shape=(5, 5),
+        config=SplattingConfig(radius_px=0, sigma_px=1.0),
+    )
+
+    assert splat.sparse_depth[2, 1] == pytest.approx(5.0)
+    assert splat.sparse_mask[2, 1]
+    assert splat.depth_expanded[2, 1] == pytest.approx(5.0)
+    assert splat.confidence[2, 1] == pytest.approx(1.0)
+    assert splat.sparse_depth[4, 4] == pytest.approx(9.0)

@@ -174,7 +174,7 @@ Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par d
 Le module `rgb_lidar_fusion.lidar_splatting` ajoute une représentation séparée des cartes sparse brutes :
 
 ```python
-from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
+from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth, splat_projected_depth
 
 splat = splat_sparse_depth(
     sparse_depth=lidar_maps[0],
@@ -183,6 +183,17 @@ splat = splat_sparse_depth(
 )
 depth_expanded = splat.depth_expanded
 confidence = splat.confidence
+```
+
+Pour appeler le splatting directement depuis des points LiDAR déjà projetés :
+
+```python
+splat = splat_projected_depth(
+    pixels=projected.pixels,              # [N, 2] en colonnes u, v
+    depths=projected.camera_points[:, 2], # profondeur caméra positive
+    image_shape=(height, width),
+    config=SplattingConfig(radius_px=2, sigma_px=1.0),
+)
 ```
 
 Règle volontairement simple : chaque point LiDAR valide est copié dans un voisinage carré de rayon `radius_px`; la confiance suit une décroissance gaussienne `exp(-distance_px² / (2 * sigma_px²))`. En cas de chevauchement, la résolution est déterministe : la profondeur la plus proche gagne, puis la confiance la plus forte, puis l'ordre source row-major.

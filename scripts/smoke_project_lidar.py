@@ -12,7 +12,11 @@ from pathlib import Path
 import numpy as np
 
 from rgb_lidar_fusion.calibration import make_identity_calibration, parse_kitti_calibration_file
-from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
+from rgb_lidar_fusion.lidar_splatting import (
+    SplattingConfig,
+    splat_projected_depth,
+    splat_sparse_depth,
+)
 from rgb_lidar_fusion.project_lidar import (
     build_sparse_lidar_maps,
     load_velodyne_bin,
@@ -126,11 +130,18 @@ def main(argv: list[str] | None = None) -> None:
         sparse_mask=maps[5] > 0.0,
         config=SplattingConfig(radius_px=2, sigma_px=1.0),
     )
+    projected_splat = splat_projected_depth(
+        pixels=projected.pixels,
+        depths=projected.camera_points[:, 2],
+        image_shape=image_shape,
+        config=SplattingConfig(radius_px=2, sigma_px=1.0),
+    )
 
     print(f"projected_points={projected.pixels.shape[0]}")
     print(f"lidar_maps_shape={maps.shape}")
     print(f"occupied_pixels={int(maps[5].sum())}")
     print(f"splatted_pixels={int((splat.confidence > 0.0).sum())}")
+    print(f"projected_splatted_pixels={int((projected_splat.confidence > 0.0).sum())}")
     print(f"splat_max_confidence={float(splat.confidence.max()):.3f}")
 
     if args.sparse_output:

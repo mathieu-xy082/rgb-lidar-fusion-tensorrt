@@ -49,3 +49,11 @@ def test_dataset_reports_missing_required_manifest_fields():
 
     with pytest.raises(ValueError, match="sample 000002.*lidar"):
         _ = dataset[0]
+
+
+def test_dataset_rejects_manifest_without_samples(tmp_path):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('{"dataset": "synthetic"}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest.json.*samples"):
+        KittiSparseLidarDataset(tmp_path)

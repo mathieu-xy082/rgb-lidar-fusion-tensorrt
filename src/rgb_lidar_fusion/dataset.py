@@ -32,7 +32,9 @@ class KittiSparseLidarDataset:
         self.max_depth_m = max_depth_m
         with self.manifest_path.open("r", encoding="utf-8") as handle:
             manifest = json.load(handle)
-        self.samples: list[dict[str, Any]] = list(manifest.get("samples", []))
+        if "samples" not in manifest:
+            raise ValueError(f"Dataset manifest {self.manifest_path} must define a samples list.")
+        self.samples: list[dict[str, Any]] = list(manifest["samples"])
 
     def __len__(self) -> int:
         return len(self.samples)

@@ -15,6 +15,7 @@ from rgb_lidar_fusion.project_lidar import (
     build_sparse_lidar_maps,
     load_velodyne_bin,
     project_lidar_to_image,
+    read_ppm_image,
     render_lidar_overlay,
     write_ppm_image,
 )
@@ -39,6 +40,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--overlay-output",
         help="Optional path for an ASCII PPM LiDAR overlay generated from synthetic points.",
+    )
+    parser.add_argument(
+        "--image-file",
+        help="Optional ASCII PPM (P3) RGB canvas to draw the overlay on instead of a black image.",
     )
     parser.add_argument("--calib-file", help="Optional KITTI calibration .txt file to project.")
     parser.add_argument("--velodyne-file", help="Optional KITTI Velodyne .bin file to project.")
@@ -75,7 +80,17 @@ def main(argv: list[str] | None = None) -> None:
     print(f"lidar_maps_shape={maps.shape}")
     print(f"occupied_pixels={int(maps[5].sum())}")
     if args.overlay_output:
-        image = np.zeros((*image_shape, 3), dtype=np.uint8)
+        if args.image_file:
+            image = read_ppm_image(args.image_file)
+            if image.shape[:2] != image_shape:
+                parser.error(
+                    "--image-file dimensions must match --image-size "
+                    f"({image.shape[0]}x{image.shape[1]} != {image_shape[0]}x{image_shape[1]})"
+                )
+            print("image_source=ppm")
+        else:
+            image = np.zeros((*image_shape, 3), dtype=np.uint8)
+            print("image_source=blank")
         overlay = render_lidar_overlay(image, projected, max_depth_m=80.0, point_radius=2)
         write_ppm_image(args.overlay_output, overlay)
         print(f"overlay_output={args.overlay_output}")

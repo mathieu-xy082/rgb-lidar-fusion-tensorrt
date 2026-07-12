@@ -138,6 +138,23 @@ La commande écrit l'overlay sur un fond noir de même résolution que l'image K
 et affiche le nombre de points chargés/projetés. Garder le PPM généré sous
 `/tmp`, `results/` local ignoré, ou un autre dossier hors Git.
 
+Pour dessiner sur un canvas RGB local sans ajouter Pillow/OpenCV au socle léger,
+convertir ponctuellement l'image KITTI en PPM ASCII (`P3`) hors Git puis fournir
+ce canvas :
+
+```bash
+magick data/kitti/training/image_2/000000.png /tmp/kitti_000000.ppm
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --calib-file data/kitti/training/calib/000000.txt \
+  --velodyne-file data/kitti/training/velodyne/000000.bin \
+  --image-file /tmp/kitti_000000.ppm \
+  --image-size 375x1242 \
+  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
+```
+
+`--image-file` accepte uniquement un PPM ASCII `P3` de même taille que
+`--image-size`; les PNG/JPEG restent une dépendance future optionnelle.
+
 Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## Dataset
@@ -148,4 +165,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse, et produit un overlay PPM synthétique ou KITTI local visualisable sans dépendance lourde. Prochaine cible : rendre l'overlay optionnellement basé sur l'image RGB réelle via une dépendance image légère ou un groupe PDM dédié.
+Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse, et produit un overlay PPM synthétique ou KITTI local visualisable sans dépendance lourde, soit sur fond noir, soit sur un canvas RGB PPM ASCII local. Prochaine cible : rendre la lecture PNG/JPEG optionnelle via une dépendance image légère ou un groupe PDM dédié.

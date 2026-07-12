@@ -15,6 +15,7 @@ data/raw/
 data/processed/
 results/**/*.png
 results/**/*.jpg
+results/**/*.ppm
 results/**/*.mp4
 results/**/*.onnx
 results/**/*.engine

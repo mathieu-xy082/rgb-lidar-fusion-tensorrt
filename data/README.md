@@ -71,3 +71,19 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
   --image-size 375x1242 \
   --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
 ```
+
+Pour superposer les points sur une vraie image RGB sans dépendance Python lourde,
+convertir l'image localement en PPM ASCII (`P3`) et la fournir comme canvas :
+
+```bash
+magick data/kitti/training/image_2/000000.png /tmp/kitti_000000.ppm
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --calib-file data/kitti/training/calib/000000.txt \
+  --velodyne-file data/kitti/training/velodyne/000000.bin \
+  --image-file /tmp/kitti_000000.ppm \
+  --image-size 375x1242 \
+  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
+```
+
+Le PPM d'entrée et l'overlay de sortie doivent rester dans `/tmp`, `results/`
+local ignoré, ou un autre dossier hors Git.

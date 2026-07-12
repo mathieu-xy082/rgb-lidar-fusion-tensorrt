@@ -10,6 +10,7 @@ from rgb_lidar_fusion.calibration import CameraCalibration, make_identity_calibr
 from rgb_lidar_fusion.project_lidar import (
     build_sparse_lidar_maps,
     project_lidar_to_image,
+    read_ppm_image,
     render_lidar_overlay,
     write_ppm_image,
 )
@@ -160,6 +161,20 @@ def test_write_ppm_image_saves_ascii_visualization(tmp_path):
     assert output_file.read_text(encoding="ascii") == "P3\n2 1\n255\n255 0 0 0 128 255\n"
 
 
+def test_read_ppm_image_loads_ascii_rgb_canvas(tmp_path):
+    image_file = tmp_path / "canvas.ppm"
+    image_file.write_text(
+        "P3\n# tiny KITTI-like crop converted locally\n2 1\n255\n255 0 0 0 128 255\n",
+        encoding="ascii",
+    )
+
+    image = read_ppm_image(image_file)
+
+    assert image.dtype == np.uint8
+    assert image.shape == (1, 2, 3)
+    np.testing.assert_array_equal(image, [[[255, 0, 0], [0, 128, 255]]])
+
+
 def test_smoke_script_can_generate_synthetic_overlay_ppm(tmp_path):
     output_file = tmp_path / "synthetic_overlay.ppm"
 
@@ -220,3 +235,31 @@ def test_smoke_script_can_project_local_kitti_calib_and_velodyne_sample(tmp_path
     assert "loaded_points=2" in completed.stdout
     assert "projected_points=1" in completed.stdout
     assert output_file.read_text(encoding="ascii").startswith("P3\n30 20\n255\n")
+
+
+def test_smoke_script_can_render_overlay_on_local_ppm_rgb_canvas(tmp_path):
+    image_file = tmp_path / "canvas.ppm"
+    image_file.write_text("P3\n4 3\n255\n" + " ".join(["10 20 30"] * 12) + "\n", encoding="ascii")
+    output_file = tmp_path / "overlay.ppm"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_project_lidar.py",
+            "--image-file",
+            str(image_file),
+            "--image-size",
+            "3x4",
+            "--overlay-output",
+            str(output_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "image_source=ppm" in completed.stdout
+    overlay_text = output_file.read_text(encoding="ascii")
+    assert overlay_text.startswith("P3\n4 3\n255\n")
+    assert "10 20 30" in overlay_text

@@ -205,3 +205,31 @@ def write_ppm_image(path: str | Path, image: np.ndarray) -> None:
     flat_values = " ".join(str(int(value)) for value in rgb.reshape(-1, 3).ravel())
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(f"P3\n{width} {height}\n255\n{flat_values}\n", encoding="ascii")
+
+
+def read_ppm_image(path: str | Path) -> np.ndarray:
+    """Read an ASCII PPM (``P3``) RGB image for dependency-free overlays."""
+
+    tokens: list[str] = []
+    for line in Path(path).read_text(encoding="ascii").splitlines():
+        tokens.extend(line.split("#", maxsplit=1)[0].split())
+
+    if len(tokens) < 4 or tokens[0] != "P3":
+        raise ValueError("PPM image must be ASCII P3 format.")
+    width = int(tokens[1])
+    height = int(tokens[2])
+    max_value = int(tokens[3])
+    if width <= 0 or height <= 0:
+        raise ValueError("PPM image dimensions must be positive.")
+    if max_value != 255:
+        raise ValueError("Only PPM images with max value 255 are supported.")
+
+    values = np.array([int(token) for token in tokens[4:]], dtype=np.int32)
+    expected_values = width * height * 3
+    if values.size != expected_values:
+        raise ValueError(
+            f"PPM image has {values.size} channel values, expected {expected_values}."
+        )
+    if ((values < 0) | (values > 255)).any():
+        raise ValueError("PPM channel values must be in the 0..255 range.")
+    return values.astype(np.uint8).reshape(height, width, 3)

@@ -20,6 +20,9 @@ results/**/*.mp4
 results/**/*.onnx
 results/**/*.engine
 results/**/*.plan
+*.onnx
+*.engine
+*.plan
 *.pt
 *.pth
 *.ckpt

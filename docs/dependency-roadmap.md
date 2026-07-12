@@ -84,4 +84,13 @@ TensorRT installation is usually platform/CUDA-specific and may involve NVIDIA p
 - Python bindings availability;
 - build path from ONNX to engine.
 
-Then add either a dedicated PDM group or an external setup document depending on what is reproducible.
+The actionable runtime/benchmark plan lives in `docs/tensorrt-benchmark-plan.md`. Current guarded scripts intentionally work as stubs on non-CUDA hosts:
+
+```bash
+python scripts/tensorrt_benchmark.py --detect
+python scripts/tensorrt_benchmark.py --schema
+python scripts/tensorrt_build_engine.py --onnx results/model.onnx --engine results/model_fp16.engine
+python scripts/tensorrt_infer.py --engine results/model_fp16.engine
+```
+
+Add either a dedicated PDM group or an external setup document only after the target CUDA/TensorRT runtime has been selected and verified.

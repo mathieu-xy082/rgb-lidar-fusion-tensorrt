@@ -83,6 +83,8 @@ PyTorch checkpoint
 → benchmark latency p50/p95/FPS
 ```
 
+Le chemin TensorRT est préparé sans supposer que la machine de développement a CUDA/TensorRT. Voir `docs/tensorrt-benchmark-plan.md` pour la stratégie local vs container, les scripts stubs sûrs et le schéma de benchmark.
+
 ## Structure
 
 ```text

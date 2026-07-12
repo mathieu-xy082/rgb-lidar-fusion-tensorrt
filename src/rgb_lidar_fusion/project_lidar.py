@@ -10,6 +10,16 @@ import numpy as np
 from .calibration import CameraCalibration
 
 
+LIDAR_MAP_CHANNELS = (
+    "normalized_camera_depth",
+    "normalized_vehicle_x",
+    "normalized_vehicle_y",
+    "normalized_vehicle_z",
+    "intensity",
+    "point_mask",
+)
+
+
 @dataclass(frozen=True)
 class ProjectedLidar:
     """Projected LiDAR points that lie inside the image and in front of camera."""
@@ -111,7 +121,7 @@ def build_sparse_lidar_maps(
 ) -> np.ndarray:
     """Build sparse LiDAR feature maps aligned to the image grid.
 
-    Output channels are:
+    Output channels are ordered according to `LIDAR_MAP_CHANNELS`:
         0. normalized camera depth z / max_depth_m
         1. vehicle x / max_depth_m
         2. vehicle y / max_depth_m

@@ -49,7 +49,7 @@ Créer un dataset qui retourne :
 ```python
 {
     "image": Tensor[3, H, W],
-    "lidar_maps": Tensor[5, H, W],
+    "lidar_maps": Tensor[6, H, W],  # depth, xyz geometry, intensity, mask
     "target": boxes/classes/depth,
 }
 ```

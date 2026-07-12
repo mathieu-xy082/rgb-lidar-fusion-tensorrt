@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from .calibration import CameraCalibration
-from .project_lidar import build_sparse_lidar_maps, project_lidar_to_image
+from .project_lidar import LIDAR_MAP_CHANNELS, build_sparse_lidar_maps, project_lidar_to_image
 
 
 class KittiSparseLidarDataset:
@@ -63,6 +63,7 @@ class KittiSparseLidarDataset:
             "meta": {
                 "sample_id": sample.get("id"),
                 "image_shape": [image_shape[0], image_shape[1]],
+                "lidar_map_channels": list(LIDAR_MAP_CHANNELS),
             },
         }
 

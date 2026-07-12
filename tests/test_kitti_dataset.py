@@ -23,7 +23,18 @@ def test_dataset_returns_rgb_lidar_maps_target_and_meta():
     assert sample["lidar_maps"][0, 2, 2] == pytest.approx(10.0 / 80.0)
     assert sample["lidar_maps"][4, 2, 2] == pytest.approx(0.7)
     assert sample["target"] == {"class_name": "synthetic_car", "bbox_2d": [1, 1, 3, 3]}
-    assert sample["meta"] == {"sample_id": "000001", "image_shape": [4, 5]}
+    assert sample["meta"] == {
+        "sample_id": "000001",
+        "image_shape": [4, 5],
+        "lidar_map_channels": [
+            "normalized_camera_depth",
+            "normalized_vehicle_x",
+            "normalized_vehicle_y",
+            "normalized_vehicle_z",
+            "intensity",
+            "point_mask",
+        ],
+    }
 
 
 def test_dataset_rejects_missing_sample_files():

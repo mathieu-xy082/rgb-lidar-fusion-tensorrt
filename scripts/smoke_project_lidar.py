@@ -42,6 +42,10 @@ def main(argv: list[str] | None = None) -> None:
         help="Optional path for an ASCII PPM LiDAR overlay generated from synthetic points.",
     )
     parser.add_argument(
+        "--sparse-output",
+        help="Optional path for a compressed .npz file containing the sparse lidar_maps array.",
+    )
+    parser.add_argument(
         "--image-file",
         help="Optional ASCII PPM (P3) RGB canvas to draw the overlay on instead of a black image.",
     )
@@ -79,6 +83,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"projected_points={projected.pixels.shape[0]}")
     print(f"lidar_maps_shape={maps.shape}")
     print(f"occupied_pixels={int(maps[5].sum())}")
+    if args.sparse_output:
+        np.savez_compressed(args.sparse_output, lidar_maps=maps)
+        print(f"sparse_output={args.sparse_output}")
     if args.overlay_output:
         if args.image_file:
             image = read_ppm_image(args.image_file)

@@ -115,12 +115,14 @@ Pour générer une visualisation synthétique sans dépendance image externe :
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
-  --overlay-output /tmp/rgb_lidar_synthetic_overlay.ppm
+  --overlay-output /tmp/rgb_lidar_synthetic_overlay.ppm \
+  --sparse-output /tmp/rgb_lidar_synthetic_sparse_maps.npz
 ```
 
 Le fichier produit est un PPM ASCII (`P3`) ouvrable avec la plupart des viewers
-image ou convertible localement. Les overlays générés et données KITTI restent
-hors Git.
+image ou convertible localement. Le `.npz` optionnel contient `lidar_maps` au
+format `[6, H, W]` (`depth`, xyz véhicule, intensité, masque). Les overlays,
+cartes sparse générées et données KITTI restent hors Git.
 
 Pour projeter un petit échantillon KITTI local déjà téléchargé sans committer les
 données, fournir la calibration, le Velodyne `.bin` et la taille image
@@ -131,7 +133,8 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
   --calib-file data/kitti/training/calib/000000.txt \
   --velodyne-file data/kitti/training/velodyne/000000.bin \
   --image-size 375x1242 \
-  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
+  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm \
+  --sparse-output /tmp/rgb_lidar_kitti_000000_sparse_maps.npz
 ```
 
 La commande écrit l'overlay sur un fond noir de même résolution que l'image KITTI
@@ -165,4 +168,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse, et produit un overlay PPM synthétique ou KITTI local visualisable sans dépendance lourde, soit sur fond noir, soit sur un canvas RGB PPM ASCII local. Prochaine cible : rendre la lecture PNG/JPEG optionnelle via une dépendance image légère ou un groupe PDM dédié.
+Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse exportables en `.npz`, et produit un overlay PPM synthétique ou KITTI local visualisable sans dépendance lourde, soit sur fond noir, soit sur un canvas RGB PPM ASCII local. Prochaine cible : rendre la lecture PNG/JPEG optionnelle via une dépendance image légère ou un groupe PDM dédié.

@@ -263,3 +263,26 @@ def test_smoke_script_can_render_overlay_on_local_ppm_rgb_canvas(tmp_path):
     overlay_text = output_file.read_text(encoding="ascii")
     assert overlay_text.startswith("P3\n4 3\n255\n")
     assert "10 20 30" in overlay_text
+
+
+def test_smoke_script_can_save_sparse_lidar_maps_npz(tmp_path):
+    sparse_file = tmp_path / "lidar_maps.npz"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_project_lidar.py",
+            "--sparse-output",
+            str(sparse_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "sparse_output=" in completed.stdout
+    with np.load(sparse_file) as saved:
+        assert set(saved.files) == {"lidar_maps"}
+        assert saved["lidar_maps"].shape == (6, 360, 640)
+        assert saved["lidar_maps"].dtype == np.float32

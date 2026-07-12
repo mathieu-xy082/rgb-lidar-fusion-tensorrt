@@ -55,7 +55,8 @@ Pour écrire un overlay synthétique visualisable sans committer d'image génér
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
-  --overlay-output /tmp/rgb_lidar_synthetic_overlay.ppm
+  --overlay-output /tmp/rgb_lidar_synthetic_overlay.ppm \
+  --sparse-output /tmp/rgb_lidar_synthetic_sparse_maps.npz
 ```
 
 Garder les sorties sous `/tmp`, `results/` local ignoré, ou un autre dossier de
@@ -69,8 +70,13 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
   --calib-file data/kitti/training/calib/000000.txt \
   --velodyne-file data/kitti/training/velodyne/000000.bin \
   --image-size 375x1242 \
-  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
+  --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm \
+  --sparse-output /tmp/rgb_lidar_kitti_000000_sparse_maps.npz
 ```
+
+Le fichier `.npz` contient une seule clé `lidar_maps`, au format `[6, H, W]` :
+profondeur normalisée, xyz véhicule normalisés, intensité et masque d'occupation.
+Comme l'overlay, il reste un artefact local non versionné.
 
 Pour superposer les points sur une vraie image RGB sans dépendance Python lourde,
 convertir l'image localement en PPM ASCII (`P3`) et la fournir comme canvas :

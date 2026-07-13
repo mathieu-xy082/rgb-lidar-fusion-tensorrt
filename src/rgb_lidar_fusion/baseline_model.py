@@ -37,7 +37,16 @@ class BaselineFusionModel(nn.Module):
 
         Returns:
             Prediction tensor with shape ``[B, output_dim]``.
+
+        Raises:
+            ValueError: If RGB and LiDAR maps are not aligned as ``[B, C, H, W]``.
         """
+
+        if rgb.shape[0] != lidar_maps.shape[0] or rgb.shape[2:] != lidar_maps.shape[2:]:
+            raise ValueError(
+                "rgb and lidar_maps must share the same batch and spatial dimensions "
+                "as [B, C, H, W]."
+            )
 
         fused = torch.cat([rgb, lidar_maps], dim=1)
         features = self.features(fused).flatten(1)

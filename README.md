@@ -119,6 +119,14 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
   --sparse-output /tmp/rgb_lidar_synthetic_sparse_maps.npz
 ```
 
+Pour créer en plus un mini-échantillon synthétique au format KITTI (`training/calib/000000.txt`
+et `training/velodyne/000000.bin`) utilisable comme fixture locale hors Git :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
+  --write-synthetic-sample /tmp/rgb_lidar_synthetic_kitti
+```
+
 Le fichier produit est un PPM ASCII (`P3`) ouvrable avec la plupart des viewers
 image ou convertible localement. Le `.npz` optionnel contient `lidar_maps` au
 format `[6, H, W]` (`depth`, xyz véhicule, intensité, masque). Les overlays,

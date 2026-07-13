@@ -311,3 +311,29 @@ def test_smoke_script_can_save_sparse_lidar_maps_npz(tmp_path):
         assert set(saved.files) == {"lidar_maps"}
         assert saved["lidar_maps"].shape == (6, 360, 640)
         assert saved["lidar_maps"].dtype == np.float32
+
+
+def test_smoke_script_can_write_synthetic_kitti_format_sample(tmp_path):
+    sample_dir = tmp_path / "synthetic_kitti"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_project_lidar.py",
+            "--write-synthetic-sample",
+            str(sample_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "synthetic_sample=" in completed.stdout
+    calib_file = sample_dir / "training" / "calib" / "000000.txt"
+    velodyne_file = sample_dir / "training" / "velodyne" / "000000.bin"
+    assert calib_file.read_text(encoding="utf-8").startswith("P2:")
+    np.testing.assert_allclose(
+        project_lidar_module.load_velodyne_bin(velodyne_file),
+        [[0.0, 0.0, 10.0, 0.9], [1.0, 0.5, 20.0, 0.6], [-1.0, 0.2, 15.0, 0.7]],
+    )

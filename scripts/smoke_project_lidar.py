@@ -7,6 +7,7 @@ PPM overlay for dependency-free visual inspection.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import numpy as np
 
@@ -19,6 +20,35 @@ from rgb_lidar_fusion.project_lidar import (
     render_lidar_overlay,
     write_ppm_image,
 )
+
+
+SYNTHETIC_POINTS = np.array(
+    [
+        [0.0, 0.0, 10.0, 0.9],
+        [1.0, 0.5, 20.0, 0.6],
+        [-1.0, 0.2, 15.0, 0.7],
+    ],
+    dtype=np.float32,
+)
+
+SYNTHETIC_KITTI_CALIBRATION = "\n".join(
+    [
+        "P2: 100.0 0.0 320.0 0.0 0.0 100.0 180.0 0.0 0.0 0.0 1.0 0.0",
+        "R0_rect: 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0",
+        "Tr_velo_to_cam: 1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0",
+    ]
+)
+
+
+def _write_synthetic_kitti_sample(root: str) -> tuple[Path, Path]:
+    sample_root = Path(root)
+    calib_file = sample_root / "training" / "calib" / "000000.txt"
+    velodyne_file = sample_root / "training" / "velodyne" / "000000.bin"
+    calib_file.parent.mkdir(parents=True, exist_ok=True)
+    velodyne_file.parent.mkdir(parents=True, exist_ok=True)
+    calib_file.write_text(SYNTHETIC_KITTI_CALIBRATION + "\n", encoding="utf-8")
+    SYNTHETIC_POINTS.tofile(velodyne_file)
+    return calib_file, velodyne_file
 
 
 def _parse_image_size(value: str) -> tuple[int, int]:
@@ -52,6 +82,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--calib-file", help="Optional KITTI calibration .txt file to project.")
     parser.add_argument("--velodyne-file", help="Optional KITTI Velodyne .bin file to project.")
     parser.add_argument(
+        "--write-synthetic-sample",
+        help="Optional output root for a tiny KITTI-format synthetic calib/velodyne sample.",
+    )
+    parser.add_argument(
         "--image-size",
         type=_parse_image_size,
         default=None,
@@ -80,14 +114,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"loaded_points={points.shape[0]}")
     else:
         calibration = make_identity_calibration(fx=100, fy=100, cx=320, cy=180)
-        points = np.array(
-            [
-                [0.0, 0.0, 10.0, 0.9],
-                [1.0, 0.5, 20.0, 0.6],
-                [-1.0, 0.2, 15.0, 0.7],
-            ],
-            dtype=np.float32,
-        )
+        points = SYNTHETIC_POINTS
         print("mode=synthetic")
     projected = project_lidar_to_image(points, calibration, image_shape=image_shape)
     maps = build_sparse_lidar_maps(projected, image_shape=image_shape)
@@ -106,6 +133,11 @@ def main(argv: list[str] | None = None) -> None:
         overlay = render_lidar_overlay(image, projected, max_depth_m=80.0, point_radius=2)
         write_ppm_image(args.overlay_output, overlay)
         print(f"overlay_output={args.overlay_output}")
+    if args.write_synthetic_sample:
+        calib_file, velodyne_file = _write_synthetic_kitti_sample(args.write_synthetic_sample)
+        print(f"synthetic_sample={args.write_synthetic_sample}")
+        print(f"synthetic_calib={calib_file}")
+        print(f"synthetic_velodyne={velodyne_file}")
 
 
 if __name__ == "__main__":

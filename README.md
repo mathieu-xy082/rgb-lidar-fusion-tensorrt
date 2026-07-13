@@ -151,12 +151,13 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/smoke_project_lidar.py \
   --calib-file data/kitti/training/calib/000000.txt \
   --velodyne-file data/kitti/training/velodyne/000000.bin \
   --image-file /tmp/kitti_000000.ppm \
-  --image-size 375x1242 \
   --overlay-output /tmp/rgb_lidar_kitti_000000_overlay.ppm
 ```
 
-`--image-file` accepte uniquement un PPM ASCII `P3` de même taille que
-`--image-size`; les PNG/JPEG restent une dépendance future optionnelle.
+`--image-file` accepte uniquement un PPM ASCII `P3`; sa taille est inférée
+automatiquement si `--image-size` n'est pas fourni. Si `--image-size` est aussi
+fourni, il doit correspondre au canvas PPM. Les PNG/JPEG restent une dépendance
+future optionnelle.
 
 Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 

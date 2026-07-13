@@ -265,6 +265,31 @@ def test_smoke_script_can_render_overlay_on_local_ppm_rgb_canvas(tmp_path):
     assert "10 20 30" in overlay_text
 
 
+def test_smoke_script_infers_image_size_from_local_ppm_canvas(tmp_path):
+    image_file = tmp_path / "canvas.ppm"
+    image_file.write_text("P3\n5 4\n255\n" + " ".join(["10 20 30"] * 20) + "\n", encoding="ascii")
+    output_file = tmp_path / "overlay.ppm"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_project_lidar.py",
+            "--image-file",
+            str(image_file),
+            "--overlay-output",
+            str(output_file),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "image_source=ppm" in completed.stdout
+    assert "image_shape=4x5" in completed.stdout
+    assert output_file.read_text(encoding="ascii").startswith("P3\n5 4\n255\n")
+
+
 def test_smoke_script_can_save_sparse_lidar_maps_npz(tmp_path):
     sparse_file = tmp_path / "lidar_maps.npz"
 

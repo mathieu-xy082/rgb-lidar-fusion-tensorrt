@@ -54,12 +54,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--image-size",
         type=_parse_image_size,
-        default=(360, 640),
-        help="Image canvas size as HEIGHTxWIDTH (default: 360x640).",
+        default=None,
+        help="Image canvas size as HEIGHTxWIDTH (default: 360x640, or inferred from --image-file).",
     )
     args = parser.parse_args(argv)
 
-    image_shape = args.image_size
+    image = None
+    if args.image_file:
+        image = read_ppm_image(args.image_file)
+        image_shape = image.shape[:2] if args.image_size is None else args.image_size
+        if image.shape[:2] != image_shape:
+            parser.error(
+                "--image-file dimensions must match --image-size "
+                f"({image.shape[0]}x{image.shape[1]} != {image_shape[0]}x{image_shape[1]})"
+            )
+    else:
+        image_shape = (360, 640) if args.image_size is None else args.image_size
+    print(f"image_shape={image_shape[0]}x{image_shape[1]}")
     if bool(args.calib_file) != bool(args.velodyne_file):
         parser.error("--calib-file and --velodyne-file must be provided together")
     if args.calib_file:
@@ -87,13 +98,7 @@ def main(argv: list[str] | None = None) -> None:
         np.savez_compressed(args.sparse_output, lidar_maps=maps)
         print(f"sparse_output={args.sparse_output}")
     if args.overlay_output:
-        if args.image_file:
-            image = read_ppm_image(args.image_file)
-            if image.shape[:2] != image_shape:
-                parser.error(
-                    "--image-file dimensions must match --image-size "
-                    f"({image.shape[0]}x{image.shape[1]} != {image_shape[0]}x{image_shape[1]})"
-                )
+        if image is not None:
             print("image_source=ppm")
         else:
             image = np.zeros((*image_shape, 3), dtype=np.uint8)

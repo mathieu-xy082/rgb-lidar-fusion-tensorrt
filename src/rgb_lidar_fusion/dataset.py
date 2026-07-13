@@ -40,6 +40,9 @@ class KittiSparseLidarDataset:
         return len(self.samples)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
+        if index >= len(self.samples) or index < -len(self.samples):
+            label = "sample" if len(self.samples) == 1 else "samples"
+            raise IndexError(f"Dataset index {index} out of range for {len(self.samples)} {label}.")
         sample = self.samples[index]
         self._validate_sample(sample, index)
         image_path = self.root / sample["image"]

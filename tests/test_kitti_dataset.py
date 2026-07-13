@@ -59,3 +59,10 @@ def test_dataset_rejects_manifest_without_samples(tmp_path):
 
     with pytest.raises(ValueError, match="manifest.json.*samples"):
         KittiSparseLidarDataset(tmp_path)
+
+
+def test_dataset_reports_out_of_range_index_with_dataset_size():
+    dataset = KittiSparseLidarDataset(FIXTURE_ROOT)
+
+    with pytest.raises(IndexError, match="Dataset index 1 out of range for 1 sample"):
+        _ = dataset[1]

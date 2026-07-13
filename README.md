@@ -223,7 +223,7 @@ tensors = model_batch_to_torch_tensors(arrays)  # optional; requires group `ml`
 output = BaselineFusionModel(lidar_mode="enriched")(**tensors)
 ```
 
-Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
+Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`; le scope initial ONNX est détaillé dans `docs/onnx-export-validation.md`.
 
 ## LiDAR local surface splatting — niveau 1
 

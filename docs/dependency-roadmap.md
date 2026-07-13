@@ -33,7 +33,8 @@ Add to the existing `ml` group only when image transforms, pretrained backbones,
 
 ### `onnx` group — export and validation milestone
 
-Add when Milestone 4 starts.
+Add when Milestone 4 starts and a reviewed baseline model interface is available on `main`.
+The current export/parity scope and limitations are tracked in `docs/onnx-export-validation.md`.
 
 Candidate dependencies:
 

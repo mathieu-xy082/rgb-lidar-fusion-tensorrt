@@ -26,6 +26,8 @@ def test_dataset_returns_rgb_lidar_maps_target_and_meta():
     assert sample["meta"] == {
         "sample_id": "000001",
         "image_shape": [4, 5],
+        "image_path": "image-000001.npy",
+        "lidar_path": "lidar-000001.npy",
         "lidar_map_channels": [
             "normalized_camera_depth",
             "normalized_vehicle_x",

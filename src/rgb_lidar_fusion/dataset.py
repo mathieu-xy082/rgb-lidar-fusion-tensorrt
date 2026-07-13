@@ -65,6 +65,8 @@ class KittiSparseLidarDataset:
             "meta": {
                 "sample_id": sample.get("id"),
                 "image_shape": [image_shape[0], image_shape[1]],
+                "image_path": sample["image"],
+                "lidar_path": sample["lidar"],
                 "lidar_map_channels": list(LIDAR_MAP_CHANNELS),
             },
         }

@@ -29,14 +29,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if not args.onnx.exists():
-        print(f"ONNX model not found: {args.onnx}", file=sys.stderr)
-        return 2
     try:
-        env = require_tensorrt_available()
         engine = validate_engine_output_path(args.engine)
+        env = require_tensorrt_available()
     except (RuntimeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
+        return 2
+    if not args.onnx.exists():
+        print(f"ONNX model not found: {args.onnx}", file=sys.stderr)
         return 2
 
     if env.trtexec_path is None:

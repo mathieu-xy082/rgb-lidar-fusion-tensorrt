@@ -67,11 +67,11 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run pytest tests/test_baseline_model.py -q
 
 ## Branches actives rebasées sur le nouveau `main`
 
-| Priorité review | Branche | SHA actuel | Objectif | Statut attendu avant intégration |
-|---:|---|---:|---|---|
-| 1 | `feature/baseline-fusion-model` | `7cb0945` | Baseline PyTorch consommant RGB + cartes LiDAR | Review fonctionnelle du contrat modèle, shapes, dépendances `ml`; idéalement adapter l'entrée pour exploiter sparse + splatting |
-| 2 | `feature/onnx-export-validation` | `c8d4c43` | Préparer export/parité ONNX | À intégrer après baseline reviewé/mergé, ou garder comme cadrage documentaire si on veut figer le scope plus tôt |
-| 3 | `feature/tensorrt-benchmark-plan` | `4f33afa` | Scaffolding runtime/benchmark TensorRT | À intégrer après clarification ONNX/runtime cible ; actuellement utile comme plan testable, pas encore benchmark réel GPU |
+| Priorité review | Branche | Base actuelle | Objectif | Statut attendu avant intégration |
+|---:|---|---|---|---|
+| 1 | `feature/baseline-fusion-model` | rebasée sur `origin/main` | Baseline PyTorch consommant RGB + cartes LiDAR | Review fonctionnelle du contrat modèle, shapes, dépendances `ml`; idéalement adapter l'entrée pour exploiter sparse + splatting |
+| 2 | `feature/onnx-export-validation` | rebasée sur `origin/main` | Préparer export/parité ONNX | À intégrer après baseline reviewé/mergé, ou garder comme cadrage documentaire si on veut figer le scope plus tôt |
+| 3 | `feature/tensorrt-benchmark-plan` | rebasée sur `origin/main` | Scaffolding runtime/benchmark TensorRT | À intégrer après clarification ONNX/runtime cible ; actuellement utile comme plan testable, pas encore benchmark réel GPU |
 
 ## Prochaines tâches / branches prioritaires
 

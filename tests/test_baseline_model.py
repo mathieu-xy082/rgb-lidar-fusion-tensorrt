@@ -23,3 +23,12 @@ def test_baseline_fusion_model_rejects_unaligned_rgb_and_lidar_maps_with_clear_s
 
     with pytest.raises(ValueError, match="same batch and spatial dimensions"):
         model(rgb, lidar_maps)
+
+
+def test_baseline_fusion_model_rejects_lidar_channel_count_that_differs_from_declared_shape():
+    model = BaselineFusionModel(lidar_channels=6, output_dim=4)
+    rgb = torch.zeros((2, 3, 32, 48), dtype=torch.float32)
+    lidar_maps = torch.zeros((2, 5, 32, 48), dtype=torch.float32)
+
+    with pytest.raises(ValueError, match="lidar_maps must have 6 channels"):
+        model(rgb, lidar_maps)

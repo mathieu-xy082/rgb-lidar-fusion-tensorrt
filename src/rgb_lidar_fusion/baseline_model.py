@@ -18,6 +18,7 @@ class BaselineFusionModel(nn.Module):
 
     def __init__(self, lidar_channels: int = 6, output_dim: int = 1) -> None:
         super().__init__()
+        self.lidar_channels = lidar_channels
         input_channels = 3 + lidar_channels
         self.features = nn.Sequential(
             nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),
@@ -47,6 +48,8 @@ class BaselineFusionModel(nn.Module):
                 "rgb and lidar_maps must share the same batch and spatial dimensions "
                 "as [B, C, H, W]."
             )
+        if lidar_maps.shape[1] != self.lidar_channels:
+            raise ValueError(f"lidar_maps must have {self.lidar_channels} channels.")
 
         fused = torch.cat([rgb, lidar_maps], dim=1)
         features = self.features(fused).flatten(1)

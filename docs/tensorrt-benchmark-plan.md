@@ -119,6 +119,10 @@ Definitions:
 - `fps`: `batch_size * 1000 / latency_ms.mean`;
 - warmup and measured run counts must be reported with every result.
 
+The lightweight helper `rgb_lidar_fusion.tensorrt_runtime.latency_summary_ms`
+implements these p50/p95/FPS calculations with no NumPy/TensorRT dependency, so
+future runtime adapters can share one tested metric contract.
+
 ## Artifact policy
 
 Do not commit generated deployment artifacts:

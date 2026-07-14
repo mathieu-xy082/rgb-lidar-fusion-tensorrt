@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import importlib.util
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -87,6 +88,37 @@ def benchmark_schema() -> dict[str, Any]:
         },
         "fps": "float: batch_size * 1000 / latency_ms.mean",
         "notes": "string: limitations, host/container, CUDA/TensorRT versions",
+    }
+
+
+def latency_summary_ms(latencies_ms: list[float], batch_size: int) -> dict[str, Any]:
+    """Summarize measured inference latencies with the Milestone 5 metrics.
+
+    Percentiles use the nearest-rank method so benchmark output is deterministic
+    without adding a NumPy dependency to the lightweight default environment.
+    """
+
+    if not latencies_ms:
+        raise ValueError("at least one latency measurement is required")
+    if batch_size < 1:
+        raise ValueError("batch_size must be >= 1")
+
+    ordered = sorted(latencies_ms)
+    mean = sum(ordered) / len(ordered)
+
+    def nearest_rank(percentile: float) -> float:
+        index = max(0, math.ceil(percentile / 100 * len(ordered)) - 1)
+        return ordered[index]
+
+    return {
+        "latency_ms": {
+            "p50": nearest_rank(50),
+            "p95": nearest_rank(95),
+            "mean": mean,
+            "min": ordered[0],
+            "max": ordered[-1],
+        },
+        "fps": batch_size * 1000 / mean,
     }
 
 

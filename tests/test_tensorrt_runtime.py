@@ -3,6 +3,7 @@ import pytest
 from rgb_lidar_fusion.tensorrt_runtime import (
     TensorRTEnvironment,
     benchmark_schema,
+    latency_summary_ms,
     require_tensorrt_available,
     validate_engine_output_path,
 )
@@ -53,3 +54,25 @@ def test_benchmark_schema_names_tail_latency_and_fps_metrics():
     assert "p50" in schema["latency_ms"]
     assert "p95" in schema["latency_ms"]
     assert schema["fps"].startswith("float")
+
+
+def test_latency_summary_reports_p50_p95_and_fps_without_extra_dependencies():
+    summary = latency_summary_ms([4.0, 1.0, 3.0, 2.0, 10.0], batch_size=2)
+
+    assert summary["latency_ms"] == {
+        "p50": 3.0,
+        "p95": 10.0,
+        "mean": 4.0,
+        "min": 1.0,
+        "max": 10.0,
+    }
+    assert summary["fps"] == 500.0
+
+
+@pytest.mark.parametrize(
+    ("latencies_ms", "batch_size", "message"),
+    [([], 1, "at least one latency"), ([1.0], 0, "batch_size")],
+)
+def test_latency_summary_rejects_invalid_measurements(latencies_ms, batch_size, message):
+    with pytest.raises(ValueError, match=message):
+        latency_summary_ms(latencies_ms, batch_size=batch_size)

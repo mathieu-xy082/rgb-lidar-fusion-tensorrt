@@ -7,6 +7,7 @@ Objectif professionnel : produire un projet AV/robotics crédible et démontrabl
 ```text
 KITTI RGB image
 + LiDAR projected sparse geometry maps
++ LiDAR local surface splatting
 → PyTorch detector
 → ONNX export
 → TensorRT FP16 engine
@@ -27,26 +28,145 @@ Le but n'est pas de battre l'état de l'art, mais de démontrer un ownership com
 7. Les dépendances lourdes sont ajoutées par groupe au moment utile, pas dans l'installation minimale.
 8. Chaque itération doit finir soit par un commit poussé sur sa branche, soit par un message de blocage précis.
 
+## État intégré dans `main`
+
+`main` contient maintenant le socle reviewé suivant :
+
+| Bloc | Branche absorbée | Statut |
+|---|---|---|
+| CI staged PDM | `ci/expand-pipeline-stages` | intégré |
+| Calibration/projection KITTI | `feature/kitti-calibration-projection` | intégré |
+| Dataset sparse LiDAR léger | `feature/kitti-dataset-lidar-maps` | intégré |
+| LiDAR local surface splatting niveau 1 | `feature/lidar-surface-splatting` | intégré |
+
+La branche `feature/lidar-surface-splatting` a été intégrée après ajout de tests d'invariants. Le modèle de splatting actuellement accepté est :
+
+- cartes sparse brutes conservées ;
+- sorties expandées séparées `depth_expanded` et `confidence` ;
+- kernel local carré paramétrable ;
+- confiance gaussienne décroissante avec la distance pixel ;
+- résolution déterministe des overlaps : profondeur proche, puis confiance forte, puis ordre source row-major ;
+- aucune dépendance PyTorch/ONNX/TensorRT pour ce niveau 1.
+
 ## Validation de base
 
-Commande minimale attendue sur toutes les branches :
+Commande minimale attendue sur `main` et sur toutes les branches non-ML :
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev
 PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
 ```
 
-## Branches et tâches secondaires
+Branches qui introduisent le modèle PyTorch :
 
-| Ordre | Branche | Objectif | Dépendances | Critère de review |
-|---:|---|---|---|---|
-| 1 | `ci/gitlab-pipeline` | Créer une CI GitLab PDM minimale | Aucune | Pipeline GitLab exécute `pdm run validate` sur MR/main |
-| 2 | `feature/kitti-calibration-projection` | Lire calibration KITTI + projeter LiDAR réel sur image | Aucune | Tests parser/projection + script générant overlay sur fixture ou instructions data |
-| 3 | `feature/lidar-surface-splatting` | Niveau 1 : expansion locale simple des points LiDAR projetés par splatting spatial avec carte de confiance | Projection disponible ou fixtures synthétiques | Tests unitaires, visualisation synthétique, API produisant `depth_expanded` + `confidence` sans remplacer le sparse brut |
-| 4 | `feature/kitti-dataset-lidar-maps` | Dataset PyTorch/KITTI produisant RGB + cartes LiDAR sparse et, si reviewé, cartes splattées | Projection/calibration reviewée ou disponible; splatting optionnel | Dataset testé sur fixture synthétique, API claire pour futures features |
-| 5 | `feature/baseline-fusion-model` | Baseline modèle PyTorch simple `RGB + lidar_maps` | Dataset prêt ou branch accepté comme base | Forward pass testé, shapes documentées, groupe `ml` PDM justifié |
-| 6 | `feature/onnx-export-validation` | Export ONNX + validation de parité | Baseline modèle prêt | Script export + test shape/parité, groupe `onnx` PDM |
-| 7 | `feature/tensorrt-benchmark-plan` | Préparer chemin TensorRT FP16 et benchmark | ONNX prêt | Plan runtime CUDA/TensorRT, scripts ou stubs testables, limites documentées |
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
+PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
+PDM_IGNORE_ACTIVE_VENV=1 pdm run pytest tests/test_baseline_model.py -q
+```
+
+## Branches actives rebasées sur le nouveau `main`
+
+| Priorité review | Branche | SHA actuel | Objectif | Statut attendu avant intégration |
+|---:|---|---:|---|---|
+| 1 | `feature/baseline-fusion-model` | `7cb0945` | Baseline PyTorch consommant RGB + cartes LiDAR | Review fonctionnelle du contrat modèle, shapes, dépendances `ml`; idéalement adapter l'entrée pour exploiter sparse + splatting |
+| 2 | `feature/onnx-export-validation` | `c8d4c43` | Préparer export/parité ONNX | À intégrer après baseline reviewé/mergé, ou garder comme cadrage documentaire si on veut figer le scope plus tôt |
+| 3 | `feature/tensorrt-benchmark-plan` | `4f33afa` | Scaffolding runtime/benchmark TensorRT | À intégrer après clarification ONNX/runtime cible ; actuellement utile comme plan testable, pas encore benchmark réel GPU |
+
+## Prochaines tâches / branches prioritaires
+
+### P0 — Review et consolidation du baseline PyTorch
+
+Branche existante : `feature/baseline-fusion-model`.
+
+Objectif : transformer la baseline actuelle en première interface modèle vraiment alignée avec le socle intégré.
+
+Critères :
+
+- forward pass testé sur tenseurs synthétiques ;
+- contrat d'entrée documenté : `rgb`, `lidar_maps`, et décision explicite sur l'utilisation de `depth_expanded` / `confidence` ;
+- shapes batch/channel/H/W verrouillées par tests ;
+- groupe PDM `ml` justifié et minimal ;
+- pas de dépendance torchvision/pretrained tant que non nécessaire ;
+- validation locale avec `pdm install -G dev -G ml`.
+
+Si une sous-branche est nécessaire avant intégration :
+
+```text
+feature/baseline-use-splatted-lidar-channels
+```
+
+But de cette sous-branche : décider si la première baseline consomme seulement les 6 cartes sparse, ou un tenseur enrichi incluant `depth_expanded` + `confidence`.
+
+### P1 — Contrat dataset → modèle
+
+Nouvelle branche recommandée :
+
+```text
+feature/dataset-model-contract
+```
+
+Objectif : écrire le contrat minimal entre `KittiSparseLidarDataset`, le splatting et le modèle.
+
+Livrables attendus :
+
+- helper ou adapter transformant un item dataset NumPy en batch modèle ;
+- option explicite pour générer/attacher les cartes splattées ;
+- tests sans données KITTI réelles, basés sur fixtures synthétiques ;
+- documentation courte : quelles cartes sont entraînables maintenant, quelles cartes restent expérimentales.
+
+### P2 — Export ONNX réel après baseline merge
+
+Branche existante : `feature/onnx-export-validation`.
+
+Objectif suivant après baseline intégré : remplacer le simple cadrage par un export exécutable.
+
+Livrables attendus :
+
+- groupe PDM `onnx` avec `onnx` + `onnxruntime` ;
+- `scripts/export_onnx.py` écrivant dans `results/onnx/` ou autre dossier ignoré ;
+- test de shape ONNX ;
+- test de parité PyTorch vs ONNX Runtime sur tenseurs déterministes ;
+- aucune inclusion de fichier `.onnx` dans Git.
+
+### P3 — TensorRT runtime target decision
+
+Branche existante : `feature/tensorrt-benchmark-plan`.
+
+Objectif : passer du scaffolding à une décision runtime vérifiable.
+
+Questions à trancher :
+
+- cible locale CUDA/TensorRT ou container NVIDIA ;
+- version CUDA/TensorRT ;
+- disponibilité des bindings Python ;
+- chemin reproductible ONNX → engine FP16 ;
+- métriques minimales : latence p50/p95, FPS, warmup, batch size.
+
+Nouvelle sous-branche possible :
+
+```text
+feature/tensorrt-runtime-environment-check
+```
+
+But : ajouter une commande de diagnostic qui détecte proprement l'absence de TensorRT/CUDA et produit un message actionnable au lieu d'échouer brutalement.
+
+### P4 — Artefacts de démonstration non versionnés
+
+Nouvelle branche recommandée :
+
+```text
+feature/demo-artifact-pipeline
+```
+
+Objectif : préparer la démonstration professionnelle sans committer d'artefacts lourds.
+
+Livrables attendus :
+
+- script générant overlay/sparse/splatted maps dans `results/` ;
+- README expliquant comment générer localement une image ou courte séquence de démo ;
+- `.gitignore` vérifié pour images/vidéos/checkpoints/ONNX/engines ;
+- éventuellement capture synthétique légère en texte/PPM si utile.
 
 ## Hypothèse architecturale — splatting local simple
 
@@ -69,13 +189,11 @@ Règles de conception :
 - produire au minimum `depth_expanded` et `confidence` ;
 - confiance décroissante avec la distance au point source ;
 - rayon limité et paramétrable ;
-- si plusieurs points influencent un pixel, résoudre de manière déterministe, idéalement en favorisant profondeur proche/confiance forte ;
+- si plusieurs points influencent un pixel, résoudre de manière déterministe, en favorisant profondeur proche/confiance forte ;
 - ne pas encore propager via modèle de plan ou surface concave ;
 - documenter clairement que cette représentation est une hypothèse expérimentale, à comparer au sparse brut.
 
-Évolutions possibles après review : propagation image-guidée / edge-aware, puis plan local, puis surface locale plus expressive.
-
-Statut branche `feature/lidar-surface-splatting` : API niveau 1 ajoutée dans `rgb_lidar_fusion.lidar_splatting` avec tests synthétiques. Les cartes sparse restent exposées séparément dans le résultat `SplattedDepth`; la stratégie de conflit documentée est `nearest_depth_then_confidence`.
+Évolutions possibles après baseline : propagation image-guidée / edge-aware, puis plan local, puis surface locale plus expressive.
 
 ## Tâche maîtresse
 
@@ -102,27 +220,13 @@ Pour intégrer une branche secondaire :
 5. Faire la review ensemble.
 6. Intégrer dans `main` uniquement après accord.
 7. Pousser `main`.
-8. Supprimer la branche secondaire seulement après confirmation.
+8. Pauser le job autonome de la branche absorbée.
+9. Rebaser les branches restantes sur le nouveau `origin/main`.
+10. Supprimer la branche secondaire seulement après confirmation.
 
 ## CI GitLab cible
 
-Première CI attendue :
-
-```yaml
-image: python:3.11
-
-stages:
-  - validate
-
-validate:
-  stage: validate
-  script:
-    - pip install pdm
-    - pdm install -G dev
-    - pdm run validate
-```
-
-Évolutions futures possibles :
+La CI actuelle doit rester alignée avec la validation de base. Évolutions futures possibles :
 
 - cache PDM/pip ;
 - jobs séparés lint/test/smoke ;
@@ -137,6 +241,7 @@ Un premier livrable présentable doit contenir :
 
 - une visualisation convaincante de LiDAR projeté dans l'image ;
 - un pipeline de features sparse cohérent ;
+- le splatting local comme innovation expérimentale testée ;
 - un dataset ou pseudo-dataset testable ;
 - une baseline modèle simple ;
 - une trajectoire claire vers ONNX/TensorRT ;

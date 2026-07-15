@@ -8,13 +8,14 @@ CUDA/TensorRT installed yet.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import metadata
 import importlib.util
 import json
 import math
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,112 @@ def detect_tensorrt_environment() -> TensorRTEnvironment:
         nvidia_smi_available=shutil.which("nvidia-smi") is not None,
         nvcc_available=shutil.which("nvcc") is not None,
     )
+
+
+CommandProbe = Callable[[list[str]], str]
+
+
+def _default_command_probe(command: list[str]) -> str:
+    result = run_command(command)
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip() or result.stderr.strip()
+
+
+def _installed_python_package_version(package: str) -> str | None:
+    try:
+        return metadata.version(package)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def _first_non_empty_line(text: str) -> str | None:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _nvidia_smi_inventory(text: str) -> list[dict[str, str]]:
+    gpus = []
+    for line in text.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) >= 3 and parts[0]:
+            gpus.append({"name": parts[0], "driver_version": parts[1], "cuda_version": parts[2]})
+    return gpus
+
+
+def runtime_diagnostic(
+    env: TensorRTEnvironment | None = None,
+    *,
+    command_probe: CommandProbe = _default_command_probe,
+    python_tensorrt_version: str | None = None,
+) -> dict[str, Any]:
+    """Return a CPU-safe structured readiness report for TensorRT/CUDA."""
+
+    detected = env or detect_tensorrt_environment()
+    trtexec_version = None
+    if detected.trtexec_path is not None:
+        trtexec_version = _first_non_empty_line(command_probe([detected.trtexec_path, "--version"]))
+
+    if python_tensorrt_version is None and detected.python_bindings_available:
+        python_tensorrt_version = _installed_python_package_version("tensorrt")
+
+    nvidia_smi_output = ""
+    if detected.nvidia_smi_available:
+        nvidia_smi_output = command_probe(
+            ["nvidia-smi", "--query-gpu=name,driver_version,cuda_version", "--format=csv,noheader"]
+        )
+    gpus = _nvidia_smi_inventory(nvidia_smi_output)
+    gpu_detected = bool(gpus) if detected.nvidia_smi_available else False
+
+    nvcc_version = None
+    if detected.nvcc_available:
+        nvcc_version = _first_non_empty_line(command_probe(["nvcc", "--version"]))
+
+    recommended_actions: list[str] = []
+    if not gpu_detected:
+        recommended_actions.append(
+            "Run this project on a host/container with an NVIDIA GPU and matching driver."
+        )
+    if not detected.is_build_ready:
+        recommended_actions.append(
+            "Install TensorRT runtime tools (`trtexec`) or Python bindings in the TensorRT target environment."
+        )
+    recommended_actions.append(
+        "Build the FP16 engine in this environment or equivalent NVIDIA container once ONNX export is available."
+        if detected.is_build_ready and gpu_detected
+        else "Keep CI CPU-safe: use this diagnostic as a readiness report, not as a hard dependency."
+    )
+
+    return {
+        "status": "ready" if detected.is_build_ready and gpu_detected else "missing_tensorrt_runtime",
+        "build_ready": detected.is_build_ready,
+        "bindings": {
+            "python_tensorrt": {
+                "available": detected.python_bindings_available,
+                "version": python_tensorrt_version,
+            }
+        },
+        "tools": {
+            "trtexec": {
+                "available": detected.trtexec_path is not None,
+                "path": detected.trtexec_path,
+                "version": trtexec_version,
+            }
+        },
+        "cuda": {
+            "gpu_detected": gpu_detected,
+            "nvidia_smi_available": detected.nvidia_smi_available,
+            "nvidia_smi_version": None,
+            "cuda_driver_version": gpus[0]["cuda_version"] if gpus else None,
+            "nvcc_available": detected.nvcc_available,
+            "nvcc_version": nvcc_version,
+            "gpus": gpus,
+        },
+        "recommended_actions": recommended_actions,
+    }
 
 
 def require_tensorrt_available(env: TensorRTEnvironment | None = None) -> TensorRTEnvironment:

@@ -24,3 +24,23 @@ Create the minimal, tested bridge between `KittiSparseLidarDataset`, LiDAR splat
 - `PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev` succeeds.
 - `PDM_IGNORE_ACTIVE_VENV=1 pdm run validate` succeeds.
 - The branch reports `BRANCHE PRÊTE POUR REVIEW: feature/dataset-model-contract` only when the adapter and docs are tested.
+
+## Implemented contract
+
+`rgb_lidar_fusion.model_batch.dataset_item_to_model_batch` converts one
+`KittiSparseLidarDataset`-style item into a NumPy-only model batch:
+
+- `inputs`: `float32` tensor-shaped array `[1, C, H, W]` with the batch dimension
+  inserted first.
+- Default channel order: `rgb_red`, `rgb_green`, `rgb_blue`, then the six sparse
+  LiDAR channels from `LIDAR_MAP_CHANNELS` (`normalized_camera_depth`, vehicle
+  xyz, `intensity`, `point_mask`).
+- With `include_splatted_depth=True`, `depth_expanded` and `confidence` are
+  appended after the sparse LiDAR channels using `splat_sparse_depth`.
+- `sparse_lidar_maps`: preserved copy of the original six sparse maps as
+  `[1, 6, H, W]`, so splatting never replaces the sparse representation.
+- The adapter validates RGB shape `[3, H, W]`, LiDAR-map shape `[6, H, W]`, and
+  shared image/LiDAR spatial dimensions.
+
+The contract intentionally remains NumPy-first; no `ml` dependency group is
+required for this bridge.

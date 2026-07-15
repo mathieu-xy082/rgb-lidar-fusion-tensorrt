@@ -13,20 +13,29 @@ venv/
 data/kitti/
 data/raw/
 data/processed/
-results/**/*.png
-results/**/*.jpg
-results/**/*.ppm
-results/**/*.mp4
-results/**/*.onnx
-results/**/*.onnx.data
-results/**/*.engine
-results/**/*.plan
+results/**
+!results/
+!results/README.md
+*.png
+*.jpg
+*.jpeg
+*.ppm
+*.mp4
+*.mov
+*.avi
+*.webm
 *.onnx
+*.onnx.data
 *.engine
 *.plan
+*.trt
 *.pt
 *.pth
 *.ckpt
+*.log
+*.jsonl
+*.csv
+benchmarks/**
 
 # OS/editor
 .DS_Store

@@ -59,6 +59,14 @@ def test_dataset_item_batch_rejects_wrong_channel_counts():
         dataset_item_to_model_batch(item)
 
 
+def test_dataset_item_batch_rejects_dataset_channel_metadata_drift():
+    item = synthetic_dataset_item()
+    item["meta"] = {"lidar_map_channels": ["unexpected"]}
+
+    with pytest.raises(ValueError, match="lidar_map_channels metadata must match"):
+        dataset_item_to_model_batch(item)
+
+
 def test_dataset_item_batch_can_append_splatted_depth_and_confidence_channels():
     item = synthetic_dataset_item()
 

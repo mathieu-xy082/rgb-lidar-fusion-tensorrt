@@ -39,8 +39,9 @@ Create the minimal, tested bridge between `KittiSparseLidarDataset`, LiDAR splat
   appended after the sparse LiDAR channels using `splat_sparse_depth`.
 - `sparse_lidar_maps`: preserved copy of the original six sparse maps as
   `[1, 6, H, W]`, so splatting never replaces the sparse representation.
-- The adapter validates RGB shape `[3, H, W]`, LiDAR-map shape `[6, H, W]`, and
-  shared image/LiDAR spatial dimensions.
+- The adapter validates RGB shape `[3, H, W]`, LiDAR-map shape `[6, H, W]`,
+  shared image/LiDAR spatial dimensions, and any dataset-provided
+  `meta.lidar_map_channels` declaration against `LIDAR_MAP_CHANNELS`.
 
 The contract intentionally remains NumPy-first; no `ml` dependency group is
 required for this bridge.

@@ -35,6 +35,12 @@ def dataset_item_to_model_batch(
         )
     if image.shape[1:] != lidar_maps.shape[1:]:
         raise ValueError("image and lidar_maps must share height and width.")
+    meta = item.get("meta", {})
+    if (
+        "lidar_map_channels" in meta
+        and tuple(meta["lidar_map_channels"]) != LIDAR_MAP_CHANNELS
+    ):
+        raise ValueError("lidar_map_channels metadata must match LIDAR_MAP_CHANNELS.")
     channels = [image, lidar_maps]
     input_channels = [*RGB_CHANNELS, *LIDAR_MAP_CHANNELS]
     if include_splatted_depth:

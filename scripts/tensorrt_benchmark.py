@@ -9,9 +9,9 @@ from pathlib import Path
 
 from rgb_lidar_fusion.tensorrt_runtime import (
     benchmark_schema,
-    detect_tensorrt_environment,
     print_json,
     require_tensorrt_available,
+    runtime_diagnostic,
     validate_engine_output_path,
 )
 
@@ -32,16 +32,7 @@ def main() -> int:
         print_json(benchmark_schema())
         return 0
     if args.detect:
-        env = detect_tensorrt_environment()
-        print_json(
-            {
-                "trtexec_path": env.trtexec_path,
-                "python_bindings_available": env.python_bindings_available,
-                "nvidia_smi_available": env.nvidia_smi_available,
-                "nvcc_available": env.nvcc_available,
-                "build_ready": env.is_build_ready,
-            }
-        )
+        print_json(runtime_diagnostic())
         return 0
     if args.engine is None:
         print("--engine is required unless --schema or --detect is used", file=sys.stderr)

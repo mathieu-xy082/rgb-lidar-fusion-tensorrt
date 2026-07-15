@@ -32,3 +32,12 @@ def test_baseline_fusion_model_rejects_lidar_channel_count_that_differs_from_dec
 
     with pytest.raises(ValueError, match="lidar_maps must have 6 channels"):
         model(rgb, lidar_maps)
+
+
+def test_baseline_fusion_model_rejects_rgb_channel_count_that_differs_from_shape_contract():
+    model = BaselineFusionModel(lidar_channels=6, output_dim=4)
+    rgb = torch.zeros((2, 1, 32, 48), dtype=torch.float32)
+    lidar_maps = torch.zeros((2, 6, 32, 48), dtype=torch.float32)
+
+    with pytest.raises(ValueError, match="rgb must have 3 channels"):
+        model(rgb, lidar_maps)

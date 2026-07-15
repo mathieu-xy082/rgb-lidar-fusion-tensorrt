@@ -48,6 +48,8 @@ class BaselineFusionModel(nn.Module):
                 "rgb and lidar_maps must share the same batch and spatial dimensions "
                 "as [B, C, H, W]."
             )
+        if rgb.shape[1] != 3:
+            raise ValueError("rgb must have 3 channels.")
         if lidar_maps.shape[1] != self.lidar_channels:
             raise ValueError(f"lidar_maps must have {self.lidar_channels} channels.")
 

@@ -38,12 +38,25 @@ def test_benchmark_detect_cli_is_safe_without_tensorrt():
     assert result.returncode == 0, result.stderr
     detected = json.loads(result.stdout)
     assert set(detected) == {
+        "bindings",
         "build_ready",
-        "nvidia_smi_available",
-        "nvcc_available",
-        "python_bindings_available",
-        "trtexec_path",
+        "cuda",
+        "recommended_actions",
+        "status",
+        "tools",
     }
+    assert set(detected["bindings"]) == {"python_tensorrt"}
+    assert set(detected["cuda"]) == {
+        "cuda_driver_version",
+        "gpu_detected",
+        "gpus",
+        "nvcc_available",
+        "nvcc_version",
+        "nvidia_smi_available",
+        "nvidia_smi_version",
+    }
+    assert set(detected["tools"]) == {"trtexec"}
+    assert detected["recommended_actions"]
 
 
 def test_benchmark_cli_requires_engine_for_execution():

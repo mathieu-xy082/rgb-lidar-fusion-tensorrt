@@ -167,7 +167,22 @@ automatiquement si `--image-size` n'est pas fourni. Si `--image-size` est aussi
 fourni, il doit correspondre au canvas PPM. Les PNG/JPEG restent une dépendance
 future optionnelle.
 
-Les dépendances lourdes PyTorch / ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
+Pour le baseline PyTorch de Milestone 3, installer aussi le groupe `ml` :
+
+```bash
+pdm install -G dev -G ml
+pdm run pytest tests/test_baseline_model.py -q
+```
+
+Le modèle minimal `BaselineFusionModel` consomme deux tenseurs alignés spatialement :
+
+```python
+rgb: Tensor[B, 3, H, W]
+lidar_maps: Tensor[B, 6, H, W]  # depth, xyz, intensity, mask
+output: Tensor[B, output_dim]
+```
+
+Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## LiDAR local surface splatting — niveau 1
 
@@ -208,4 +223,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. La branche `feature/kitti-calibration-projection` couvre maintenant une première lecture testée des fichiers calibration KITTI (`P2`, `R0_rect`, `Tr_velo_to_cam`) et des nuages Velodyne `.bin`, puis projette les points vers l'image, génère des cartes sparse exportables en `.npz`, et produit un overlay PPM synthétique ou KITTI local visualisable sans dépendance lourde, soit sur fond noir, soit sur un canvas RGB PPM ASCII local. Prochaine cible : rendre la lecture PNG/JPEG optionnelle via une dépendance image légère ou un groupe PDM dédié.
+Initial skeleton créé. Le socle intégré couvre maintenant la CI staged, la calibration/projection KITTI, le dataset sparse LiDAR léger et le splatting local déterministe. Prochaine cible : consolider le baseline PyTorch avec les cartes sparse/splattées avant l'export ONNX.

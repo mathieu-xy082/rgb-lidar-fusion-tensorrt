@@ -14,30 +14,22 @@ Milestone 2 dataset work stays PyTorch-free for now: `KittiSparseLidarDataset` i
 
 - `pytest` — unit and smoke validation.
 
+### `ml` group
+
+- `torch` — minimal Milestone 3 baseline model and synthetic forward-pass test.
+
 Commands:
 
 ```bash
-pdm install -G dev
+pdm install -G dev -G ml
 pdm run validate
 ```
 
 ## Add when the relevant milestone starts
 
-### `ml` group — PyTorch model milestone
+### `torchvision` — dataset/model utilities
 
-Add when Milestone 2/3 starts: dataset + baseline model.
-
-Candidate dependencies:
-
-```toml
-[dependency-groups]
-ml = [
-  "torch",
-  "torchvision",
-]
-```
-
-Keep this separate from the default install because PyTorch is heavy and may need CPU/CUDA-specific wheel selection.
+Add to the existing `ml` group only when image transforms, pretrained backbones, or detection utilities are introduced. The first baseline uses plain PyTorch only.
 
 ### `onnx` group — export and validation milestone
 

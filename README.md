@@ -170,17 +170,27 @@ future optionnelle.
 Pour le baseline PyTorch de Milestone 3, installer aussi le groupe `ml` :
 
 ```bash
-pdm install -G dev -G ml
-pdm run pytest tests/test_baseline_model.py -q
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
+PDM_IGNORE_ACTIVE_VENV=1 pdm run pytest tests/test_baseline_model.py -q
 ```
 
-Le modèle minimal `BaselineFusionModel` consomme deux tenseurs alignés spatialement :
+Le modèle minimal `BaselineFusionModel` consomme deux tenseurs alignés spatialement.
+Le contrat par défaut est désormais le LiDAR **enriched** à 8 canaux : les 6 cartes
+sparse brutes restent intactes et `depth_expanded`/`confidence` sont ajoutées en
+complément, pas en remplacement.
 
 ```python
 rgb: Tensor[B, 3, H, W]
-lidar_maps: Tensor[B, 6, H, W]  # depth, xyz, intensity, mask
+lidar_maps: Tensor[B, 8, H, W]
+# channels 0..5: normalized depth, vehicle xyz, intensity, sparse point mask
+# channel 6: depth_expanded from local LiDAR splatting
+# channel 7: confidence from local LiDAR splatting
 output: Tensor[B, output_dim]
 ```
+
+Une option explicite `BaselineFusionModel(lidar_mode="sparse")` conserve le chemin
+6 canaux pour comparer un baseline sparse-only, mais le chemin recommandé pour les
+itérations ONNX/TensorRT suivantes est `lidar_mode="enriched"`.
 
 Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from .calibration import CameraCalibration
+from .lidar_splatting import SplattingConfig, splat_sparse_depth
 
 
 LIDAR_MAP_CHANNELS = (
@@ -19,6 +20,10 @@ LIDAR_MAP_CHANNELS = (
     "point_mask",
 )
 
+ENRICHED_LIDAR_MAP_CHANNELS = LIDAR_MAP_CHANNELS + (
+    "depth_expanded",
+    "confidence",
+)
 
 @dataclass(frozen=True)
 class ProjectedLidar:
@@ -155,6 +160,33 @@ def build_sparse_lidar_maps(
         maps[5, v, u] = 1.0
 
     return maps
+
+
+def build_enriched_lidar_maps(
+    sparse_lidar_maps: np.ndarray,
+    splatting_config: SplattingConfig | None = None,
+) -> np.ndarray:
+    """Append splatted depth maps to the six-channel sparse LiDAR contract.
+
+    The first six channels are copied from ``build_sparse_lidar_maps`` output
+    unchanged. Channels 6 and 7 append local ``depth_expanded`` and
+    ``confidence`` maps computed from the sparse normalized depth and point mask.
+    """
+
+    sparse = np.asarray(sparse_lidar_maps, dtype=np.float32)
+    if sparse.ndim != 3 or sparse.shape[0] != 6:
+        raise ValueError("sparse_lidar_maps must have shape [6, H, W].")
+
+    splat = splat_sparse_depth(
+        sparse_depth=sparse[0],
+        sparse_mask=sparse[5] > 0.0,
+        config=splatting_config,
+    )
+    enriched = np.zeros((8, sparse.shape[1], sparse.shape[2]), dtype=np.float32)
+    enriched[:6] = sparse
+    enriched[6] = splat.depth_expanded
+    enriched[7] = splat.confidence
+    return enriched
 
 
 def _as_rgb_image(image: np.ndarray) -> np.ndarray:

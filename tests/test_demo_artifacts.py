@@ -27,6 +27,11 @@ def test_generate_synthetic_demo_artifacts_writes_all_expected_files(tmp_path: P
     assert sparse_path.exists()
     assert splat_path.exists()
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == manifest
+    assert manifest["outputs"] == {
+        "overlay": "projected_lidar_examples/synthetic_overlay.ppm",
+        "sparse_maps": "sparse_maps/synthetic_sparse_maps.npz",
+        "splatted_maps": "splatted_maps/synthetic_splatted_maps.npz",
+    }
 
     sparse = np.load(sparse_path)
     splatted = np.load(splat_path)

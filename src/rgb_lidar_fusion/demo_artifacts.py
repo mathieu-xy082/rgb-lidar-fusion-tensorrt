@@ -82,9 +82,9 @@ def generate_synthetic_demo_artifacts(
         "occupied_pixels": int(lidar_maps[5].sum()),
         "splatted_pixels": int((splat.confidence > 0.0).sum()),
         "outputs": {
-            "overlay": str(overlay_path),
-            "sparse_maps": str(sparse_path),
-            "splatted_maps": str(splat_path),
+            "overlay": overlay_path.relative_to(output_root).as_posix(),
+            "sparse_maps": sparse_path.relative_to(output_root).as_posix(),
+            "splatted_maps": splat_path.relative_to(output_root).as_posix(),
         },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

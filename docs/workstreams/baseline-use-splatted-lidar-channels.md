@@ -38,6 +38,9 @@ The expected outcome is a reviewable model input contract, not a large model arc
 3. `confidence` from local surface splatting is appended as channel 7.
 
 The sparse-only baseline remains available as `lidar_mode="sparse"` with
-`Tensor[B, 6, H, W]` to keep ablation comparisons possible. Shape checks reject
-missing batch dimensions, RGB tensors that are not `B x 3 x H x W`, unaligned
-batch/spatial dimensions, and wrong LiDAR channel counts before concatenation.
+`Tensor[B, 6, H, W]` to keep ablation comparisons possible. `build_enriched_lidar_maps`
+now provides the canonical handoff from projection/splatting to the baseline: it
+copies sparse channels 0–5 unchanged, then appends `depth_expanded` and
+`confidence` as channels 6–7. Shape checks reject missing batch dimensions, RGB
+tensors that are not `B x 3 x H x W`, unaligned batch/spatial dimensions, and
+wrong LiDAR channel counts before concatenation.

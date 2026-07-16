@@ -8,6 +8,7 @@ from rgb_lidar_fusion import calibration as calibration_module
 from rgb_lidar_fusion import project_lidar as project_lidar_module
 from rgb_lidar_fusion.calibration import CameraCalibration, make_identity_calibration
 from rgb_lidar_fusion.project_lidar import (
+    build_enriched_lidar_maps,
     build_sparse_lidar_maps,
     project_lidar_to_image,
     read_ppm_image,
@@ -65,6 +66,30 @@ def test_sparse_maps_keep_nearest_point_when_pixels_collide():
     assert maps[5].sum() == 1.0
     assert maps[0, 5, 5] == pytest.approx(0.1)  # 10m / 100m, nearest point wins
     assert maps[4, 5, 5] == pytest.approx(0.8)
+
+
+def test_enriched_lidar_maps_preserve_sparse_channels_and_append_splatted_maps():
+    sparse_maps = np.zeros((6, 5, 5), dtype=np.float32)
+    sparse_maps[0, 2, 2] = 0.25
+    sparse_maps[1, 2, 2] = 0.10
+    sparse_maps[2, 2, 2] = -0.05
+    sparse_maps[3, 2, 2] = 0.02
+    sparse_maps[4, 2, 2] = 0.90
+    sparse_maps[5, 2, 2] = 1.0
+
+    enriched = build_enriched_lidar_maps(sparse_maps)
+
+    assert enriched.shape == (8, 5, 5)
+    np.testing.assert_array_equal(enriched[:6], sparse_maps)
+    assert enriched[6, 2, 2] == pytest.approx(0.25)
+    assert enriched[6, 2, 3] == pytest.approx(0.25)
+    assert enriched[7, 2, 2] == pytest.approx(1.0)
+    assert 0.0 < enriched[7, 2, 3] < enriched[7, 2, 2]
+
+
+def test_enriched_lidar_maps_reject_sparse_map_shape_that_would_violate_baseline_contract():
+    with pytest.raises(ValueError, match="sparse_lidar_maps must have shape \\[6, H, W\\]"):
+        build_enriched_lidar_maps(np.zeros((5, 4, 4), dtype=np.float32))
 
 
 def test_parse_kitti_calibration_file_builds_rectified_velodyne_to_camera_transform(tmp_path):

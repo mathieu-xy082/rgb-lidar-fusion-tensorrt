@@ -17,6 +17,17 @@ Keep the first graph small and deployment-friendly:
 3. Compare PyTorch output against ONNX Runtime output on deterministic synthetic tensors.
 4. Keep NMS, decoding, visualization, TensorRT-specific plugins, and other complex post-processing outside the ONNX graph.
 
+## Baseline contract required before scripts
+
+Do not add `pdm run export_onnx` or `pdm run validate_onnx` until `main` exposes a reviewed model interface with:
+
+- deterministic construction for a tiny synthetic fixture, without requiring a checkpoint download;
+- named tensor inputs for `rgb` and `lidar_maps`, or a documented fused tensor replacement if the baseline standardizes on concatenation;
+- a stable `prediction` output tensor or mapping whose shape can be asserted before any post-processing;
+- no NMS, box decoding, visualization, TensorRT plugins, or dataset I/O inside the exported graph.
+
+The first parity script should instantiate that reviewed interface directly, feed fixed synthetic tensors, write the generated `.onnx` under `results/onnx/`, and remove/recreate only that ignored artifact path during validation.
+
 ## Expected PDM shape
 
 Add an `onnx` dependency group when the export scripts are implemented and exercised against the reviewed baseline:

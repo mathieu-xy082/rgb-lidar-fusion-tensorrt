@@ -22,3 +22,13 @@ def test_onnx_artifact_policy_is_documented_before_export_scripts_are_enabled():
     assert "onnx/" in results_readme
     assert "NMS" in onnx_plan
     assert "outside the ONNX graph" in onnx_plan
+
+
+def test_onnx_plan_names_the_required_baseline_contract_before_scripts_land():
+    onnx_plan = (ROOT / "docs" / "onnx-export-validation.md").read_text(encoding="utf-8")
+
+    assert "Baseline contract required before scripts" in onnx_plan
+    assert "rgb" in onnx_plan
+    assert "lidar_maps" in onnx_plan
+    assert "prediction" in onnx_plan
+    assert "no NMS" in onnx_plan

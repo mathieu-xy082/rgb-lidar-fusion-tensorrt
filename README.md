@@ -194,6 +194,29 @@ Une option explicite `BaselineFusionModel(lidar_mode="sparse")` conserve le chem
 6 canaux pour comparer un baseline sparse-only, mais le chemin recommandé pour les
 itérations ONNX/TensorRT suivantes est `lidar_mode="enriched"`.
 
+Le batch dataset reste NumPy-first et expose aussi une représentation générique
+concaténée `inputs: [B, C, H, W]`. Les chemins downstream PyTorch/ONNX/demo ne
+doivent pas reslicer `inputs` à la main : utiliser l'adaptateur explicite, qui
+valide `input_channels` avant de retourner les tenseurs attendus par le modèle.
+Le mode enriched exige que `depth_expanded` et `confidence` soient déjà présents ;
+il échoue clairement au lieu de les reconstruire implicitement.
+
+```python
+from rgb_lidar_fusion.model_batch import (
+    dataset_items_to_model_batch,
+    model_batch_to_baseline_inputs,
+    model_batch_to_torch_tensors,
+)
+
+batch = dataset_items_to_model_batch(items, include_splatted_depth=True)
+arrays = model_batch_to_baseline_inputs(batch, lidar_mode="enriched")
+# arrays["rgb"]: [B, 3, H, W]
+# arrays["lidar_maps"]: [B, 8, H, W]
+
+tensors = model_batch_to_torch_tensors(arrays)  # optional; requires group `ml`
+output = BaselineFusionModel(lidar_mode="enriched")(**tensors)
+```
+
 Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## LiDAR local surface splatting — niveau 1

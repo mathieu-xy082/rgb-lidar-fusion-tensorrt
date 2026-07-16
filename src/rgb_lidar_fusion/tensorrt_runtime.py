@@ -96,7 +96,9 @@ def runtime_diagnostic(
         python_tensorrt_version = _installed_python_package_version("tensorrt")
 
     nvidia_smi_output = ""
+    nvidia_smi_version = None
     if detected.nvidia_smi_available:
+        nvidia_smi_version = _first_non_empty_line(command_probe(["nvidia-smi", "--version"]))
         nvidia_smi_output = command_probe(
             ["nvidia-smi", "--query-gpu=name,driver_version,cuda_version", "--format=csv,noheader"]
         )
@@ -141,7 +143,7 @@ def runtime_diagnostic(
         "cuda": {
             "gpu_detected": gpu_detected,
             "nvidia_smi_available": detected.nvidia_smi_available,
-            "nvidia_smi_version": None,
+            "nvidia_smi_version": nvidia_smi_version,
             "cuda_driver_version": gpus[0]["cuda_version"] if gpus else None,
             "nvcc_available": detected.nvcc_available,
             "nvcc_version": nvcc_version,

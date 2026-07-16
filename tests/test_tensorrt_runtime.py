@@ -57,6 +57,8 @@ def test_runtime_diagnostic_reports_versions_and_gpu_inventory_when_tools_exist(
             return "TensorRT v10.1.0\n"
         if command == ["nvidia-smi", "--query-gpu=name,driver_version,cuda_version", "--format=csv,noheader"]:
             return "NVIDIA RTX 4090, 550.54.14, 12.4\n"
+        if command == ["nvidia-smi", "--version"]:
+            return "NVIDIA-SMI 550.54.14    Driver Version: 550.54.14    CUDA Version: 12.4\n"
         if command == ["nvcc", "--version"]:
             return "Cuda compilation tools, release 12.4, V12.4.131\n"
         raise AssertionError(f"unexpected probe: {command}")
@@ -73,7 +75,7 @@ def test_runtime_diagnostic_reports_versions_and_gpu_inventory_when_tools_exist(
     assert diagnostic["cuda"] == {
         "gpu_detected": True,
         "nvidia_smi_available": True,
-        "nvidia_smi_version": None,
+        "nvidia_smi_version": "NVIDIA-SMI 550.54.14    Driver Version: 550.54.14    CUDA Version: 12.4",
         "cuda_driver_version": "12.4",
         "nvcc_available": True,
         "nvcc_version": "Cuda compilation tools, release 12.4, V12.4.131",

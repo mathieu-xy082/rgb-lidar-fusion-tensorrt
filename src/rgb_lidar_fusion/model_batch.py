@@ -13,6 +13,39 @@ RGB_CHANNELS = ("rgb_red", "rgb_green", "rgb_blue")
 SPLATTED_CHANNELS = ("depth_expanded", "confidence")
 
 
+def dataset_items_to_model_batch(
+    items: list[dict[str, Any]],
+    *,
+    include_splatted_depth: bool = False,
+    splatting_config: SplattingConfig | None = None,
+) -> dict[str, Any]:
+    """Stack multiple dataset items into one model-ready NumPy batch."""
+
+    batches = [
+        dataset_item_to_model_batch(
+            item,
+            include_splatted_depth=include_splatted_depth,
+            splatting_config=splatting_config,
+        )
+        for item in items
+    ]
+    if not batches:
+        raise ValueError("items must contain at least one dataset item.")
+    input_channels = batches[0]["input_channels"]
+    if any(batch["input_channels"] != input_channels for batch in batches):
+        raise ValueError("all dataset items must produce the same input channel order.")
+    return {
+        "inputs": np.concatenate([batch["inputs"] for batch in batches], axis=0),
+        "input_channels": input_channels,
+        "sparse_lidar_maps": np.concatenate(
+            [batch["sparse_lidar_maps"] for batch in batches],
+            axis=0,
+        ),
+        "targets": [batch["target"] for batch in batches],
+        "metas": [batch["meta"] for batch in batches],
+    }
+
+
 def dataset_item_to_model_batch(
     item: dict[str, Any],
     *,

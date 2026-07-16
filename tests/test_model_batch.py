@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from rgb_lidar_fusion.model_batch import dataset_item_to_model_batch
+from rgb_lidar_fusion.model_batch import (
+    dataset_item_to_model_batch,
+    dataset_items_to_model_batch,
+)
 from rgb_lidar_fusion.lidar_splatting import SplattingConfig
 from rgb_lidar_fusion.project_lidar import LIDAR_MAP_CHANNELS
 
@@ -96,3 +99,29 @@ def test_dataset_item_batch_preserves_sparse_lidar_maps_separately_from_splats()
     np.testing.assert_allclose(batch["sparse_lidar_maps"], item["lidar_maps"][np.newaxis])
     assert batch["sparse_lidar_maps"][0, 0, 1, 0] == pytest.approx(0.0)
     assert batch["inputs"][0, 9, 1, 0] == pytest.approx(0.125)
+
+
+def test_dataset_items_batch_stacks_synthetic_items_without_losing_per_item_contract():
+    first = synthetic_dataset_item()
+    second = synthetic_dataset_item()
+    second["image"] = second["image"] + 0.1
+    second["lidar_maps"] = second["lidar_maps"].copy()
+    second["lidar_maps"][0, 0, 2] = 0.5
+    second["lidar_maps"][5, 0, 2] = 1.0
+
+    batch = dataset_items_to_model_batch([first, second])
+
+    assert batch["inputs"].shape == (2, 9, 2, 3)
+    assert batch["sparse_lidar_maps"].shape == (2, 6, 2, 3)
+    assert batch["input_channels"] == [
+        "rgb_red",
+        "rgb_green",
+        "rgb_blue",
+        *LIDAR_MAP_CHANNELS,
+    ]
+    assert batch["targets"] == [first["target"], second["target"]]
+    assert batch["metas"] == [first["meta"], second["meta"]]
+    np.testing.assert_allclose(batch["inputs"][0, 0:3], first["image"])
+    np.testing.assert_allclose(batch["inputs"][1, 0:3], second["image"])
+    np.testing.assert_allclose(batch["sparse_lidar_maps"][0], first["lidar_maps"])
+    np.testing.assert_allclose(batch["sparse_lidar_maps"][1], second["lidar_maps"])

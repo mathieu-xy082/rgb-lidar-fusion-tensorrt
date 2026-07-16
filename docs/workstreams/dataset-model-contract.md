@@ -39,6 +39,9 @@ Create the minimal, tested bridge between `KittiSparseLidarDataset`, LiDAR splat
   appended after the sparse LiDAR channels using `splat_sparse_depth`.
 - `sparse_lidar_maps`: preserved copy of the original six sparse maps as
   `[1, 6, H, W]`, so splatting never replaces the sparse representation.
+- `dataset_items_to_model_batch([...])` stacks validated single-item batches into
+  `[N, C, H, W]` inputs plus `[N, 6, H, W]` sparse maps while carrying per-item
+  `targets` and `metas` lists.
 - The adapter validates RGB shape `[3, H, W]`, LiDAR-map shape `[6, H, W]`,
   shared image/LiDAR spatial dimensions, and any dataset-provided
   `meta.lidar_map_channels` declaration against `LIDAR_MAP_CHANNELS`.

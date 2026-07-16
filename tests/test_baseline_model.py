@@ -17,6 +17,16 @@ def test_baseline_fusion_model_defaults_to_enriched_sparse_plus_splatted_lidar_c
     output = model(rgb, lidar_maps)
 
     assert model.lidar_channels == 8
+    assert model.lidar_channel_names == (
+        "normalized_camera_depth",
+        "normalized_vehicle_x",
+        "normalized_vehicle_y",
+        "normalized_vehicle_z",
+        "intensity",
+        "point_mask",
+        "depth_expanded",
+        "confidence",
+    )
     assert output.shape == (2, 4)
     assert output.dtype == torch.float32
 

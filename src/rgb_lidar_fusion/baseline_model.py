@@ -23,6 +23,10 @@ LIDAR_CHANNELS_BY_MODE = {
     "sparse": SPARSE_LIDAR_CHANNELS,
     "enriched": ENRICHED_LIDAR_CHANNELS,
 }
+LIDAR_CHANNEL_NAMES_BY_MODE = {
+    "sparse": LIDAR_MAP_CHANNELS,
+    "enriched": ENRICHED_LIDAR_MAP_CHANNELS,
+}
 
 
 class BaselineFusionModel(nn.Module):
@@ -46,6 +50,7 @@ class BaselineFusionModel(nn.Module):
             )
         self.lidar_mode = lidar_mode
         self.lidar_channels = expected_lidar_channels
+        self.lidar_channel_names = LIDAR_CHANNEL_NAMES_BY_MODE[lidar_mode]
         input_channels = 3 + self.lidar_channels
         self.features = nn.Sequential(
             nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),

@@ -34,6 +34,9 @@ def dataset_items_to_model_batch(
     input_channels = batches[0]["input_channels"]
     if any(batch["input_channels"] != input_channels for batch in batches):
         raise ValueError("all dataset items must produce the same input channel order.")
+    input_shape = batches[0]["inputs"].shape[1:]
+    if any(batch["inputs"].shape[1:] != input_shape for batch in batches):
+        raise ValueError("all dataset items must share batch input shape.")
     return {
         "inputs": np.concatenate([batch["inputs"] for batch in batches], axis=0),
         "input_channels": input_channels,

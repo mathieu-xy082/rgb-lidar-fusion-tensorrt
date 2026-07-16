@@ -125,3 +125,13 @@ def test_dataset_items_batch_stacks_synthetic_items_without_losing_per_item_cont
     np.testing.assert_allclose(batch["inputs"][1, 0:3], second["image"])
     np.testing.assert_allclose(batch["sparse_lidar_maps"][0], first["lidar_maps"])
     np.testing.assert_allclose(batch["sparse_lidar_maps"][1], second["lidar_maps"])
+
+
+def test_dataset_items_batch_rejects_mixed_spatial_shapes_before_stacking():
+    first = synthetic_dataset_item()
+    second = synthetic_dataset_item()
+    second["image"] = np.zeros((3, 3, 3), dtype=np.float32)
+    second["lidar_maps"] = np.zeros((6, 3, 3), dtype=np.float32)
+
+    with pytest.raises(ValueError, match="all dataset items must share batch input shape"):
+        dataset_items_to_model_batch([first, second])

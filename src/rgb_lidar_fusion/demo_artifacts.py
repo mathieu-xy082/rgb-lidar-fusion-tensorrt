@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,11 @@ SYNTHETIC_POINTS = np.array(
     ],
     dtype=np.float32,
 )
+
+
+def _artifact_integrity(path: Path) -> dict[str, int | str]:
+    data = path.read_bytes()
+    return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
 def generate_synthetic_demo_artifacts(
@@ -85,6 +91,11 @@ def generate_synthetic_demo_artifacts(
             "overlay": overlay_path.relative_to(output_root).as_posix(),
             "sparse_maps": sparse_path.relative_to(output_root).as_posix(),
             "splatted_maps": splat_path.relative_to(output_root).as_posix(),
+        },
+        "artifact_integrity": {
+            "overlay": _artifact_integrity(overlay_path),
+            "sparse_maps": _artifact_integrity(sparse_path),
+            "splatted_maps": _artifact_integrity(splat_path),
         },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

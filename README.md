@@ -135,9 +135,9 @@ manifest.json
 
 Ces fichiers sont des sorties locales ignorées par Git. Le manifeste indique la
 taille image, le nombre de points projetés, les pixels sparse occupés, les
-pixels couverts par le splatting, et les chemins de sortie relatifs au dossier
-de génération pour rester reproductible entre machines. Pour choisir un autre
-dossier de sortie :
+pixels couverts par le splatting, les chemins de sortie relatifs au dossier
+de génération, ainsi que les tailles et SHA-256 de chaque artefact pour vérifier
+la reproductibilité entre machines. Pour choisir un autre dossier de sortie :
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm run python -m rgb_lidar_fusion.demo_artifacts \

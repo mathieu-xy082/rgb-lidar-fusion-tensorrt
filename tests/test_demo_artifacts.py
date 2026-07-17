@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -31,6 +32,20 @@ def test_generate_synthetic_demo_artifacts_writes_all_expected_files(tmp_path: P
         "overlay": "projected_lidar_examples/synthetic_overlay.ppm",
         "sparse_maps": "sparse_maps/synthetic_sparse_maps.npz",
         "splatted_maps": "splatted_maps/synthetic_splatted_maps.npz",
+    }
+    assert manifest["artifact_integrity"] == {
+        "overlay": {
+            "bytes": overlay_path.stat().st_size,
+            "sha256": hashlib.sha256(overlay_path.read_bytes()).hexdigest(),
+        },
+        "sparse_maps": {
+            "bytes": sparse_path.stat().st_size,
+            "sha256": hashlib.sha256(sparse_path.read_bytes()).hexdigest(),
+        },
+        "splatted_maps": {
+            "bytes": splat_path.stat().st_size,
+            "sha256": hashlib.sha256(splat_path.read_bytes()).hexdigest(),
+        },
     }
 
     sparse = np.load(sparse_path)

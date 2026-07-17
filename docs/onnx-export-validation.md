@@ -6,7 +6,7 @@ Current status:
 
 - `main` exposes `rgb_lidar_fusion.baseline_model.BaselineFusionModel` with a documented RGB + LiDAR-map input contract.
 - The default LiDAR contract is the enriched 8-channel representation; `lidar_mode="sparse"` remains available for 6-channel sparse-only comparison.
-- No generated `.onnx` artifacts are committed; exports should be written to an ignored output path such as `results/onnx/`.
+- No generated `.onnx` or `.onnx.data` artifacts are committed; exports should be written to an ignored output path such as `results/onnx/`.
 
 ## Initial scope once the baseline is available
 
@@ -17,30 +17,31 @@ Keep the first graph small and deployment-friendly:
 3. Compare PyTorch output against ONNX Runtime output on deterministic synthetic tensors.
 4. Keep NMS, decoding, visualization, TensorRT-specific plugins, and other complex post-processing outside the ONNX graph.
 
-## Baseline contract required before scripts
+## Reviewed baseline contract used by scripts
 
-Do not add `pdm run export_onnx` or `pdm run validate_onnx` until `main` exposes a reviewed model interface with:
+`pdm run export_onnx` and `pdm run validate_onnx` now target the reviewed model interface on `main`:
 
-- deterministic construction for a tiny synthetic fixture, without requiring a checkpoint download;
-- named tensor inputs for `rgb` and `lidar_maps`, or a documented fused tensor replacement if the baseline standardizes on concatenation;
-- a stable `prediction` output tensor or mapping whose shape can be asserted before any post-processing;
+- deterministic construction via `BaselineFusionModel(output_dim=4, lidar_mode="enriched")`, without requiring a checkpoint download;
+- named tensor inputs `rgb: [2, 3, 32, 48]` and `lidar_maps: [2, 8, 32, 48]`;
+- stable `prediction: [2, 4]` output asserted before any post-processing;
 - no NMS, box decoding, visualization, TensorRT plugins, or dataset I/O inside the exported graph.
 
-The first parity script should instantiate that reviewed interface directly, feed fixed synthetic tensors, write the generated `.onnx` under `results/onnx/`, and remove/recreate only that ignored artifact path during validation.
+The parity scripts instantiate that reviewed interface directly, feed fixed synthetic tensors, write the generated `.onnx` under `results/onnx/`, and recreate only that ignored artifact path during validation.
 
 ## Expected PDM shape
 
-Add an `onnx` dependency group when the export scripts are implemented and exercised against the reviewed baseline:
+The `onnx` dependency group is opt-in and must be installed together with `ml` for export/parity validation:
 
 ```toml
 [dependency-groups]
 onnx = [
-  "onnx",
-  "onnxruntime",
+  "onnx>=1.16",
+  "onnxruntime>=1.18",
+  "onnxscript>=0.1",
 ]
 ```
 
-Candidate scripts once useful:
+Enabled scripts:
 
 ```toml
 [tool.pdm.scripts]

@@ -225,6 +225,22 @@ output = BaselineFusionModel(lidar_mode="enriched")(**tensors)
 
 Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`; le scope initial ONNX est détaillé dans `docs/onnx-export-validation.md`.
 
+Pour le premier export ONNX Milestone 4, installer les groupes optionnels `ml` et
+`onnx`, puis lancer l'export et la validation de parité synthétique :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml -G onnx
+PDM_IGNORE_ACTIVE_VENV=1 pdm run export_onnx
+PDM_IGNORE_ACTIVE_VENV=1 pdm run validate_onnx
+```
+
+Les scripts utilisent `BaselineFusionModel(output_dim=4, lidar_mode="enriched")`
+avec des tenseurs déterministes `rgb: [2, 3, 32, 48]` et
+`lidar_maps: [2, 8, 32, 48]`, puis vérifient la sortie ONNX
+`prediction: [2, 4]` et la parité ONNX Runtime. Les fichiers générés
+`results/onnx/baseline_fusion.onnx` et l'éventuel sidecar `.onnx.data` sont
+ignorés par Git et ne doivent pas être commités.
+
 ## LiDAR local surface splatting — niveau 1
 
 Le module `rgb_lidar_fusion.lidar_splatting` ajoute une représentation séparée des cartes sparse brutes :

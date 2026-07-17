@@ -10,4 +10,4 @@ onnx/                      Local ONNX exports for Milestone 4 validation (ignore
 benchmarks/                Markdown/CSV latency summaries
 ```
 
-Do not commit generated `.onnx`, TensorRT engine, plan, image, video, or checkpoint artifacts.
+Do not commit generated `.onnx`, `.onnx.data`, TensorRT engine, plan, image, video, or checkpoint artifacts.

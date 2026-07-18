@@ -31,13 +31,33 @@ def synthetic_dataset_item() -> dict:
     }
 
 
-def test_dataset_item_batch_adds_batch_dimension_and_documents_channel_order():
+def test_dataset_item_batch_defaults_to_enriched_identity_contract():
     item = synthetic_dataset_item()
 
     batch = dataset_item_to_model_batch(item)
 
-    assert batch["inputs"].shape == (1, 9, 2, 3)
+    assert batch["inputs"].shape == (1, 11, 2, 3)
     assert batch["inputs"].dtype == np.float32
+    assert batch["input_channels"] == [
+        "rgb_red",
+        "rgb_green",
+        "rgb_blue",
+        *LIDAR_MAP_CHANNELS,
+        "depth_expanded",
+        "confidence",
+    ]
+    np.testing.assert_allclose(batch["inputs"][0, 0:3], item["image"])
+    np.testing.assert_allclose(batch["inputs"][0, 3:9], item["lidar_maps"])
+    np.testing.assert_allclose(batch["inputs"][0, 9], item["lidar_maps"][0])
+    np.testing.assert_allclose(batch["inputs"][0, 10], item["lidar_maps"][5])
+
+
+def test_dataset_item_batch_supports_explicit_sparse_only_ablation():
+    item = synthetic_dataset_item()
+
+    batch = dataset_item_to_model_batch(item, include_splatted_depth=False)
+
+    assert batch["inputs"].shape == (1, 9, 2, 3)
     assert batch["input_channels"] == [
         "rgb_red",
         "rgb_green",
@@ -72,7 +92,7 @@ def test_dataset_item_batch_rejects_dataset_channel_metadata_drift():
         dataset_item_to_model_batch(item)
 
 
-def test_dataset_item_batch_can_append_splatted_depth_and_confidence_channels():
+def test_dataset_item_batch_can_append_non_degenerate_splatted_channels():
     item = synthetic_dataset_item()
 
     batch = dataset_item_to_model_batch(
@@ -113,13 +133,15 @@ def test_dataset_items_batch_stacks_synthetic_items_without_losing_per_item_cont
 
     batch = dataset_items_to_model_batch([first, second])
 
-    assert batch["inputs"].shape == (2, 9, 2, 3)
+    assert batch["inputs"].shape == (2, 11, 2, 3)
     assert batch["sparse_lidar_maps"].shape == (2, 6, 2, 3)
     assert batch["input_channels"] == [
         "rgb_red",
         "rgb_green",
         "rgb_blue",
         *LIDAR_MAP_CHANNELS,
+        "depth_expanded",
+        "confidence",
     ]
     assert batch["targets"] == [first["target"], second["target"]]
     assert batch["metas"] == [first["meta"], second["meta"]]
@@ -179,24 +201,18 @@ def test_model_batch_to_baseline_inputs_rejects_missing_channel_metadata():
 
 def test_model_batch_to_baseline_inputs_rejects_wrong_channel_metadata_even_if_shape_matches():
     batch = dataset_items_to_model_batch([synthetic_dataset_item()])
-    batch["input_channels"] = [
-        "rgb_red",
-        "rgb_green",
-        "rgb_blue",
-        "normalized_camera_depth",
-        "normalized_vehicle_x",
-        "normalized_vehicle_y",
-        "normalized_vehicle_z",
-        "intensity",
-        "unexpected_mask",
-    ]
+    batch["input_channels"] = list(batch["input_channels"])
+    batch["input_channels"][8] = "unexpected_mask"
 
     with pytest.raises(ValueError, match="missing required baseline input channels"):
         model_batch_to_baseline_inputs(batch, lidar_mode="sparse")
 
 
 def test_model_batch_to_baseline_inputs_rejects_missing_enriched_channels_without_reconstructing():
-    batch = dataset_items_to_model_batch([synthetic_dataset_item()])
+    batch = dataset_items_to_model_batch(
+        [synthetic_dataset_item()],
+        include_splatted_depth=False,
+    )
 
     with pytest.raises(ValueError, match="missing required baseline input channels"):
         model_batch_to_baseline_inputs(batch, lidar_mode="enriched")

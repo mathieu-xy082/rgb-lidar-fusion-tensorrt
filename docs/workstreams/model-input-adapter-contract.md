@@ -8,7 +8,7 @@ Parent branch: `main`
 
 Close the contract gap between the NumPy dataset/model batch adapter and the PyTorch `BaselineFusionModel` forward API.
 
-The integrated dataset/model batch branch exposes a generic concatenated representation:
+The dataset/model batch adapter exposes a generic concatenated representation:
 
 ```text
 inputs: [B, 9, H, W]   # RGB + six sparse LiDAR maps
@@ -23,7 +23,16 @@ lidar_maps: [B, 6, H, W]  # sparse mode
 lidar_maps: [B, 8, H, W]  # enriched mode
 ```
 
-This workstream should add a small, tested adapter that converts the batch dictionary into model-call inputs without each downstream script re-implementing channel slicing.
+This workstream adds a small, tested adapter that converts the batch dictionary into model-call inputs without each downstream script re-implementing channel slicing. The nominal project contract is now enriched by default: sparse-only batches are treated as an ablation/debug path, while the default `[B, 11, H, W]` batch can represent sparse LiDAR as the degenerate limit of local Gaussian splatting.
+
+In that identity limit:
+
+```text
+depth_expanded = normalized_camera_depth
+confidence = point_mask
+```
+
+This corresponds to a zero-radius / infinitely peaked local kernel: no information is propagated to neighboring pixels, but downstream ONNX/demo/TensorRT code can still consume one stable enriched model contract.
 
 ## Scope
 
@@ -32,10 +41,11 @@ This workstream should add a small, tested adapter that converts the batch dicti
 - For `lidar_mode="sparse"`, return:
   - `rgb = inputs[:, 0:3]`
   - `lidar_maps = inputs[:, 3:9]`
-- For `lidar_mode="enriched"`, require or build the eight LiDAR channels:
+- For `lidar_mode="enriched"`, return the eight LiDAR channels:
   - six sparse maps
   - `depth_expanded`
   - `confidence`
+- Make enriched batch production the default; preserve `include_splatted_depth=False` only for sparse-only ablations.
 - Preserve NumPy-first behavior; only convert to torch tensors in an explicit optional helper if useful.
 - Add tests that call `BaselineFusionModel(**model_inputs)` on synthetic batches for both sparse and enriched modes when the `ml` group is available.
 - Document whether downstream ONNX/demo scripts should use the generic concatenated batch or the explicit model input adapter.

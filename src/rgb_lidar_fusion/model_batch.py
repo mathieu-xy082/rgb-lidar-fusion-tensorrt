@@ -6,7 +6,11 @@ from typing import Any
 
 import numpy as np
 
-from .lidar_splatting import SplattingConfig, splat_sparse_depth
+from .lidar_splatting import (
+    IDENTITY_SPLATTING_CONFIG,
+    SplattingConfig,
+    splat_sparse_depth,
+)
 from .project_lidar import ENRICHED_LIDAR_MAP_CHANNELS, LIDAR_MAP_CHANNELS
 
 RGB_CHANNELS = ("rgb_red", "rgb_green", "rgb_blue")
@@ -20,10 +24,15 @@ BASELINE_LIDAR_CHANNELS_BY_MODE = {
 def dataset_items_to_model_batch(
     items: list[dict[str, Any]],
     *,
-    include_splatted_depth: bool = False,
+    include_splatted_depth: bool = True,
     splatting_config: SplattingConfig | None = None,
 ) -> dict[str, Any]:
-    """Stack multiple dataset items into one model-ready NumPy batch."""
+    """Stack multiple dataset items into one model-ready NumPy batch.
+
+    The nominal project contract is enriched LiDAR: RGB plus the six sparse
+    LiDAR channels plus ``depth_expanded``/``confidence``. Pass
+    ``include_splatted_depth=False`` only for explicit sparse-only ablations.
+    """
 
     batches = [
         dataset_item_to_model_batch(
@@ -56,13 +65,15 @@ def dataset_items_to_model_batch(
 def dataset_item_to_model_batch(
     item: dict[str, Any],
     *,
-    include_splatted_depth: bool = False,
+    include_splatted_depth: bool = True,
     splatting_config: SplattingConfig | None = None,
 ) -> dict[str, Any]:
     """Convert one ``KittiSparseLidarDataset`` item into a batch dictionary.
 
-    The model input contract is channel-first NumPy data with an explicit batch
-    dimension: RGB channels first, followed by the dataset's sparse LiDAR maps.
+    The nominal model input contract is channel-first NumPy data with an
+    explicit batch dimension: RGB channels first, followed by the dataset's
+    sparse LiDAR maps and enriched ``depth_expanded``/``confidence`` channels.
+    Use ``include_splatted_depth=False`` only for sparse-only ablations.
     """
 
     image = np.asarray(item["image"], dtype=np.float32)
@@ -87,7 +98,7 @@ def dataset_item_to_model_batch(
         splat = splat_sparse_depth(
             sparse_depth=lidar_maps[0],
             sparse_mask=lidar_maps[5] > 0.0,
-            config=splatting_config,
+            config=splatting_config or IDENTITY_SPLATTING_CONFIG,
         )
         channels.append(
             np.stack([splat.depth_expanded, splat.confidence]).astype(

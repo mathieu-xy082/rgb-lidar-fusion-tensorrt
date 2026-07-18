@@ -9,6 +9,16 @@ import numpy as np
 from rgb_lidar_fusion.demo_artifacts import generate_synthetic_demo_artifacts
 
 
+def test_generate_synthetic_demo_artifacts_removes_stale_files(tmp_path: Path) -> None:
+    stale_path = tmp_path / "projected_lidar_examples" / "stale_overlay.ppm"
+    stale_path.parent.mkdir(parents=True)
+    stale_path.write_text("old", encoding="ascii")
+
+    generate_synthetic_demo_artifacts(tmp_path)
+
+    assert not stale_path.exists()
+
+
 def test_generate_synthetic_demo_artifacts_writes_all_expected_files(tmp_path: Path) -> None:
     manifest = generate_synthetic_demo_artifacts(tmp_path)
 

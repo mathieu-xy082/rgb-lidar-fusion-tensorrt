@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,9 @@ def generate_synthetic_demo_artifacts(
     """
 
     output_root = Path(output_dir)
+    if output_root.exists():
+        shutil.rmtree(output_root)
+
     overlay_dir = output_root / "projected_lidar_examples"
     sparse_dir = output_root / "sparse_maps"
     splat_dir = output_root / "splatted_maps"

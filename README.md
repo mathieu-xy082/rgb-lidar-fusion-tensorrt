@@ -130,14 +130,16 @@ La commande écrit sous `results/demo_artifacts/` :
 projected_lidar_examples/synthetic_overlay.ppm
 sparse_maps/synthetic_sparse_maps.npz
 splatted_maps/synthetic_splatted_maps.npz
+model_inputs/synthetic_baseline_inputs.npz
 manifest.json
 ```
 
-Ces fichiers sont des sorties locales ignorées par Git. Le manifeste indique la
-taille image, le nombre de points projetés, les pixels sparse occupés, les
-pixels couverts par le splatting, les chemins de sortie relatifs au dossier
-de génération, ainsi que les tailles et SHA-256 de chaque artefact pour vérifier
-la reproductibilité entre machines. Pour choisir un autre dossier de sortie :
+La commande réinitialise le dossier de sortie ciblé avant d'écrire le bundle, puis
+renseigne la taille image, le nombre de points projetés, les pixels sparse
+occupés, les pixels couverts par le splatting, les chemins de sortie relatifs au
+dossier de génération, les shapes des entrées baseline RGB+LiDAR enrichi, ainsi
+que les tailles et SHA-256 de chaque artefact pour vérifier la reproductibilité
+entre machines. Pour choisir un autre dossier de sortie :
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm run python -m rgb_lidar_fusion.demo_artifacts \

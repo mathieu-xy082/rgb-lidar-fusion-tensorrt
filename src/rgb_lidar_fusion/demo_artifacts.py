@@ -12,6 +12,10 @@ import numpy as np
 
 from rgb_lidar_fusion.calibration import make_identity_calibration
 from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
+from rgb_lidar_fusion.model_batch import (
+    dataset_items_to_model_batch,
+    model_batch_to_baseline_inputs,
+)
 from rgb_lidar_fusion.project_lidar import (
     build_sparse_lidar_maps,
     project_lidar_to_image,
@@ -44,14 +48,16 @@ def generate_synthetic_demo_artifacts(
 
     The output intentionally uses lightweight formats that can be regenerated
     locally and should remain ignored by Git: a PPM overlay, compressed sparse
-    LiDAR maps, compressed splatted maps, and a JSON manifest.
+    LiDAR maps, compressed splatted maps, enriched baseline model inputs, and a
+    JSON manifest.
     """
 
     output_root = Path(output_dir)
     overlay_dir = output_root / "projected_lidar_examples"
     sparse_dir = output_root / "sparse_maps"
     splat_dir = output_root / "splatted_maps"
-    for directory in (overlay_dir, sparse_dir, splat_dir):
+    model_input_dir = output_root / "model_inputs"
+    for directory in (overlay_dir, sparse_dir, splat_dir, model_input_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     calibration = make_identity_calibration(fx=100, fy=100, cx=320, cy=180)
@@ -65,10 +71,21 @@ def generate_synthetic_demo_artifacts(
 
     image = np.zeros((*image_shape, 3), dtype=np.uint8)
     overlay = render_lidar_overlay(image, projected, max_depth_m=80.0, point_radius=2)
+    model_batch = dataset_items_to_model_batch(
+        [
+            {
+                "image": np.moveaxis(image.astype(np.float32) / 255.0, -1, 0),
+                "lidar_maps": lidar_maps,
+            }
+        ],
+        splatting_config=splat_config or SplattingConfig(radius_px=2, sigma_px=1.0),
+    )
+    model_inputs = model_batch_to_baseline_inputs(model_batch, lidar_mode="enriched")
 
     overlay_path = overlay_dir / "synthetic_overlay.ppm"
     sparse_path = sparse_dir / "synthetic_sparse_maps.npz"
     splat_path = splat_dir / "synthetic_splatted_maps.npz"
+    model_inputs_path = model_input_dir / "synthetic_baseline_inputs.npz"
     manifest_path = output_root / "manifest.json"
 
     write_ppm_image(overlay_path, overlay)
@@ -80,6 +97,11 @@ def generate_synthetic_demo_artifacts(
         sparse_depth=splat.sparse_depth,
         sparse_mask=splat.sparse_mask,
     )
+    np.savez_compressed(
+        model_inputs_path,
+        rgb=model_inputs["rgb"],
+        lidar_maps=model_inputs["lidar_maps"],
+    )
 
     manifest: dict[str, Any] = {
         "mode": "synthetic",
@@ -87,15 +109,21 @@ def generate_synthetic_demo_artifacts(
         "projected_points": int(projected.pixels.shape[0]),
         "occupied_pixels": int(lidar_maps[5].sum()),
         "splatted_pixels": int((splat.confidence > 0.0).sum()),
+        "model_input_shapes": {
+            "rgb": list(model_inputs["rgb"].shape),
+            "lidar_maps": list(model_inputs["lidar_maps"].shape),
+        },
         "outputs": {
             "overlay": overlay_path.relative_to(output_root).as_posix(),
             "sparse_maps": sparse_path.relative_to(output_root).as_posix(),
             "splatted_maps": splat_path.relative_to(output_root).as_posix(),
+            "model_inputs": model_inputs_path.relative_to(output_root).as_posix(),
         },
         "artifact_integrity": {
             "overlay": _artifact_integrity(overlay_path),
             "sparse_maps": _artifact_integrity(sparse_path),
             "splatted_maps": _artifact_integrity(splat_path),
+            "model_inputs": _artifact_integrity(model_inputs_path),
         },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

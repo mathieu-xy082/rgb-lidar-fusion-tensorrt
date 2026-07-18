@@ -43,6 +43,18 @@ class SplattingConfig:
             )
 
 
+IDENTITY_SPLATTING_CONFIG = SplattingConfig(radius_px=0, sigma_px=1.0)
+"""Degenerate enriched representation for sparse-only LiDAR input.
+
+With a zero-pixel splat radius, each valid sparse LiDAR sample only contributes
+to its own projected pixel. This is the discrete limit of an infinitely peaked
+local Gaussian: ``depth_expanded == sparse_depth`` and
+``confidence == sparse_mask`` at valid points, while all non-source pixels remain
+zero. Use this when downstream code should always consume the enriched
+8-channel contract even if no real neighborhood expansion is desired.
+"""
+
+
 @dataclass(frozen=True)
 class SplattedDepth:
     """Dense-ish local splat output plus untouched sparse inputs."""

@@ -194,6 +194,35 @@ Une option explicite `BaselineFusionModel(lidar_mode="sparse")` conserve le chem
 6 canaux pour comparer un baseline sparse-only, mais le chemin recommandé pour les
 itérations ONNX/TensorRT suivantes est `lidar_mode="enriched"`.
 
+Le batch dataset reste NumPy-first et expose aussi une représentation générique
+concaténée `inputs: [B, C, H, W]`. Par défaut, il produit le contrat enriched
+nominal `inputs: [B, 11, H, W]` : RGB + 6 cartes LiDAR sparse +
+`depth_expanded`/`confidence`. Si aucune expansion locale non dégénérée n'est
+demandée, ces deux derniers canaux utilisent la limite identité d'une gaussienne
+infiniment piquée : `depth_expanded = depth` et `confidence = mask`. Le chemin
+`inputs: [B, 9, H, W]` reste disponible uniquement via
+`include_splatted_depth=False` pour les ablations sparse-only.
+
+Les chemins downstream PyTorch/ONNX/demo ne doivent pas reslicer `inputs` à la
+main : utiliser l'adaptateur explicite, qui valide `input_channels` avant de
+retourner les tenseurs attendus par le modèle.
+
+```python
+from rgb_lidar_fusion.model_batch import (
+    dataset_items_to_model_batch,
+    model_batch_to_baseline_inputs,
+    model_batch_to_torch_tensors,
+)
+
+batch = dataset_items_to_model_batch(items)
+arrays = model_batch_to_baseline_inputs(batch, lidar_mode="enriched")
+# arrays["rgb"]: [B, 3, H, W]
+# arrays["lidar_maps"]: [B, 8, H, W]
+
+tensors = model_batch_to_torch_tensors(arrays)  # optional; requires group `ml`
+output = BaselineFusionModel(lidar_mode="enriched")(**tensors)
+```
+
 Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`.
 
 ## LiDAR local surface splatting — niveau 1
@@ -223,7 +252,7 @@ splat = splat_projected_depth(
 )
 ```
 
-Règle volontairement simple : chaque point LiDAR valide est copié dans un voisinage carré de rayon `radius_px`; la confiance suit une décroissance gaussienne `exp(-distance_px² / (2 * sigma_px²))`. En cas de chevauchement, la résolution est déterministe : la profondeur la plus proche gagne, puis la confiance la plus forte, puis l'ordre source row-major.
+Règle volontairement simple : chaque point LiDAR valide est copié dans un voisinage carré de rayon `radius_px`; la confiance suit une décroissance gaussienne `exp(-distance_px² / (2 * sigma_px²))`. En cas de chevauchement, la résolution est déterministe : la profondeur la plus proche gagne, puis la confiance la plus forte, puis l'ordre source row-major. La configuration identité `radius_px=0` représente le mode sparse comme enriched dégénéré : seul le pixel source reçoit `depth_expanded=depth` et `confidence=mask`.
 
 Limites assumées pour cette étape : pas de propagation image-guidée/edge-aware, pas d'estimation de plan local, pas de surface concave, et aucune dépendance PyTorch/ONNX/TensorRT. Les sorties `depth_expanded` et `confidence` complètent les cartes sparse, elles ne les remplacent pas.
 

@@ -28,6 +28,9 @@ def test_export_and_validation_scripts_keep_generated_models_under_ignored_resul
     assert "results/onnx/baseline_fusion.onnx" in validate_script
     assert "BaselineFusionModel" in export_script
     assert "BaselineFusionModel" in validate_script
+    assert "dataset_items_to_model_batch" in export_script
+    assert "model_batch_to_baseline_inputs" in export_script
+    assert "synthetic_baseline_inputs" in validate_script
     assert "opset_version=18" in export_script
     assert "dynamo=False" in export_script
     assert "warnings.filterwarnings" in export_script

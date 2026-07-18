@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from export_onnx import export_baseline_onnx
+from export_onnx import export_baseline_onnx, synthetic_baseline_inputs
 
 EXPECTED_INPUTS = {
     "rgb": [2, 3, 32, 48],
@@ -47,25 +47,19 @@ def assert_runtime_parity(model_path: Path, *, tolerance: float = 1e-5) -> float
     import onnxruntime as ort
     import torch
 
-    from rgb_lidar_fusion.baseline_model import BaselineFusionModel, ENRICHED_LIDAR_CHANNELS
+    from rgb_lidar_fusion.baseline_model import BaselineFusionModel
 
     torch.manual_seed(0)
     model = BaselineFusionModel(output_dim=4, lidar_mode="enriched").eval()
-    rgb = torch.linspace(0.0, 1.0, steps=2 * 3 * 32 * 48, dtype=torch.float32).reshape(2, 3, 32, 48)
-    lidar_maps = torch.linspace(
-        -1.0,
-        1.0,
-        steps=2 * ENRICHED_LIDAR_CHANNELS * 32 * 48,
-        dtype=torch.float32,
-    ).reshape(2, ENRICHED_LIDAR_CHANNELS, 32, 48)
+    inputs = synthetic_baseline_inputs(batch_size=2, height=32, width=48)
 
     with torch.no_grad():
-        expected = model(rgb, lidar_maps).detach().cpu().numpy()
+        expected = model(inputs["rgb"], inputs["lidar_maps"]).detach().cpu().numpy()
 
     session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
     actual = session.run(
         ["prediction"],
-        {"rgb": rgb.cpu().numpy(), "lidar_maps": lidar_maps.cpu().numpy()},
+        {"rgb": inputs["rgb"].cpu().numpy(), "lidar_maps": inputs["lidar_maps"].cpu().numpy()},
     )[0]
     max_abs_diff = float(np.max(np.abs(expected - actual)))
     if max_abs_diff > tolerance:

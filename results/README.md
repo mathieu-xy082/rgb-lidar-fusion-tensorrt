@@ -6,8 +6,18 @@ Expected subfolders:
 
 ```text
 projected_lidar_examples/  PNG/JPG overlays for Milestone 1
-onnx/                      Local ONNX exports for Milestone 4 validation (ignored)
+sparse_maps/               Compressed sparse LiDAR map arrays
+splatted_maps/             Compressed local depth splat arrays
+demo_artifacts/            Reproducible synthetic demo bundle
+onnx/                      Local ONNX exports for validation
 benchmarks/                Markdown/CSV latency summaries
 ```
 
-Do not commit generated `.onnx`, `.onnx.data`, TensorRT engine, plan, image, video, or checkpoint artifacts.
+Everything under `results/` is ignored except this README. Regenerate local artifacts with:
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run demo-artifacts
+PDM_IGNORE_ACTIVE_VENV=1 pdm run validate_onnx
+```
+
+Do not commit generated `.onnx`, `.onnx.data`, TensorRT engine, plan, image, video, array, metrics, or checkpoint artifacts.

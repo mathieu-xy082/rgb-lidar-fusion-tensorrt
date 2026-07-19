@@ -32,7 +32,8 @@ distribution = true
 [tool.pdm.scripts]
 test = "pytest"
 smoke = "python scripts/smoke_project_lidar.py"
-validate = { composite = ["test", "smoke"] }
+demo-artifacts = "python -m rgb_lidar_fusion.demo_artifacts"
+validate = { composite = ["test", "smoke", "demo-artifacts"] }
 export_onnx = "python scripts/export_onnx.py"
 validate_onnx = "python scripts/validate_onnx.py"
 

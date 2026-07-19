@@ -110,8 +110,44 @@ Commandes utiles :
 ```bash
 pdm run test      # lance pytest
 pdm run smoke     # lance le smoke test de projection synthétique
+pdm run demo-artifacts  # régénère un bundle de démo sous results/demo_artifacts/
 pdm run validate  # test + smoke
 ```
+
+## Artefacts de démonstration reproductibles
+
+La branche `feature/demo-artifact-pipeline` fournit un générateur déterministe
+qui produit un mini-bundle synthétique sans données KITTI externes ni dépendances
+lourdes :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run demo-artifacts
+```
+
+La commande écrit sous `results/demo_artifacts/` :
+
+```text
+projected_lidar_examples/synthetic_overlay.ppm
+sparse_maps/synthetic_sparse_maps.npz
+splatted_maps/synthetic_splatted_maps.npz
+model_inputs/synthetic_baseline_inputs.npz
+manifest.json
+```
+
+La commande réinitialise le dossier de sortie ciblé avant d'écrire le bundle, puis
+renseigne la taille image, le nombre de points projetés, les pixels sparse
+occupés, les pixels couverts par le splatting, les chemins de sortie relatifs au
+dossier de génération, les shapes des entrées baseline RGB+LiDAR enrichi, ainsi
+que les tailles et SHA-256 de chaque artefact pour vérifier la reproductibilité
+entre machines. Pour choisir un autre dossier de sortie :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python -m rgb_lidar_fusion.demo_artifacts \
+  --output-dir /tmp/rgb_lidar_demo_artifacts
+```
+
+Les overlays/images, vidéos, exports ONNX, engines TensorRT, checkpoints, logs
+et benchmarks générés sont explicitement exclus du versionnement.
 
 Pour générer une visualisation synthétique sans dépendance image externe :
 

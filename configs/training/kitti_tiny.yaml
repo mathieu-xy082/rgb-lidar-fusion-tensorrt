@@ -1,0 +1,12 @@
+# Placeholder for a future tiny local KITTI/pseudo-target run.
+# Keep data/checkpoints/results outside Git; data_root should point at a local subset.
+seed: 13
+device: auto
+epochs: 1
+batch_size: 1
+learning_rate: 0.001
+loss: smooth_l1
+height: 128
+width: 416
+data_root: data/kitti
+output_dir: results/training/kitti_tiny

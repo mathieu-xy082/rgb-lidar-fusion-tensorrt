@@ -272,6 +272,40 @@ tensors = model_batch_to_torch_tensors(arrays)  # optional; requires group `ml`
 output = BaselineFusionModel(lidar_mode="enriched")(**tensors)
 ```
 
+### Training baseline CPU-safe / GPU-ready
+
+La boucle minimale d'entraînement reste volontairement légère : stdlib + PyTorch,
+seed déterministe, sélection `cuda` si disponible sinon `cpu`, smoke synthétique
+CI-safe, checkpoints et métriques hors Git sous `results/training/` par défaut.
+Elle passe toujours par le contrat canonique dataset→modèle :
+`dataset_items_to_model_batch(...)`, `model_batch_to_baseline_inputs(...,
+lidar_mode="enriched")`, puis `model_batch_to_torch_tensors(...)`.
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
+PDM_IGNORE_ACTIVE_VENV=1 pdm run train-baseline -- --config configs/training/synthetic_smoke.yaml
+```
+
+Sorties générées ignorées par Git :
+
+```text
+results/training/synthetic_smoke/checkpoints/latest.pt
+results/training/synthetic_smoke/metrics.json
+results/training/synthetic_smoke/metrics.csv
+```
+
+Reprise :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run train-baseline -- \
+  --config configs/training/synthetic_smoke.yaml \
+  --resume-from results/training/synthetic_smoke/checkpoints/latest.pt
+```
+
+`configs/training/kitti_tiny.yaml` documente le prochain incrément local KITTI,
+mais le runner actuel reste synthétique tant qu'un schéma de pseudo-targets KITTI
+n'est pas validé.
+
 Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles sont isolées par groupes PDM ou par setup runtime dédié au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`, `docs/gpu-training-plan.md`, et `docs/onnx-export-validation.md`.
 
 Pour l'export ONNX intégré, installer les groupes optionnels `ml` et `onnx`, puis lancer l'export et la validation de parité synthétique :

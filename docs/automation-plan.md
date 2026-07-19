@@ -23,7 +23,8 @@ https://gitlab.com/zeratulakek/rgb-lidar-fusion-tensorrt
 - Une branche prête doit alerter explicitement : `BRANCHE PRÊTE POUR REVIEW: <branch>`.
 - Les tâches ne doivent pas fusionner dans `main` sans instruction explicite.
 - Les jobs intégrés dans `main` sont pausés, pas supprimés, pour garder l'historique.
-- Les branches actives doivent être rebasées sur leur base de référence après les mises à jour de `main`.
+- Les branches actives doivent être rebasées sur leur base de référence après les mises à jour de `main` qui changent code, contrats, dépendances ou CI.
+- Les artefacts générés, checkpoints, datasets, ONNX et engines TensorRT restent hors Git.
 
 ## État intégré dans `main`
 
@@ -34,6 +35,14 @@ https://gitlab.com/zeratulakek/rgb-lidar-fusion-tensorrt
 | Calibration/projection KITTI | `feature/kitti-calibration-projection` | `4e740e9f0926` | pausé |
 | Dataset sparse LiDAR | `feature/kitti-dataset-lidar-maps` | `c14fc66ace0b` | pausé |
 | LiDAR local surface splatting | `feature/lidar-surface-splatting` | `e708c5234841` | pausé |
+| Baseline PyTorch | `feature/baseline-fusion-model` | `5ba77d52d513` | pausé |
+| Baseline splatted/enriched contract | `feature/baseline-use-splatted-lidar-channels` | `39955b4d68ca` | pausé |
+| Dataset-model contract | `feature/dataset-model-contract` | `4c07230c6d83` | pausé |
+| Model input adapter contract | `feature/model-input-adapter-contract` | `883d17269097` | pausé |
+| ONNX export validation | `feature/onnx-export-validation` | `3b5996eb00b6` | pausé |
+| Demo artifact pipeline | `feature/demo-artifact-pipeline` | `d293dd90feea` | pausé |
+| TensorRT benchmark plan | `feature/tensorrt-benchmark-plan` | `cbba862ccdfb` | pausé |
+| TensorRT runtime environment check | `feature/tensorrt-runtime-environment-check` | `291f2424cf69` | pausé |
 
 Validation de base sur `main` :
 
@@ -44,33 +53,37 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
 
 ## Tâche maîtresse
 
-| Job ID | Nom | Cadence | Répétitions restantes | Rôle |
+| Job ID | Nom | Cadence | Répétitions | Rôle |
 |---|---|---:|---:|---|
 | `5cb7256a80fb` | RGB-LiDAR master roadmap coordinator | 12h | borné à 40 runs total | Coordinateur read-only: agrège les outputs, signale les branches prêtes, recommande l'ordre de review/intégration |
 
-La tâche maîtresse reçoit comme contexte les derniers outputs des tâches secondaires actives via `context_from`.
+La tâche maîtresse reçoit comme contexte les derniers outputs des tâches secondaires actives via `context_from` et/ou le scanner déterministe `/root/.hermes/scripts/rgb_lidar_readiness_scan.py`.
 
-## Tâches secondaires actives
+## Tâches secondaires actives restantes
 
-| Priorité | Job ID | Nom | Branche | Base de référence | Cadence | Répétitions | Objectif |
-|---:|---|---|---|---|---:|---:|---|
-| P0 | `5ba77d52d513` | RGB-LiDAR baseline model workstream | `feature/baseline-fusion-model` | `origin/main` | 24h | 10 total | Baseline PyTorch simple et contrat modèle minimal |
-| P0 | `39955b4d68ca` | RGB-LiDAR P0 splatted baseline contract | `feature/baseline-use-splatted-lidar-channels` | `origin/feature/baseline-fusion-model` | 12h | 8 total | Décider/tester l'usage des cartes `depth_expanded` + `confidence` dans la baseline |
-| P1 | `4c07230c6d83` | RGB-LiDAR P1 dataset-model contract | `feature/dataset-model-contract` | `origin/main` | 12h | 8 total | Adapter dataset + splatting vers batch modèle testé |
-| P2 | `3b5996eb00b6` | RGB-LiDAR ONNX export workstream | `feature/onnx-export-validation` | `origin/main` | 24h | 10 total | Export/parité ONNX après stabilisation baseline |
-| P3 | `cbba862ccdfb` | RGB-LiDAR TensorRT benchmark planning workstream | `feature/tensorrt-benchmark-plan` | `origin/main` | 48h | 6 total | Plan/scripts de benchmark TensorRT FP16 |
-| P3 | `291f2424cf69` | RGB-LiDAR P3 TensorRT runtime environment check | `feature/tensorrt-runtime-environment-check` | `origin/feature/tensorrt-benchmark-plan` | 24h | 5 total | Diagnostic CPU-safe TensorRT/CUDA |
-| P4 | `d293dd90feea` | RGB-LiDAR P4 demo artifact pipeline | `feature/demo-artifact-pipeline` | `origin/main` | 24h | 5 total | Artefacts de démonstration reproductibles et non versionnés |
+Aucune branche pré-training active ne reste après intégration ONNX + demo. La prochaine tâche secondaire doit être créée pour l'entraînement baseline.
 
-## Ordre recommandé de review
+## Prochaine tâche à créer maintenant
 
-1. `feature/baseline-fusion-model`
-2. `feature/baseline-use-splatted-lidar-channels`
-3. `feature/dataset-model-contract`
-4. `feature/onnx-export-validation`
-5. `feature/tensorrt-benchmark-plan`
-6. `feature/tensorrt-runtime-environment-check`
-7. `feature/demo-artifact-pipeline`
+| Priorité | Nom proposé | Branche proposée | Objectif |
+|---:|---|---|---|
+| P5 | RGB-LiDAR baseline training loop | `feature/training-loop-baseline` | Boucle d'entraînement PyTorch CPU-safe/GPU-ready, checkpointing, metrics, smoke tests |
+
+Prompt recommandé pour ce futur job :
+
+```text
+Projet: /root/ai-projects/rgb-lidar-fusion-tensorrt.
+Branche dédiée: feature/training-loop-baseline.
+Base: origin/main.
+Objectif: implémenter une boucle d'entraînement PyTorch minimale mais sérieuse pour le modèle baseline RGB + LiDAR enriched. Rester CPU-safe en CI, GPU-ready pour runs dédiés. Ajouter scripts/config/tests/docs, ne jamais committer datasets/checkpoints/artefacts générés. Valider avec PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml puis pdm run validate et tests training ciblés. Alerter uniquement avec `BRANCHE PRÊTE POUR REVIEW: feature/training-loop-baseline` quand la branche est validée et poussée.
+```
+
+## Ordre recommandé de review à partir d'ici
+
+1. créer `feature/training-loop-baseline`
+2. préparer/réaliser première expérience GPU dédiée
+3. exporter checkpoint entraîné vers ONNX
+4. benchmark TensorRT sur runtime NVIDIA vérifié
 
 ## Commandes de validation locale
 
@@ -88,6 +101,25 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
 PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
 ```
 
+Branches ONNX :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml -G onnx
+PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
+PDM_IGNORE_ACTIVE_VENV=1 pdm run validate_onnx
+```
+
+Training GPU réel :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/train_baseline.py \
+  --config configs/training/kitti_tiny.yaml \
+  --device cuda
+```
+
+Le script training doit afficher un diagnostic clair si CUDA n'est pas disponible.
+
 ## Politique d'intégration
 
 Pour intégrer une branche :
@@ -96,6 +128,8 @@ Pour intégrer une branche :
 2. Lancer la validation locale appropriée.
 3. Vérifier les commits propres avec `git rev-list --left-right --count origin/main...origin/<branch>` ou la base pertinente.
 4. Obtenir l'accord explicite de Mathieu.
-5. Fast-forward `main` si la branche est directement basée sur `main`, ou intégrer d'abord sa branche parent si c'est une sous-branche.
+5. Intégrer dans `main` uniquement après accord.
 6. Valider `main`, pousser, pauser le job de la branche absorbée.
-7. Rebaser les branches actives restantes sur leur nouvelle base.
+7. Vérifier containment avec `git merge-base --is-ancestor`.
+8. Supprimer la branche secondaire seulement après confirmation.
+9. Rebaser les branches actives restantes sur leur nouvelle base si le changement impacte code/contrats/dépendances/CI.

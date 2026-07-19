@@ -7,7 +7,8 @@ Objectif : construire un pipeline complet et démontrable :
 ```text
 KITTI RGB image
 + LiDAR projected sparse geometry maps
-→ PyTorch detector
+→ PyTorch baseline + training loop
+→ checkpoint entraîné, même modeste
 → ONNX export
 → TensorRT FP16 engine
 → real-time inference benchmark
@@ -23,6 +24,7 @@ Le projet montre l'ownership d'un pipeline ML deployment réaliste :
 - géométrie caméra/LiDAR ;
 - dataset PyTorch ;
 - modèle de perception multimodal ;
+- entraînement PyTorch reproductible et checkpointing ;
 - export ONNX ;
 - optimisation TensorRT FP16 ;
 - benchmark de latence ;
@@ -66,14 +68,23 @@ D'abord simple : adapter une première convolution à `8` ou `9` canaux.
 
 Ensuite, si utile : deux branches RGB / LiDAR maps avec fusion intermédiaire.
 
-### Milestone 4 — Export ONNX
+### Milestone 4 — Training baseline
+
+- ajouter une boucle d'entraînement PyTorch CPU-safe / GPU-ready ;
+- sauvegarder checkpoints et métriques hors Git ;
+- valider un smoke test synthétique en CI ;
+- préparer un run sur GPU dédié pour produire un checkpoint réel.
+
+Voir `docs/gpu-training-plan.md`.
+
+### Milestone 5 — Export ONNX
 
 - exporter le modèle ;
 - vérifier les shapes ;
 - comparer PyTorch vs ONNX Runtime ;
 - documenter les limitations.
 
-### Milestone 5 — TensorRT FP16
+### Milestone 6 — TensorRT FP16
 
 ```text
 PyTorch checkpoint
@@ -84,6 +95,8 @@ PyTorch checkpoint
 ```
 
 Le chemin TensorRT est préparé sans supposer que la machine de développement a CUDA/TensorRT. Voir `docs/tensorrt-benchmark-plan.md` pour la stratégie local vs container, les scripts stubs sûrs et le schéma de benchmark.
+
+La roadmap maîtresse complète, incluant l'ordre ONNX/demo → training → GPU → checkpoint → export/benchmark, est documentée dans `ROADMAP.md`.
 
 ## Structure
 
@@ -259,10 +272,9 @@ tensors = model_batch_to_torch_tensors(arrays)  # optional; requires group `ml`
 output = BaselineFusionModel(lidar_mode="enriched")(**tensors)
 ```
 
-Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles seront ajoutées par groupes PDM au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`; le scope initial ONNX est détaillé dans `docs/onnx-export-validation.md`.
+Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles sont isolées par groupes PDM ou par setup runtime dédié au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`, `docs/gpu-training-plan.md`, et `docs/onnx-export-validation.md`.
 
-Pour le premier export ONNX Milestone 4, installer les groupes optionnels `ml` et
-`onnx`, puis lancer l'export et la validation de parité synthétique :
+Pour l'export ONNX intégré, installer les groupes optionnels `ml` et `onnx`, puis lancer l'export et la validation de parité synthétique :
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml -G onnx
@@ -316,4 +328,4 @@ Les données ne doivent pas être commitées. Voir `data/README.md`.
 
 ## Status
 
-Initial skeleton créé. Le socle intégré couvre maintenant la CI staged, la calibration/projection KITTI, le dataset sparse LiDAR léger et le splatting local déterministe. Prochaine cible : consolider le baseline PyTorch avec les cartes sparse/splattées avant l'export ONNX.
+Le socle intégré couvre maintenant la CI staged, la calibration/projection KITTI, le dataset sparse LiDAR léger, le splatting local déterministe, le baseline PyTorch enriched, le contrat dataset→modèle, l'adaptateur modèle, l'export/parité ONNX baseline, et les plans TensorRT. La prochaine cible review est la demo, puis une branche dédiée `feature/training-loop-baseline` pour préparer l'entraînement réel sur GPU.

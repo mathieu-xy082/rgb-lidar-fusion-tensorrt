@@ -61,11 +61,13 @@ La tâche maîtresse reçoit comme contexte les derniers outputs des tâches sec
 
 ## Tâches secondaires actives restantes
 
-Aucune branche pré-training active ne reste après intégration ONNX + demo. La prochaine tâche secondaire doit être créée pour l'entraînement baseline.
+| Priorité | Job ID | Nom | Branche | Base de référence | Cadence | Répétitions | Objectif |
+|---:|---|---|---|---|---:|---:|---|
+| P5 | `ec5b3d4582ec` | RGB-LiDAR P5 baseline training loop | `feature/training-loop-baseline` | `origin/main` | 12h | 8 total | Boucle d'entraînement PyTorch CPU-safe/GPU-ready, checkpointing, metrics, smoke tests |
 
-## Prochaine tâche à créer maintenant
+## Tâche active actuelle
 
-| Priorité | Nom proposé | Branche proposée | Objectif |
+| Priorité | Nom | Branche | Objectif |
 |---:|---|---|---|
 | P5 | RGB-LiDAR baseline training loop | `feature/training-loop-baseline` | Boucle d'entraînement PyTorch CPU-safe/GPU-ready, checkpointing, metrics, smoke tests |
 

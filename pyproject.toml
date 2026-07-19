@@ -20,6 +20,11 @@ dev = [
 ml = [
   "torch>=2.3",
 ]
+onnx = [
+  "onnx>=1.16",
+  "onnxruntime>=1.18",
+  "onnxscript>=0.1",
+]
 
 [tool.pdm]
 distribution = true
@@ -28,6 +33,8 @@ distribution = true
 test = "pytest"
 smoke = "python scripts/smoke_project_lidar.py"
 validate = { composite = ["test", "smoke"] }
+export_onnx = "python scripts/export_onnx.py"
+validate_onnx = "python scripts/validate_onnx.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

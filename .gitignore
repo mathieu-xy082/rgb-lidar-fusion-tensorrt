@@ -18,6 +18,7 @@ results/**/*.jpg
 results/**/*.ppm
 results/**/*.mp4
 results/**/*.onnx
+results/**/*.onnx.data
 results/**/*.engine
 results/**/*.plan
 *.onnx

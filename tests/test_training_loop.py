@@ -20,6 +20,7 @@ from rgb_lidar_fusion.training import (
     load_training_config,
     run_synthetic_smoke_training,
     train_one_step,
+    validate_training_config,
 )
 
 
@@ -85,6 +86,20 @@ def test_load_training_config_reads_flat_cpu_safe_yaml(tmp_path) -> None:
         "loss": "smooth_l1",
         "output_dir": "results/training/synthetic_smoke",
     }
+
+
+def test_validate_training_config_rejects_non_positive_smoke_dimensions() -> None:
+    config = {
+        "epochs": 1,
+        "batch_size": 2,
+        "learning_rate": 0.01,
+        "height": 0,
+        "width": 16,
+        "output_dir": "results/training/synthetic_smoke",
+    }
+
+    with pytest.raises(ValueError, match="height must be a positive integer"):
+        validate_training_config(config)
 
 
 def test_train_one_step_consumes_model_batch_adapter_and_updates_parameters() -> None:

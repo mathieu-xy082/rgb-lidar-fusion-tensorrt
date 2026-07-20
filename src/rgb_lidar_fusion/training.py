@@ -96,6 +96,17 @@ def load_training_config(path: str | Path) -> dict[str, Any]:
     return config
 
 
+def validate_training_config(config: dict[str, Any]) -> None:
+    """Reject smoke-training config values that would create invalid tensors/runs."""
+
+    positive_int_fields = ("epochs", "batch_size", "height", "width")
+    for field in positive_int_fields:
+        if field in config and int(config[field]) <= 0:
+            raise ValueError(f"{field} must be a positive integer.")
+    if "learning_rate" in config and float(config["learning_rate"]) <= 0.0:
+        raise ValueError("learning_rate must be positive.")
+
+
 def set_deterministic_seed(seed: int) -> None:
     """Seed Python, NumPy, and Torch for deterministic smoke training."""
 
@@ -269,6 +280,8 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
     """
 
     import torch
+
+    validate_training_config(config)
 
     seed = int(config.get("seed", 0))
     requested_device = str(config.get("device", "auto"))

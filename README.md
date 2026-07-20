@@ -286,6 +286,10 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
 PDM_IGNORE_ACTIVE_VENV=1 pdm run train-baseline -- --config configs/training/synthetic_smoke.yaml
 ```
 
+Le runner imprime un diagnostic explicite de sélection device, par exemple
+`device=cpu requested=auto cuda_available=False` en CI sans GPU, afin de rendre
+visible le fallback CPU ou le passage CUDA lors d'un futur run dédié.
+
 Sorties générées ignorées par Git :
 
 ```text

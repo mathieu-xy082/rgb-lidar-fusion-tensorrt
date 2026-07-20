@@ -41,7 +41,7 @@ def main() -> None:
         config["device"] = args.device
 
     result = run_synthetic_smoke_training(config)
-    print(f"device={result.device}")
+    print(result.device_diagnostic)
     print(f"start_epoch={result.start_epoch}")
     print(f"epochs_completed={result.epochs_completed}")
     print(f"checkpoint={result.checkpoint_path}")

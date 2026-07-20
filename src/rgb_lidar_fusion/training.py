@@ -42,6 +42,7 @@ class TrainingRunResult:
     """Summary returned by the synthetic training smoke runner."""
 
     device: str
+    device_diagnostic: str
     start_epoch: int
     epochs_completed: int
     checkpoint_path: Path
@@ -120,6 +121,18 @@ def select_device(requested: str = "auto"):
     if requested == "cuda" and not torch.cuda.is_available():
         raise ValueError("device='cuda' was requested but CUDA is not available.")
     return torch.device(requested)
+
+
+def describe_device_selection(requested: str = "auto") -> str:
+    """Return an explicit device-selection diagnostic for logs and CLI output."""
+
+    import torch
+
+    device = select_device(requested)
+    return (
+        f"device={device} requested={requested} "
+        f"cuda_available={torch.cuda.is_available()}"
+    )
 
 
 def train_one_step(
@@ -258,8 +271,10 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
     import torch
 
     seed = int(config.get("seed", 0))
+    requested_device = str(config.get("device", "auto"))
     set_deterministic_seed(seed)
-    device = select_device(str(config.get("device", "auto")))
+    device = select_device(requested_device)
+    device_diagnostic = describe_device_selection(requested_device)
     epochs = int(config.get("epochs", 1))
     batch_size = int(config.get("batch_size", 2))
     learning_rate = float(config.get("learning_rate", 1e-3))
@@ -321,6 +336,7 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
     write_metrics(output_dir, metrics)
     return TrainingRunResult(
         device=str(device),
+        device_diagnostic=device_diagnostic,
         start_epoch=start_epoch,
         epochs_completed=epochs,
         checkpoint_path=checkpoint_path,

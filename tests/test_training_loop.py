@@ -16,6 +16,7 @@ from rgb_lidar_fusion.model_batch import (
 )
 from rgb_lidar_fusion.training import (
     build_loss,
+    describe_device_selection,
     load_training_config,
     run_synthetic_smoke_training,
     train_one_step,
@@ -48,6 +49,14 @@ def test_build_loss_supports_smooth_l1_and_mse_with_clear_errors() -> None:
 
     with pytest.raises(ValueError, match="loss_name must be one of"):
         build_loss("focal")
+
+
+def test_describe_device_selection_reports_request_cuda_availability_and_choice(monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    diagnostic = describe_device_selection("auto")
+
+    assert diagnostic == "device=cpu requested=auto cuda_available=False"
 
 
 def test_load_training_config_reads_flat_cpu_safe_yaml(tmp_path) -> None:
@@ -108,7 +117,8 @@ def test_train_one_step_consumes_model_batch_adapter_and_updates_parameters() ->
     assert any(not torch.allclose(old, new) for old, new in zip(before, after))
 
 
-def test_synthetic_smoke_training_writes_metrics_checkpoint_and_resumes(tmp_path) -> None:
+def test_synthetic_smoke_training_writes_metrics_checkpoint_and_resumes(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     output_dir = tmp_path / "training"
 
     first = run_synthetic_smoke_training(
@@ -124,6 +134,7 @@ def test_synthetic_smoke_training_writes_metrics_checkpoint_and_resumes(tmp_path
     )
 
     assert first.device == "cpu"
+    assert first.device_diagnostic == "device=cpu requested=cpu cuda_available=False"
     assert first.epochs_completed == 1
     assert first.checkpoint_path == output_dir / "checkpoints" / "latest.pt"
     assert first.checkpoint_path.exists()

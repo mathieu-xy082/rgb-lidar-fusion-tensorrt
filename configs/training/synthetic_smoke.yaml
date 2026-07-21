@@ -1,4 +1,5 @@
 # CPU-safe deterministic training smoke test for CI/local validation.
+dataset: synthetic
 seed: 7
 device: auto
 epochs: 2

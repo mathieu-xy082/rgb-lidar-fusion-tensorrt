@@ -99,6 +99,12 @@ def load_training_config(path: str | Path) -> dict[str, Any]:
 def validate_training_config(config: dict[str, Any]) -> None:
     """Reject smoke-training config values that would create invalid tensors/runs."""
 
+    dataset = str(config.get("dataset", "synthetic"))
+    if dataset != "synthetic":
+        raise ValueError(
+            "synthetic smoke runner only supports dataset='synthetic' until "
+            "KITTI pseudo-target loading is implemented."
+        )
     positive_int_fields = ("epochs", "batch_size", "height", "width")
     for field in positive_int_fields:
         if field in config and int(config[field]) <= 0:

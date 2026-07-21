@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 
@@ -99,6 +103,22 @@ def test_validate_training_config_rejects_non_positive_smoke_dimensions() -> Non
     }
 
     with pytest.raises(ValueError, match="height must be a positive integer"):
+        validate_training_config(config)
+
+
+def test_validate_training_config_rejects_kitti_config_for_synthetic_runner() -> None:
+    config = {
+        "dataset": "kitti_tiny",
+        "data_root": "data/kitti",
+        "epochs": 1,
+        "batch_size": 1,
+        "learning_rate": 0.001,
+        "height": 128,
+        "width": 416,
+        "output_dir": "results/training/kitti_tiny",
+    }
+
+    with pytest.raises(ValueError, match="synthetic smoke runner only supports dataset='synthetic'"):
         validate_training_config(config)
 
 
@@ -206,3 +226,41 @@ def test_resumed_synthetic_training_preserves_metrics_history(tmp_path, monkeypa
     assert [row["epoch"] for row in metrics] == [1, 2]
     assert metrics_csv.read_text().splitlines()[1:][0].startswith("1,")
     assert metrics_csv.read_text().splitlines()[1:][1].startswith("2,")
+
+
+def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:
+    config_path = tmp_path / "kitti_tiny.yaml"
+    config_path.write_text(
+        """
+        dataset: kitti_tiny
+        seed: 13
+        device: cpu
+        epochs: 1
+        batch_size: 1
+        learning_rate: 0.001
+        loss: smooth_l1
+        height: 128
+        width: 416
+        data_root: data/kitti
+        output_dir: results/training/kitti_tiny
+        """
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/train_baseline.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(tmp_path / "training"),
+        ],
+        check=False,
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+    )
+
+    assert completed.returncode == 2
+    assert "synthetic smoke runner only supports dataset='synthetic'" in completed.stderr
+    assert "Traceback" not in completed.stderr

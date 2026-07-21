@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from rgb_lidar_fusion.training import load_training_config, run_synthetic_smoke_training
 
@@ -40,7 +41,11 @@ def main() -> None:
     if args.device:
         config["device"] = args.device
 
-    result = run_synthetic_smoke_training(config)
+    try:
+        result = run_synthetic_smoke_training(config)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
     print(result.device_diagnostic)
     print(f"start_epoch={result.start_epoch}")
     print(f"epochs_completed={result.epochs_completed}")

@@ -1,5 +1,6 @@
 # Placeholder for a future tiny local KITTI/pseudo-target run.
 # Keep data/checkpoints/results outside Git; data_root should point at a local subset.
+dataset: kitti_tiny
 seed: 13
 device: auto
 epochs: 1

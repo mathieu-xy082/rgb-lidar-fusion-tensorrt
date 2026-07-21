@@ -258,11 +258,22 @@ def load_checkpoint(*, path: Path, model, optimizer, device) -> tuple[int, int]:
     return int(payload["epoch"]), int(payload.get("step", 0))
 
 
-def write_metrics(output_dir: Path, metrics: list[EpochMetrics]) -> None:
+def _read_existing_metric_rows(output_dir: Path) -> list[dict[str, Any]]:
+    metrics_path = output_dir / "metrics.json"
+    if not metrics_path.exists():
+        return []
+    rows = json.loads(metrics_path.read_text())
+    if not isinstance(rows, list):
+        raise ValueError("existing metrics.json must contain a list of metric rows.")
+    return rows
+
+
+def write_metrics(output_dir: Path, metrics: list[EpochMetrics], *, append: bool = False) -> None:
     """Write metrics as JSON and CSV sidecars under the configured output dir."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    rows = [asdict(metric) for metric in metrics]
+    rows = _read_existing_metric_rows(output_dir) if append else []
+    rows.extend(asdict(metric) for metric in metrics)
     (output_dir / "metrics.json").write_text(json.dumps(rows, indent=2) + "\n")
     with (output_dir / "metrics.csv").open("w", newline="") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=["epoch", "step", "loss", "grad_norm"])
@@ -346,7 +357,7 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
             config=config,
         )
 
-    write_metrics(output_dir, metrics)
+    write_metrics(output_dir, metrics, append=bool(resume_from))
     return TrainingRunResult(
         device=str(device),
         device_diagnostic=device_diagnostic,

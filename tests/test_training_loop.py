@@ -174,3 +174,35 @@ def test_synthetic_smoke_training_writes_metrics_checkpoint_and_resumes(tmp_path
     assert resumed.epochs_completed == 2
     assert resumed.checkpoint_path.exists()
     assert len(resumed.metrics) == 1
+
+
+def test_resumed_synthetic_training_preserves_metrics_history(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    output_dir = tmp_path / "training"
+    base_config = {
+        "seed": 17,
+        "device": "cpu",
+        "epochs": 1,
+        "batch_size": 2,
+        "learning_rate": 0.01,
+        "loss": "mse",
+        "output_dir": str(output_dir),
+    }
+    first = run_synthetic_smoke_training(base_config)
+
+    run_synthetic_smoke_training(
+        {
+            **base_config,
+            "epochs": 2,
+            "resume_from": str(first.checkpoint_path),
+        }
+    )
+
+    metrics_json = output_dir / "metrics.json"
+    metrics_csv = output_dir / "metrics.csv"
+    import json
+
+    metrics = json.loads(metrics_json.read_text())
+    assert [row["epoch"] for row in metrics] == [1, 2]
+    assert metrics_csv.read_text().splitlines()[1:][0].startswith("1,")
+    assert metrics_csv.read_text().splitlines()[1:][1].startswith("2,")

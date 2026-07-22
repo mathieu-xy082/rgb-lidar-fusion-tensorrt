@@ -146,10 +146,11 @@ def describe_device_selection(requested: str = "auto") -> str:
     import torch
 
     device = select_device(requested)
-    return (
-        f"device={device} requested={requested} "
-        f"cuda_available={torch.cuda.is_available()}"
-    )
+    cuda_available = torch.cuda.is_available()
+    diagnostic = f"device={device} requested={requested} cuda_available={cuda_available}"
+    if device.type == "cuda":  # pragma: no cover - real CUDA depends on host GPU.
+        diagnostic += f" cuda_device_name={torch.cuda.get_device_name(0)!r}"
+    return diagnostic
 
 
 def train_one_step(

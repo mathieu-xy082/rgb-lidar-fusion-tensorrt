@@ -64,6 +64,15 @@ def test_describe_device_selection_reports_request_cuda_availability_and_choice(
     assert diagnostic == "device=cpu requested=auto cuda_available=False"
 
 
+def test_describe_device_selection_reports_cuda_device_name_when_selected(monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda index=0: "Fake RTX")
+
+    diagnostic = describe_device_selection("auto")
+
+    assert diagnostic == "device=cuda requested=auto cuda_available=True cuda_device_name='Fake RTX'"
+
+
 def test_load_training_config_reads_flat_cpu_safe_yaml(tmp_path) -> None:
     config_path = tmp_path / "synthetic_smoke.yaml"
     config_path.write_text(

@@ -84,7 +84,8 @@ tests/test_training_loop.py
 - checkpoint save/resume;
 - metrics JSON/CSV saved outside Git-tracked artifacts;
 - no committed datasets/checkpoints;
-- failure messages that explain missing CUDA/GPU resources rather than crashing cryptically.
+- failure messages that explain missing CUDA/GPU resources rather than crashing cryptically;
+- CUDA training logs should include the selected GPU name for run traceability.
 
 ## Initial learning target
 

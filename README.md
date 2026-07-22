@@ -297,6 +297,7 @@ Sorties générées ignorées par Git :
 results/training/synthetic_smoke/checkpoints/latest.pt
 results/training/synthetic_smoke/metrics.json
 results/training/synthetic_smoke/metrics.csv
+results/training/synthetic_smoke/run_metadata.json
 ```
 
 Reprise :

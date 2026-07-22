@@ -288,6 +288,30 @@ def write_metrics(output_dir: Path, metrics: list[EpochMetrics], *, append: bool
         writer.writerows(rows)
 
 
+def write_run_metadata(
+    output_dir: Path,
+    *,
+    config: dict[str, Any],
+    device: str,
+    device_diagnostic: str,
+    checkpoint_path: Path,
+    start_epoch: int,
+    epochs_completed: int,
+) -> None:
+    """Write lightweight run metadata for CPU/GPU training traceability."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "seed": int(config.get("seed", 0)),
+        "device": device,
+        "device_diagnostic": device_diagnostic,
+        "start_epoch": start_epoch,
+        "epochs_completed": epochs_completed,
+        "checkpoint_path": str(checkpoint_path),
+    }
+    (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+
 def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
     """Train the baseline on a tiny deterministic synthetic batch.
 
@@ -365,6 +389,15 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
         )
 
     write_metrics(output_dir, metrics, append=bool(resume_from))
+    write_run_metadata(
+        output_dir,
+        config=config,
+        device=str(device),
+        device_diagnostic=device_diagnostic,
+        checkpoint_path=checkpoint_path,
+        start_epoch=start_epoch,
+        epochs_completed=epochs,
+    )
     return TrainingRunResult(
         device=str(device),
         device_diagnostic=device_diagnostic,

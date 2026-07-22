@@ -184,6 +184,13 @@ def test_synthetic_smoke_training_writes_metrics_checkpoint_and_resumes(tmp_path
     assert first.checkpoint_path.exists()
     assert (output_dir / "metrics.json").exists()
     assert (output_dir / "metrics.csv").exists()
+    import json
+
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert metadata["device"] == "cpu"
+    assert metadata["device_diagnostic"] == "device=cpu requested=cpu cuda_available=False"
+    assert metadata["seed"] == 11
+    assert metadata["checkpoint_path"] == str(first.checkpoint_path)
     assert first.metrics[-1].loss > 0.0
 
     resumed = run_synthetic_smoke_training(

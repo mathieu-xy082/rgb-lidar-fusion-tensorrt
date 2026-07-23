@@ -259,6 +259,8 @@ def load_checkpoint(*, path: Path, model, optimizer, device) -> tuple[int, int]:
 
     import torch
 
+    if not path.exists():
+        raise ValueError(f"resume checkpoint does not exist: {path}")
     payload = torch.load(path, map_location=device, weights_only=False)
     model.load_state_dict(payload["model_state_dict"])
     optimizer.load_state_dict(payload["optimizer_state_dict"])

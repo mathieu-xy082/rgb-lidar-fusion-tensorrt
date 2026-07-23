@@ -280,3 +280,30 @@ def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) ->
     assert completed.returncode == 2
     assert "synthetic smoke runner only supports dataset='synthetic'" in completed.stderr
     assert "Traceback" not in completed.stderr
+
+
+def test_train_baseline_cli_reports_missing_resume_checkpoint_without_traceback(tmp_path) -> None:
+    missing_checkpoint = tmp_path / "missing" / "latest.pt"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/train_baseline.py",
+            "--config",
+            "configs/training/synthetic_smoke.yaml",
+            "--output-dir",
+            str(tmp_path / "training"),
+            "--resume-from",
+            str(missing_checkpoint),
+            "--device",
+            "cpu",
+        ],
+        check=False,
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+    )
+
+    assert completed.returncode == 2
+    assert f"resume checkpoint does not exist: {missing_checkpoint}" in completed.stderr
+    assert "Traceback" not in completed.stderr

@@ -83,8 +83,10 @@ tests/test_training_loop.py
 - configurable batch size, epochs, learning rate, output directory;
 - checkpoint save/resume;
 - metrics JSON/CSV saved outside Git-tracked artifacts;
+- run metadata JSON with seed, selected device diagnostic, resume start epoch, and checkpoint path;
 - no committed datasets/checkpoints;
-- failure messages that explain missing CUDA/GPU resources rather than crashing cryptically.
+- failure messages that explain missing CUDA/GPU resources rather than crashing cryptically;
+- CUDA training logs should include the selected GPU name for run traceability.
 
 ## Initial learning target
 

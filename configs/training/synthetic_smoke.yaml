@@ -1,0 +1,11 @@
+# CPU-safe deterministic training smoke test for CI/local validation.
+dataset: synthetic
+seed: 7
+device: auto
+epochs: 2
+batch_size: 2
+learning_rate: 0.01
+loss: mse
+height: 16
+width: 16
+output_dir: results/training/synthetic_smoke

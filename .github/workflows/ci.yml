@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - ec/**
+      - feature/**
+      - ci/**
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PDM_CHECK_UPDATE: "false"
+  PDM_CACHE_DIR: ${{ github.workspace }}/.pdm-cache
+  PDM_VENV_IN_PROJECT: "1"
+  PDM_IGNORE_ACTIVE_VENV: "1"
+
+jobs:
+  dependency-check:
+    name: Dependency lock check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PDM
+        run: |
+          python -m pip install --upgrade pip pdm==2.28.0
+          pdm --version
+
+      - name: Check lockfile
+        run: pdm lock --check
+
+  validate:
+    name: Test, smoke, and demo validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PDM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pdm-cache
+            .venv
+          key: pdm-${{ runner.os }}-py3.11-${{ hashFiles('pdm.lock') }}
+          restore-keys: |
+            pdm-${{ runner.os }}-py3.11-
+
+      - name: Install PDM
+        run: |
+          python -m pip install --upgrade pip pdm==2.28.0
+          pdm --version
+
+      - name: Install project dependencies
+        run: pdm install -G dev -G ml --frozen-lockfile
+
+      - name: Run validation suite
+        run: pdm run validate
+
+      - name: Run training smoke test
+        run: |
+          pdm run train-baseline -- \
+            --config configs/training/synthetic_smoke.yaml \
+            --output-dir "$RUNNER_TEMP/rgb-lidar-training-smoke" \
+            --device cpu

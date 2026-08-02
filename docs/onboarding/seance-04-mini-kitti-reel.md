@@ -11,89 +11,135 @@ image caméra réelle
 → overlay LiDAR sur image
 → sparse maps réelles
 → visualisation du splatting
+→ galerie multi-frames navigable
 ```
 
-## Étape A — Télécharger un sample léger
+## Étape A — Télécharger plusieurs samples légers
 
-Les gros zips officiels KITTI sont volumineux. Pour l'onboarding, on utilise un
-mini-sample versionné dans `kuixu/kitti_object_vis`.
+Les gros zips officiels KITTI sont volumineux. Pour l'onboarding, on utilise des
+mini-samples versionnés dans `kuixu/kitti_object_vis`.
 
 ```bash
-mkdir -p data/kitti/training/image_2 data/kitti/training/velodyne data/kitti/training/calib
-base='https://raw.githubusercontent.com/kuixu/kitti_object_vis/master/data/object/training'
-wget -O data/kitti/training/image_2/000000.png "$base/image_2/000000.png"
-wget -O data/kitti/training/velodyne/000000.bin "$base/velodyne/000000.bin"
-wget -O data/kitti/training/calib/000000.txt "$base/calib/000000.txt"
+pdm run python docs/onboarding/scripts/download_kitti_samples.py --count 3
+```
+
+Ou explicitement :
+
+```bash
+pdm run python docs/onboarding/scripts/download_kitti_samples.py --ids 000000,000001,000002
+```
+
+Le script affiche les commandes équivalentes avant chaque téléchargement :
+
+```text
+COMMAND: wget -O data/kitti/training/image_2/000000.png ...
+COMMAND: wget -O data/kitti/training/velodyne/000000.bin ...
+COMMAND: wget -O data/kitti/training/calib/000000.txt ...
 ```
 
 Ces fichiers restent hors Git grâce à `.gitignore`.
 
-## Étape B — Convertir l'image caméra PNG en PPM
-
-Le script de projection du repo lit un canvas PPM simple. Pour éviter ImageMagick
-ou Pillow, utiliser le helper standard-library :
+## Étape B — Générer tous les rendus et la galerie
 
 ```bash
-mkdir -p results/onboarding/kitti_000000
-pdm run python docs/onboarding/scripts/png_to_ppm.py \
-  data/kitti/training/image_2/000000.png \
-  results/onboarding/kitti_000000/image_000000.ppm
+pdm run python docs/onboarding/scripts/render_kitti_sequence.py --count 3 --alpha 0.45
 ```
 
-## Étape C — Projeter le vrai LiDAR sur la vraie image
+Ce script boucle image par image et affiche les commandes de base qu'il lance :
+
+```text
+COMMAND: ... png_to_ppm.py ...
+COMMAND: ... smoke_project_lidar.py ...
+COMMAND: ... render_splatting_ppm.py ...
+```
+
+Pour chaque frame, il produit :
+
+```text
+results/onboarding/kitti_<id>/image_<id>.ppm
+results/onboarding/kitti_<id>/overlay_<id>.ppm
+results/onboarding/kitti_<id>/sparse_maps_<id>.npz
+results/onboarding/kitti_<id>/visualizations/sparse_depth_overlay.ppm
+results/onboarding/kitti_<id>/visualizations/splatted_depth_overlay.ppm
+```
+
+Il génère aussi :
+
+```text
+results/onboarding/kitti_gallery.html
+```
+
+## Étape C — Ouvrir la galerie navigable
+
+Depuis le dossier `results/onboarding` :
 
 ```bash
-pdm run python scripts/smoke_project_lidar.py \
-  --calib-file data/kitti/training/calib/000000.txt \
-  --velodyne-file data/kitti/training/velodyne/000000.bin \
-  --image-file results/onboarding/kitti_000000/image_000000.ppm \
-  --overlay-output results/onboarding/kitti_000000/overlay_000000.ppm \
-  --sparse-output results/onboarding/kitti_000000/sparse_maps_000000.npz
+cd results/onboarding
+python -m http.server 8000
 ```
 
-Sortie observée sur ce sample :
+Puis ouvrir :
+
+```text
+http://127.0.0.1:8000/kitti_gallery.html
+```
+
+Le script `render_kitti_sequence.py` affiche aussi cette commande à la fin.
+
+## Navigation
+
+Dans la galerie :
+
+```text
+← / →       frame précédente / suivante
+↑ / ↓       frame précédente / suivante
+n / p       next / previous
+1 / 2 / 3 / 4 focus sur un panneau
+```
+
+Les 4 panneaux affichés sont :
+
+```text
+1. Camera
+2. LiDAR overlay
+3. Sparse depth overlay
+4. Splatted depth overlay
+```
+
+## Variante tout-en-un avec serveur
+
+Si tu veux que le script démarre le serveur directement :
+
+```bash
+pdm run python docs/onboarding/scripts/render_kitti_sequence.py --count 3 --alpha 0.45 --serve
+```
+
+Puis ouvrir :
+
+```text
+http://127.0.0.1:8000/kitti_gallery.html
+```
+
+## Sorties observées sur les premiers samples
+
+Sample `000000` :
 
 ```text
 image_shape=370x1224
-mode=kitti
 loaded_points=115384
 projected_points=20285
-lidar_maps_shape=(6, 370, 1224)
 occupied_pixels=20235
 splatted_pixels=245529
-projected_splatted_pixels=245529
-splat_max_confidence=1.000
 ```
 
-## Étape D — Visualiser sparse vs splatted
-
-```bash
-pdm run python docs/onboarding/scripts/render_splatting_ppm.py \
-  --sparse-npz results/onboarding/kitti_000000/sparse_maps_000000.npz \
-  --background-ppm results/onboarding/kitti_000000/image_000000.ppm \
-  --output-dir results/onboarding/kitti_000000/visualizations \
-  --alpha 0.45
-```
-
-Images générées :
+Sample `000001` :
 
 ```text
-results/onboarding/kitti_000000/overlay_000000.ppm
-results/onboarding/kitti_000000/visualizations/sparse_depth.ppm
-results/onboarding/kitti_000000/visualizations/splatted_depth.ppm
-results/onboarding/kitti_000000/visualizations/splatted_confidence.ppm
-results/onboarding/kitti_000000/visualizations/sparse_depth_overlay.ppm
-results/onboarding/kitti_000000/visualizations/splatted_depth_overlay.ppm
-```
-
-Les deux images `*_overlay.ppm` superposent la depth colorisée sur l'image caméra.
-`--alpha 0.45` garde une légère transparence pour deviner la scène derrière.
-
-À observer :
-
-```text
-sparse_pixels=20235
-splatted_pixels=245529
+image_shape=375x1242
+loaded_points=120268
+projected_points=18630
+occupied_pixels=18622
+splatted_pixels=225910
 ```
 
 Le splatting devient visuellement intéressant ici parce que le LiDAR réel fournit

@@ -114,6 +114,12 @@ scripts/                     Commandes utilitaires
 Le projet suit Semantic Versioning. Les changements notables et les éléments
 validés pour la future release stable sont suivis dans `CHANGELOG.md`.
 
+## Onboarding pratique
+
+Un parcours de tutorat progressif est disponible dans `docs/onboarding/` pour
+s'approprier le repo par la pratique : validation locale, artefacts demo,
+projection LiDAR, splatting et contrats de batch modèle.
+
 ## Installation dev
 
 Ce projet utilise **PDM**, comme XoloLingua, pour garder un environnement reproductible et des commandes standardisées.

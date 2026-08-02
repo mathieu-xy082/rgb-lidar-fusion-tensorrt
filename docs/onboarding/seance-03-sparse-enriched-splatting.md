@@ -58,7 +58,27 @@ sed -n '1,240p' tests/test_lidar_splatting.py
 
 Question : que se passe-t-il si deux splats se chevauchent ?
 
-## Étape C — Relier à `project_lidar.py`
+## Étape C — Afficher le splatting
+
+Après avoir généré les artefacts demo :
+
+```bash
+pdm run demo-artifacts
+pdm run python docs/onboarding/scripts/render_splatting_ppm.py
+```
+
+Important : utiliser `pdm run python`, pas `python`, car le script dépend de `numpy` installé dans l'environnement PDM du repo.
+
+Les images générées sont :
+
+```text
+results/demo_artifacts/visualizations/sparse_depth.ppm
+results/demo_artifacts/visualizations/sparse_mask.ppm
+results/demo_artifacts/visualizations/splatted_depth.ppm
+results/demo_artifacts/visualizations/splatted_confidence.ppm
+```
+
+## Étape D — Relier à `project_lidar.py`
 
 Dans `build_enriched_lidar_maps(...)`, les 6 canaux sparse sont copiés inchangés, puis les canaux 6 et 7 sont ajoutés.
 

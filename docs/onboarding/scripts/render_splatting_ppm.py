@@ -3,7 +3,7 @@
 
 Usage:
   cd .
-  python docs/onboarding/scripts/render_splatting_ppm.py
+  pdm run python docs/onboarding/scripts/render_splatting_ppm.py
 """
 from __future__ import annotations
 

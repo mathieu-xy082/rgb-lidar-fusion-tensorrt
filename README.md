@@ -109,6 +109,11 @@ results/                     Résultats générés non versionnés
 scripts/                     Commandes utilitaires
 ```
 
+## Versioning
+
+Le projet suit Semantic Versioning. Les changements notables et les éléments
+validés pour la future release stable sont suivis dans `CHANGELOG.md`.
+
 ## Installation dev
 
 Ce projet utilise **PDM**, comme XoloLingua, pour garder un environnement reproductible et des commandes standardisées.

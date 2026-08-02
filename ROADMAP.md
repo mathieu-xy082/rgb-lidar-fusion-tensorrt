@@ -245,12 +245,14 @@ Elle ne doit pas fusionner dans `main` sans instruction explicite.
 8. Benchmark TensorRT sur runtime NVIDIA vérifié
 ```
 
-## CI GitLab cible
+## CI GitHub Actions cible
 
-La CI doit rester fiable et légère :
+La CI de référence vit désormais sur GitHub `origin` et doit rester fiable et légère :
 
-- validation de base `dev` sur chaque push ;
+- validation de base sur chaque push vers `main`, `ec/**`, `feature/**` et `ci/**` ;
+- vérification du lockfile PDM ;
 - tests PyTorch CPU via groupe `ml` quand les dépendances sont disponibles ;
+- smoke training CPU déterministe avec sorties sous le dossier temporaire du runner ;
 - ONNX optionnel ou séparé si le temps CI devient trop long ;
 - pas de job TensorRT obligatoire sans runner GPU ;
 - artefacts générés ignorés ou explicitement uploadés comme artefacts CI, jamais committés.

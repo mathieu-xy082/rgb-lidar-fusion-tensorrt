@@ -2,25 +2,19 @@
 
 All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this file.
 
-This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until the first stable release is cut, the package version remains `0.1.0`; after `ec/ci-github` is integrated into `main`, the next dedicated release commit should promote the project to `1.0.0` and move the relevant entries under `## 1.0.0 - YYYY-MM-DD`.
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+No changes yet.
+
+## 1.0.0 - 2026-08-02
+
+First stable portfolio/demo release of the RGB-LiDAR Fusion TensorRT prototype. This release establishes the reviewed technical foundation for an AV/robotics ML deployment pipeline: geometry, dataset contracts, enriched LiDAR representation, PyTorch model/training loop, ONNX parity scaffolding, TensorRT runtime planning, reproducible demo artifacts, and GitHub Actions CI.
 
 ### Added
 
 - GitHub Actions CI equivalent to the former GitLab validation surface, with lockfile checking, full validation, and deterministic CPU training smoke coverage.
-
-### Release preparation
-
-- Prepare the repository for the first stable release by documenting the validated roadmap milestones below.
-- Next release step after integration into `main`: bump `[project].version` from `0.1.0` to `1.0.0`, move these release-preparation notes into a dated `1.0.0` section if still relevant, tag `v1.0.0`, and publish a stable GitHub release.
-
-## 0.1.0 - 2026-08-02
-
-Initial validated prototype baseline. This version is still pre-stable from a packaging perspective, but it contains the reviewed technical foundation that should become the first stable portfolio/demo release once GitHub CI is integrated.
-
-### Added
-
 - PDM-based Python project structure with staged validation commands and lightweight default dependencies.
 - KITTI calibration parsing and camera/LiDAR projection utilities.
 - Synthetic and local KITTI smoke paths for projected LiDAR overlays and sparse LiDAR map generation.
@@ -39,9 +33,9 @@ Initial validated prototype baseline. This version is still pre-stable from a pa
 
 ### Validated
 
-- Local validation on the integrated training baseline passed with `91 passed` plus deterministic smoke/demo artifact generation.
+- GitHub Actions CI passed on the release branch and is integrated into `main`.
+- Local validation on `main` passed with `91 passed` plus deterministic smoke/demo artifact generation.
 - CPU training smoke completed two epochs, wrote checkpoint/metrics/run metadata outside the repository, and produced finite decreasing losses on the synthetic target.
-- The current repository state is suitable as the technical base for a stable `v1.0.0` release once GitHub Actions CI is merged and the release commit is created.
 
 ### Deferred
 

@@ -118,7 +118,8 @@ validés pour la future release stable sont suivis dans `CHANGELOG.md`.
 
 Un parcours de tutorat progressif est disponible dans `docs/onboarding/` pour
 s'approprier le repo par la pratique : validation locale, artefacts demo,
-projection LiDAR, splatting et contrats de batch modèle.
+projection LiDAR, splatting, mini-échantillon KITTI réel et contrats de batch
+modèle.
 
 ## Installation dev
 

@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Render RGB-LiDAR demo splatting NPZ artifacts as simple PPM images.
+"""Render RGB-LiDAR splatting NPZ artifacts as simple PPM images.
 
-Usage:
-  cd .
+Demo usage:
+  pdm run demo-artifacts
   pdm run python docs/onboarding/scripts/render_splatting_ppm.py
+
+KITTI usage:
+  pdm run python docs/onboarding/scripts/render_splatting_ppm.py \
+    --sparse-npz results/onboarding/kitti_000000/sparse_maps_000000.npz \
+    --output-dir results/onboarding/kitti_000000/visualizations
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
+
 import numpy as np
 
-ROOT = Path("results/demo_artifacts")
-SPARSE = ROOT / "sparse_maps" / "synthetic_sparse_maps.npz"
-SPLAT = ROOT / "splatted_maps" / "synthetic_splatted_maps.npz"
-OUT = ROOT / "visualizations"
+DEFAULT_ROOT = Path("results/demo_artifacts")
 
 
 def normalize(arr: np.ndarray) -> np.ndarray:
@@ -49,14 +53,43 @@ def write_ppm(path: Path, image: np.ndarray) -> None:
             f.write(" ".join(f"{r} {g} {b}" for r, g, b in row) + "\n")
 
 
+def load_splat_from_demo(root: Path) -> tuple[np.ndarray, np.ndarray, Path]:
+    sparse_npz = root / "sparse_maps" / "synthetic_sparse_maps.npz"
+    splat_npz = root / "splatted_maps" / "synthetic_splatted_maps.npz"
+    sparse = np.load(sparse_npz)["lidar_maps"]
+    splatted = np.load(splat_npz)
+    return sparse, np.stack([splatted["depth_expanded"], splatted["confidence"]]), root / "visualizations"
+
+
+def compute_splat_from_sparse(sparse_npz: Path, output_dir: Path) -> tuple[np.ndarray, np.ndarray, Path]:
+    from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
+
+    sparse = np.load(sparse_npz)["lidar_maps"]
+    splat = splat_sparse_depth(
+        sparse_depth=sparse[0],
+        sparse_mask=sparse[5] > 0.0,
+        config=SplattingConfig(radius_px=2, sigma_px=1.0),
+    )
+    return sparse, np.stack([splat.depth_expanded, splat.confidence]), output_dir
+
+
 def main() -> None:
-    sparse = np.load(SPARSE)["lidar_maps"]
-    splatted = np.load(SPLAT)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sparse-npz", type=Path, help="Sparse LiDAR NPZ containing lidar_maps")
+    parser.add_argument("--output-dir", type=Path, help="Directory for visualization PPM files")
+    args = parser.parse_args()
+
+    if args.sparse_npz:
+        if not args.output_dir:
+            parser.error("--output-dir is required with --sparse-npz")
+        sparse, splatted, out = compute_splat_from_sparse(args.sparse_npz, args.output_dir)
+    else:
+        sparse, splatted, out = load_splat_from_demo(DEFAULT_ROOT)
 
     sparse_depth = sparse[0]
     sparse_mask = sparse[5]
-    depth_expanded = splatted["depth_expanded"]
-    confidence = splatted["confidence"]
+    depth_expanded = splatted[0]
+    confidence = splatted[1]
 
     outputs = {
         "sparse_depth.ppm": heatmap(sparse_depth),
@@ -65,7 +98,7 @@ def main() -> None:
         "splatted_confidence.ppm": heatmap(confidence),
     }
     for name, image in outputs.items():
-        path = OUT / name
+        path = out / name
         write_ppm(path, image)
         print(path)
 

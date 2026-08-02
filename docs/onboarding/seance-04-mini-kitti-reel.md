@@ -19,6 +19,20 @@ image caméra réelle
 Les gros zips officiels KITTI sont volumineux. Pour l'onboarding, on utilise des
 mini-samples versionnés dans `kuixu/kitti_object_vis`.
 
+Limite importante : cette source légère contient seulement 3 frames :
+
+```text
+000000,000001,000002
+```
+
+Pour les lister :
+
+```bash
+pdm run python docs/onboarding/scripts/download_kitti_samples.py --list-available
+```
+
+Pour télécharger les 3 frames disponibles :
+
 ```bash
 pdm run python docs/onboarding/scripts/download_kitti_samples.py --count 3
 ```
@@ -28,6 +42,9 @@ Ou explicitement :
 ```bash
 pdm run python docs/onboarding/scripts/download_kitti_samples.py --ids 000000,000001,000002
 ```
+
+Si tu demandes `--count 10`, le script s'arrête proprement en expliquant que la
+source légère ne fournit pas `000003` et suivants.
 
 Le script affiche les commandes équivalentes avant chaque téléchargement :
 

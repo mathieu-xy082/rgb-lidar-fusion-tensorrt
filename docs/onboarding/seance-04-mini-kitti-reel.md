@@ -70,7 +70,9 @@ splat_max_confidence=1.000
 ```bash
 pdm run python docs/onboarding/scripts/render_splatting_ppm.py \
   --sparse-npz results/onboarding/kitti_000000/sparse_maps_000000.npz \
-  --output-dir results/onboarding/kitti_000000/visualizations
+  --background-ppm results/onboarding/kitti_000000/image_000000.ppm \
+  --output-dir results/onboarding/kitti_000000/visualizations \
+  --alpha 0.45
 ```
 
 Images générées :
@@ -80,7 +82,12 @@ results/onboarding/kitti_000000/overlay_000000.ppm
 results/onboarding/kitti_000000/visualizations/sparse_depth.ppm
 results/onboarding/kitti_000000/visualizations/splatted_depth.ppm
 results/onboarding/kitti_000000/visualizations/splatted_confidence.ppm
+results/onboarding/kitti_000000/visualizations/sparse_depth_overlay.ppm
+results/onboarding/kitti_000000/visualizations/splatted_depth_overlay.ppm
 ```
+
+Les deux images `*_overlay.ppm` superposent la depth colorisée sur l'image caméra.
+`--alpha 0.45` garde une légère transparence pour deviner la scène derrière.
 
 À observer :
 

@@ -14,12 +14,17 @@ image caméra réelle
 → galerie multi-frames navigable
 ```
 
-## Étape A — Télécharger plusieurs samples légers
+## Étape A — Télécharger plusieurs samples KITTI
 
-Les gros zips officiels KITTI sont volumineux. Pour l'onboarding, on utilise des
-mini-samples versionnés dans `kuixu/kitti_object_vis`.
+Deux sources sont disponibles.
 
-Limite importante : cette source légère contient seulement 3 frames :
+### Option rapide — miroir léger, 3 frames seulement
+
+```bash
+pdm run python docs/onboarding/scripts/download_kitti_samples.py --count 3
+```
+
+Limite du miroir léger :
 
 ```text
 000000,000001,000002
@@ -31,27 +36,30 @@ Pour les lister :
 pdm run python docs/onboarding/scripts/download_kitti_samples.py --list-available
 ```
 
-Pour télécharger les 3 frames disponibles :
+### Option complète — archives KITTI officielles, plus de frames
+
+Pour récupérer 10 frames sans télécharger les gros zips complets :
 
 ```bash
-pdm run python docs/onboarding/scripts/download_kitti_samples.py --count 3
+pdm run python docs/onboarding/scripts/download_kitti_samples.py --source official --count 10
 ```
 
 Ou explicitement :
 
 ```bash
-pdm run python docs/onboarding/scripts/download_kitti_samples.py --ids 000000,000001,000002
+pdm run python docs/onboarding/scripts/download_kitti_samples.py \
+  --source official \
+  --ids 000000,000001,000002,000003,000004,000005,000006,000007,000008,000009
 ```
 
-Si tu demandes `--count 10`, le script s'arrête proprement en expliquant que la
-source légère ne fournit pas `000003` et suivants.
+Le script lit les répertoires ZIP distants par HTTP Range, puis extrait seulement
+les fichiers demandés depuis les archives officielles KITTI S3.
 
-Le script affiche les commandes équivalentes avant chaque téléchargement :
+Il affiche les commandes/étapes équivalentes :
 
 ```text
-COMMAND: wget -O data/kitti/training/image_2/000000.png ...
-COMMAND: wget -O data/kitti/training/velodyne/000000.bin ...
-COMMAND: wget -O data/kitti/training/calib/000000.txt ...
+COMMAND: HTTP Range central-directory ...data_object_image_2.zip...
+COMMAND: extract training/image_2/000003.png from ... -> data/kitti/...
 ```
 
 Ces fichiers restent hors Git grâce à `.gitignore`.

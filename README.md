@@ -102,12 +102,14 @@ La roadmap maîtresse complète, incluant l'ordre ONNX/demo → training → GPU
 
 ```text
 configs/                    Configuration dataset/modèle
+docs/articles/              Bibliographie et positionnement littérature
+docs/onboarding/            Parcours pratique guidé
 src/rgb_lidar_fusion/        Package Python principal
 tests/                       Tests unitaires
 notebooks/                   Exploration visuelle
 results/                     Résultats générés non versionnés
-scripts/                     Commandes utilitaires
 ```
+
 
 ## Versioning
 

@@ -9,8 +9,9 @@ __pycache__/
 venv/
 .pdm-python
 
-# Data and generated outputs
+# Data, downloaded papers, and generated outputs
 data/kitti/
+docs/articles/biblio/
 data/raw/
 data/processed/
 results/**

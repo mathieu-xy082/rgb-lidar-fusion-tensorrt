@@ -8,6 +8,7 @@ import numpy as np
 
 from .lidar_splatting import (
     IDENTITY_SPLATTING_CONFIG,
+    SPLATTED_LIDAR_MAP_CHANNELS,
     SplattingConfig,
     splat_sparse_depth,
 )
@@ -80,39 +81,50 @@ def dataset_item_to_model_batch(
     lidar_maps = np.asarray(item["lidar_maps"], dtype=np.float32)
     if image.ndim != 3 or image.shape[0] != 3:
         raise ValueError("image must have shape [3, H, W].")
-    if lidar_maps.ndim != 3 or lidar_maps.shape[0] != len(LIDAR_MAP_CHANNELS):
+    meta = item.get("meta", {})
+    lidar_representation = meta.get("lidar_representation", "sparse")
+    if lidar_representation == "splatted":
+        expected_channels = SPLATTED_LIDAR_MAP_CHANNELS
+        expected_count = len(SPLATTED_LIDAR_MAP_CHANNELS)
+    else:
+        expected_channels = LIDAR_MAP_CHANNELS
+        expected_count = len(LIDAR_MAP_CHANNELS)
+    if lidar_maps.ndim != 3 or lidar_maps.shape[0] != expected_count:
         raise ValueError(
-            f"lidar_maps must have shape [{len(LIDAR_MAP_CHANNELS)}, H, W]."
+            f"lidar_maps must have shape [{expected_count}, H, W]."
         )
     if image.shape[1:] != lidar_maps.shape[1:]:
         raise ValueError("image and lidar_maps must share height and width.")
-    meta = item.get("meta", {})
     if (
         "lidar_map_channels" in meta
-        and tuple(meta["lidar_map_channels"]) != LIDAR_MAP_CHANNELS
+        and tuple(meta["lidar_map_channels"]) != expected_channels
     ):
-        raise ValueError("lidar_map_channels metadata must match LIDAR_MAP_CHANNELS.")
-    channels = [image, lidar_maps]
+        raise ValueError("lidar_map_channels metadata must match the lidar representation.")
+    sparse_lidar_maps = lidar_maps[:6]
+    channels = [image, sparse_lidar_maps]
     input_channels = [*RGB_CHANNELS, *LIDAR_MAP_CHANNELS]
     if include_splatted_depth:
-        splat = splat_sparse_depth(
-            sparse_depth=lidar_maps[0],
-            sparse_mask=lidar_maps[5] > 0.0,
-            config=splatting_config or IDENTITY_SPLATTING_CONFIG,
-        )
-        channels.append(
-            np.stack([splat.depth_expanded, splat.confidence]).astype(
-                np.float32,
-                copy=False,
+        if lidar_representation == "splatted":
+            channels.append(lidar_maps[6:8])
+        else:
+            splat = splat_sparse_depth(
+                sparse_depth=sparse_lidar_maps[0],
+                sparse_mask=sparse_lidar_maps[5] > 0.0,
+                config=splatting_config or IDENTITY_SPLATTING_CONFIG,
             )
-        )
+            channels.append(
+                np.stack([splat.depth_expanded, splat.confidence]).astype(
+                    np.float32,
+                    copy=False,
+                )
+            )
         input_channels.extend(SPLATTED_CHANNELS)
 
     inputs = np.concatenate(channels, axis=0)[np.newaxis, ...]
     return {
         "inputs": inputs.astype(np.float32, copy=False),
         "input_channels": input_channels,
-        "sparse_lidar_maps": lidar_maps[np.newaxis, ...].copy(),
+        "sparse_lidar_maps": sparse_lidar_maps[np.newaxis, ...].copy(),
         "target": item.get("target"),
         "meta": item.get("meta", {}),
     }

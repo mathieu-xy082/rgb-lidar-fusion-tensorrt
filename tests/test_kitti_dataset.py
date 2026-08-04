@@ -28,6 +28,7 @@ def test_dataset_returns_rgb_lidar_maps_target_and_meta():
         "image_shape": [4, 5],
         "image_path": "image-000001.npy",
         "lidar_path": "lidar-000001.npy",
+        "lidar_representation": "sparse",
         "lidar_map_channels": [
             "normalized_camera_depth",
             "normalized_vehicle_x",
@@ -37,6 +38,34 @@ def test_dataset_returns_rgb_lidar_maps_target_and_meta():
             "point_mask",
         ],
     }
+
+
+def test_dataset_can_return_splatted_lidar_representation_with_metadata():
+    dataset = KittiSparseLidarDataset(FIXTURE_ROOT, lidar_representation="splatted")
+
+    sample = dataset[0]
+
+    assert sample["lidar_maps"].shape == (8, 4, 5)
+    assert sample["lidar_maps"].dtype == np.float32
+    assert sample["lidar_maps"][5].sum() == pytest.approx(2.0)
+    assert sample["lidar_maps"][6, 2, 2] == pytest.approx(10.0 / 80.0)
+    assert sample["lidar_maps"][7, 2, 2] == pytest.approx(1.0)
+    assert sample["meta"]["lidar_representation"] == "splatted"
+    assert sample["meta"]["lidar_map_channels"] == [
+        "normalized_camera_depth_sparse",
+        "normalized_vehicle_x_sparse",
+        "normalized_vehicle_y_sparse",
+        "normalized_vehicle_z_sparse",
+        "intensity_sparse",
+        "point_mask_sparse",
+        "normalized_camera_depth_splatted",
+        "splat_confidence",
+    ]
+
+
+def test_dataset_rejects_unknown_lidar_representation():
+    with pytest.raises(ValueError, match="lidar_representation must be 'sparse' or 'splatted'"):
+        KittiSparseLidarDataset(FIXTURE_ROOT, lidar_representation="dense")
 
 
 def test_dataset_rejects_missing_sample_files():

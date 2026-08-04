@@ -10,6 +10,7 @@ image caméra réelle
 + calibration KITTI
 → overlay LiDAR sur image
 → sparse maps réelles
+→ artefact ML splatté structuré
 → visualisation du splatting
 → galerie multi-frames navigable
 ```
@@ -84,8 +85,24 @@ Pour chaque frame, il produit :
 results/onboarding/kitti_<id>/image_<id>.ppm
 results/onboarding/kitti_<id>/overlay_<id>.ppm
 results/onboarding/kitti_<id>/sparse_maps_<id>.npz
+results/onboarding/kitti_<id>/splatted_maps_<id>.npz
 results/onboarding/kitti_<id>/visualizations/sparse_depth_overlay.ppm
 results/onboarding/kitti_<id>/visualizations/splatted_depth_overlay.ppm
+```
+
+`overlay_<id>.ppm` et les fichiers `visualizations/*.ppm` sont des vues humaines/debug.
+L'entrée ML structurée est `splatted_maps_<id>.npz` : elle garde les 6 canaux sparse
+originaux, puis ajoute `normalized_camera_depth_splatted` et `splat_confidence`.
+Le contrat versionné minimal est inspectable sans dépendances ML :
+
+```bash
+pdm run python - <<'PY'
+import numpy as np
+z = np.load('results/onboarding/kitti_000000/splatted_maps_000000.npz')
+print(str(z['schema_version'].item()))
+print(z['splatted_lidar_maps'].shape)
+print([str(x) for x in z['splatted_channel_names']])
+PY
 ```
 
 Il génère aussi :

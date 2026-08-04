@@ -58,6 +58,7 @@ def render_sample(sample_id: str, data_root: Path, output_root: Path, alpha: flo
     image_ppm = sample_out / f"image_{sample_id}.ppm"
     overlay_ppm = sample_out / f"overlay_{sample_id}.ppm"
     sparse_npz = sample_out / f"sparse_maps_{sample_id}.npz"
+    splatted_npz = sample_out / f"splatted_maps_{sample_id}.npz"
     visual_dir = sample_out / "visualizations"
 
     for path in (image_png, velodyne, calib):
@@ -83,12 +84,18 @@ def render_sample(sample_id: str, data_root: Path, output_root: Path, alpha: flo
         str(overlay_ppm),
         "--sparse-output",
         str(sparse_npz),
+        "--splatted-output",
+        str(splatted_npz),
+        "--splat-radius-px",
+        "2",
+        "--splat-sigma-px",
+        "1.0",
     ])
     run([
         sys.executable,
         "docs/onboarding/scripts/render_splatting_ppm.py",
-        "--sparse-npz",
-        str(sparse_npz),
+        "--splatted-npz",
+        str(splatted_npz),
         "--background-ppm",
         str(image_ppm),
         "--output-dir",
@@ -143,7 +150,7 @@ def write_gallery(output_root: Path, frames: list[dict[str, object]]) -> Path:
 
     function parsePPM(text) {{
       text = text.replace(/#[^\\n]*/g, ' ');
-      const tokens = text.trim().split(/\s+/);
+      const tokens = text.trim().split(/\\s+/);
       if (tokens[0] !== 'P3') throw new Error('Only P3 PPM is supported in this gallery');
       const width = Number(tokens[1]);
       const height = Number(tokens[2]);

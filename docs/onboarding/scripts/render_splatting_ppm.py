@@ -106,6 +106,13 @@ def load_splat_from_demo(root: Path) -> tuple[np.ndarray, np.ndarray, Path]:
     return sparse, np.stack([splatted["depth_expanded"], splatted["confidence"]]), root / "visualizations"
 
 
+def load_splat_from_splatted_npz(splatted_npz: Path, output_dir: Path) -> tuple[np.ndarray, np.ndarray, Path]:
+    from rgb_lidar_fusion.lidar_splatting import load_splatted_lidar_maps_npz
+
+    loaded = load_splatted_lidar_maps_npz(splatted_npz)
+    return loaded["sparse_lidar_maps"], loaded["splatted_lidar_maps"][6:8], output_dir
+
+
 def compute_splat_from_sparse(sparse_npz: Path, output_dir: Path) -> tuple[np.ndarray, np.ndarray, Path]:
     from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
 
@@ -121,6 +128,7 @@ def compute_splat_from_sparse(sparse_npz: Path, output_dir: Path) -> tuple[np.nd
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sparse-npz", type=Path, help="Sparse LiDAR NPZ containing lidar_maps")
+    parser.add_argument("--splatted-npz", type=Path, help="Precomputed stable splatted_maps_<id>.npz artifact")
     parser.add_argument("--output-dir", type=Path, help="Directory for visualization PPM files")
     parser.add_argument("--background-ppm", type=Path, help="Optional camera PPM used for transparent overlays")
     parser.add_argument("--alpha", type=float, default=0.45, help="Overlay opacity in [0, 1], default: 0.45")
@@ -129,7 +137,11 @@ def main() -> None:
     if not 0.0 <= args.alpha <= 1.0:
         parser.error("--alpha must be between 0 and 1")
 
-    if args.sparse_npz:
+    if args.splatted_npz:
+        if not args.output_dir:
+            parser.error("--output-dir is required with --splatted-npz")
+        sparse, splatted, out = load_splat_from_splatted_npz(args.splatted_npz, args.output_dir)
+    elif args.sparse_npz:
         if not args.output_dir:
             parser.error("--output-dir is required with --sparse-npz")
         sparse, splatted, out = compute_splat_from_sparse(args.sparse_npz, args.output_dir)

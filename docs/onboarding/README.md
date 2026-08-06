@@ -10,10 +10,10 @@ Repo étudié : `.`
 2. [Séance 2 — Géométrie caméra/LiDAR](./seance-02-geometrie-camera-lidar.md)
 3. [Séance 3 — Cartes LiDAR sparse et enriched](./seance-03-sparse-enriched-splatting.md)
 4. [Séance 4 — Mini-échantillon KITTI réel](./seance-04-mini-kitti-reel.md)
-5. Séance 5 — Dataset et contrat batch
-6. Séance 6 — Baseline PyTorch
-7. Séance 7 — Training loop
-8. Séance 8 — ONNX / TensorRT / suite roadmap
+5. [Séance 5 — Vision d'ensemble du pipeline et des blocs du repo](./seance-05-vision-ensemble-pipeline.md)
+6. [Séance 6 — Inspecter les `.npz` et les tenseurs LiDAR](./seance-06-inspecter-npz-lidar.md)
+7. [Séance 7 — Dataset → batch → modèle](./seance-07-dataset-batch-modele.md)
+8. [Séance 8 — Forward pass, mini-entraînement, ONNX et TensorRT](./seance-08-forward-training-onnx-tensorrt.md)
 
 ## Méthode
 

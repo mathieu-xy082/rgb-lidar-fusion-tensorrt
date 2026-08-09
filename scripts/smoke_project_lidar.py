@@ -14,6 +14,8 @@ import numpy as np
 from rgb_lidar_fusion.calibration import make_identity_calibration, parse_kitti_calibration_file
 from rgb_lidar_fusion.lidar_splatting import (
     SplattingConfig,
+    build_splatted_lidar_maps,
+    save_splatted_lidar_maps_npz,
     splat_projected_depth,
     splat_sparse_depth,
 )
@@ -81,6 +83,22 @@ def main(argv: list[str] | None = None) -> None:
         help="Optional path for a compressed .npz file containing the sparse lidar_maps array.",
     )
     parser.add_argument(
+        "--splatted-output",
+        help="Optional path for the stable v1 compressed .npz splatted LiDAR map artifact.",
+    )
+    parser.add_argument(
+        "--splat-radius-px",
+        type=int,
+        default=2,
+        help="Inclusive pixel radius for --splatted-output splatting (default: 2).",
+    )
+    parser.add_argument(
+        "--splat-sigma-px",
+        type=float,
+        default=1.0,
+        help="Gaussian sigma in pixels for --splatted-output splatting (default: 1.0).",
+    )
+    parser.add_argument(
         "--image-file",
         help="Optional ASCII PPM (P3) RGB canvas to draw the overlay on instead of a black image.",
     )
@@ -125,16 +143,17 @@ def main(argv: list[str] | None = None) -> None:
 
     projected = project_lidar_to_image(points, calibration, image_shape=image_shape)
     maps = build_sparse_lidar_maps(projected, image_shape=image_shape)
+    splat_config = SplattingConfig(radius_px=args.splat_radius_px, sigma_px=args.splat_sigma_px)
     splat = splat_sparse_depth(
         sparse_depth=maps[0],
         sparse_mask=maps[5] > 0.0,
-        config=SplattingConfig(radius_px=2, sigma_px=1.0),
+        config=splat_config,
     )
     projected_splat = splat_projected_depth(
         pixels=projected.pixels,
         depths=projected.camera_points[:, 2],
         image_shape=image_shape,
-        config=SplattingConfig(radius_px=2, sigma_px=1.0),
+        config=splat_config,
     )
 
     print(f"projected_points={projected.pixels.shape[0]}")
@@ -147,6 +166,17 @@ def main(argv: list[str] | None = None) -> None:
     if args.sparse_output:
         np.savez_compressed(args.sparse_output, lidar_maps=maps)
         print(f"sparse_output={args.sparse_output}")
+    if args.splatted_output:
+        splatted_maps = build_splatted_lidar_maps(maps, config=splat_config)
+        save_splatted_lidar_maps_npz(
+            args.splatted_output,
+            sparse_lidar_maps=maps,
+            splatted_lidar_maps=splatted_maps,
+            config=splat_config,
+            source_sparse_maps=args.sparse_output,
+        )
+        print(f"splatted_output={args.splatted_output}")
+        print(f"splatted_lidar_maps_shape={splatted_maps.shape}")
     if args.overlay_output:
         if image is not None:
             print("image_source=ppm")

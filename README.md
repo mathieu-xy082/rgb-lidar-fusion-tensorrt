@@ -102,17 +102,26 @@ La roadmap maîtresse complète, incluant l'ordre ONNX/demo → training → GPU
 
 ```text
 configs/                    Configuration dataset/modèle
+docs/articles/              Bibliographie et positionnement littérature
+docs/onboarding/            Parcours pratique guidé
 src/rgb_lidar_fusion/        Package Python principal
 tests/                       Tests unitaires
 notebooks/                   Exploration visuelle
 results/                     Résultats générés non versionnés
-scripts/                     Commandes utilitaires
 ```
+
 
 ## Versioning
 
 Le projet suit Semantic Versioning. Les changements notables et les éléments
 validés pour la future release stable sont suivis dans `CHANGELOG.md`.
+
+## Onboarding pratique
+
+Un parcours de tutorat progressif est disponible dans `docs/onboarding/` pour
+s'approprier le repo par la pratique : validation locale, artefacts demo,
+projection LiDAR, splatting, mini-échantillon KITTI réel et contrats de batch
+modèle.
 
 ## Installation dev
 

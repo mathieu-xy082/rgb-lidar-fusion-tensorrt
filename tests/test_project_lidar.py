@@ -338,6 +338,37 @@ def test_smoke_script_can_save_sparse_lidar_maps_npz(tmp_path):
         assert saved["lidar_maps"].dtype == np.float32
 
 
+def test_smoke_script_can_save_splatted_lidar_maps_npz(tmp_path):
+    splatted_file = tmp_path / "splatted_maps.npz"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_project_lidar.py",
+            "--splatted-output",
+            str(splatted_file),
+            "--splat-radius-px",
+            "1",
+            "--splat-sigma-px",
+            "1.5",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert f"splatted_output={splatted_file}" in completed.stdout
+    assert "splatted_lidar_maps_shape=(8, 360, 640)" in completed.stdout
+    with np.load(splatted_file) as saved:
+        assert str(saved["schema_version"].item()) == "splatted-lidar-maps-v1"
+        assert saved["splatted_lidar_maps"].shape == (8, 360, 640)
+        assert saved["splatted_lidar_maps"].dtype == np.float32
+        assert saved["sparse_lidar_maps"].shape == (6, 360, 640)
+        assert int(saved["splat_radius_px"].item()) == 1
+        assert float(saved["splat_sigma_px"].item()) == pytest.approx(1.5)
+
+
 def test_smoke_script_can_write_synthetic_kitti_format_sample(tmp_path):
     sample_dir = tmp_path / "synthetic_kitti"
 

@@ -55,7 +55,7 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
 
 | Job ID | Nom | Cadence | Répétitions | Rôle |
 |---|---|---:|---:|---|
-| `5cb7256a80fb` | RGB-LiDAR master roadmap coordinator | 12h | borné à 40 runs total | Coordinateur read-only: agrège les outputs, signale les branches prêtes, recommande l'ordre de review/intégration |
+| `e146168ef424` | RGB-LiDAR master roadmap coordinator | 12h | 10 runs total | Coordinateur read-only: agrège les outputs, signale les branches prêtes, recommande l'ordre de review/intégration |
 
 La tâche maîtresse reçoit comme contexte les derniers outputs des tâches secondaires actives via `context_from` et/ou le scanner déterministe `/root/.hermes/scripts/rgb_lidar_readiness_scan.py`.
 
@@ -63,29 +63,30 @@ La tâche maîtresse reçoit comme contexte les derniers outputs des tâches sec
 
 | Priorité | Job ID | Nom | Branche | Base de référence | Cadence | Répétitions | Objectif |
 |---:|---|---|---|---|---:|---:|---|
-| P5 | `ec5b3d4582ec` | RGB-LiDAR P5 baseline training loop | `feature/training-loop-baseline` | `origin/main` | 12h | 8 total | Boucle d'entraînement PyTorch CPU-safe/GPU-ready, checkpointing, metrics, smoke tests |
+| P0 | `a10d6c8fe7a1` | RGB-LiDAR structured splatted maps | `ec/splatted-structured-maps` | `origin/ec/onboarding` | 12h | 8 total | Générer et consommer un `.npz` structuré contenant les cartes LiDAR après splatting |
 
 ## Tâche active actuelle
 
 | Priorité | Nom | Branche | Objectif |
 |---:|---|---|---|
-| P5 | RGB-LiDAR baseline training loop | `feature/training-loop-baseline` | Boucle d'entraînement PyTorch CPU-safe/GPU-ready, checkpointing, metrics, smoke tests |
+| P0 | RGB-LiDAR structured splatted maps | `ec/splatted-structured-maps` | Transformer les sorties de séance 4 en artefacts ML structurés `splatted_maps_<id>.npz` |
 
-Prompt recommandé pour ce futur job :
+Prompt recommandé pour ce job :
 
 ```text
 Projet: /root/ai-projects/rgb-lidar-fusion-tensorrt.
-Branche dédiée: feature/training-loop-baseline.
-Base: origin/main.
-Objectif: implémenter une boucle d'entraînement PyTorch minimale mais sérieuse pour le modèle baseline RGB + LiDAR enriched. Rester CPU-safe en CI, GPU-ready pour runs dédiés. Ajouter scripts/config/tests/docs, ne jamais committer datasets/checkpoints/artefacts générés. Valider avec PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml puis pdm run validate et tests training ciblés. Alerter uniquement avec `BRANCHE PRÊTE POUR REVIEW: feature/training-loop-baseline` quand la branche est validée et poussée.
+Branche dédiée: ec/splatted-structured-maps.
+Base: origin/ec/onboarding.
+Objectif: implémenter le plan docs/splatted-structured-maps-plan.md. Ajouter un contrat `.npz` versionné pour `splatted_maps_<id>.npz`, générer les cartes splattées structurées depuis le pipeline KITTI onboarding, permettre à la visualisation de consommer un `.npz` précomputé, et ajouter un mode dataset/model input opt-in pour la représentation splatted. Ne pas entraîner de modèle dans cette branche. Ne jamais committer `data/`, `results/`, datasets, checkpoints, ONNX ou engines TensorRT. Valider avec `pdm run validate` et un smoke réel sur `render_kitti_sequence.py --ids 000000 --alpha 0.45`. Alerter uniquement avec `BRANCHE PRÊTE POUR REVIEW: ec/splatted-structured-maps` quand la branche est validée et poussée.
 ```
 
 ## Ordre recommandé de review à partir d'ici
 
-1. créer `feature/training-loop-baseline`
-2. préparer/réaliser première expérience GPU dédiée
-3. exporter checkpoint entraîné vers ONNX
-4. benchmark TensorRT sur runtime NVIDIA vérifié
+1. finaliser `ec/splatted-structured-maps` ;
+2. review/intégration de ce contrat d'artefact dans la base onboarding/main selon décision de Mathieu ;
+3. reprendre ensuite l'entraînement baseline avec `splatted_maps_<id>.npz` comme entrée structurée ;
+4. exporter checkpoint entraîné vers ONNX ;
+5. benchmark TensorRT sur runtime NVIDIA vérifié.
 
 ## Commandes de validation locale
 

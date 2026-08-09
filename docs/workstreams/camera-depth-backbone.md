@@ -34,10 +34,10 @@ to BEV.
 - [x] Add the dense `CameraDepthModel` encoder/decoder.
 - [x] Add deterministic sparse LiDAR holdout and leakage-safe resplatting.
 - [x] Add masked depth loss and a finite CPU training-step test.
-- [ ] Connect the camera-depth path to downloaded KITTI object frames.
-- [ ] Add the local multi-frame KITTI smoke runner and its configuration.
-- [ ] Add checkpoint/resume and depth-specific training metrics.
-- [ ] Run and record the first meaningful KITTI smoke experiment.
+- [x] Connect the camera-depth path to downloaded KITTI object frames.
+- [x] Add the local multi-frame KITTI smoke runner and its configuration.
+- [x] Add checkpoint/resume and depth-specific training metrics.
+- [x] Run and record the first meaningful KITTI smoke experiment.
 
 ## Sparse LiDAR channels
 
@@ -156,6 +156,18 @@ The exact count can be adjusted for the machine, but the default meaningful
 target should be dozens of frames rather than the 3-frame lightweight mirror.
 The downloaded data must stay ignored by Git.
 
+Run the camera-depth smoke after the download:
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
+  --config configs/training/kitti_camera_depth.yaml
+```
+
+The default configuration uses 64 frames resized to `128x416`, a 20% sparse
+LiDAR holdout, and local splatting with a 2-pixel radius. Checkpoints and metrics
+are written below `results/training/kitti_camera_depth/` and remain ignored by
+Git.
+
 The branch should therefore support two validation levels:
 
 ```text
@@ -165,6 +177,34 @@ CI smoke:
 local KITTI smoke:
   downloaded KITTI object frames, sparse holdout, masked depth loss
 ```
+
+## First KITTI smoke result
+
+Run completed locally on 2026-08-09 with the committed default configuration:
+
+```text
+dataset: KITTI Object training frames 000000..000063
+device: CPU (local CUDA driver incompatible with the installed PyTorch build)
+image shape: 128x416
+batch size: 2
+epochs: 1
+optimizer steps: 32
+mean training loss: 0.028757
+mean gradient norm: 0.248513
+checkpoint: results/training/kitti_camera_depth/checkpoints/latest.pt
+```
+
+This result proves that the downloaded KITTI path, projection, holdout,
+resplatting, dense forward pass, masked loss, backward pass, and checkpoint path
+work together on a non-trivial sample. It is not a validation metric and does
+not yet demonstrate depth generalization.
+
+The first real run also exposed saturation in the original `Softplus` output
+head: after several batches, the prediction approached zero and all gradients
+vanished. The camera-depth head now emits an unconstrained linear regression
+value during training. Positivity can be applied at inference or revisited with
+a calibrated depth parameterization after the basic learning behavior has been
+measured.
 
 ## Acceptance criteria
 

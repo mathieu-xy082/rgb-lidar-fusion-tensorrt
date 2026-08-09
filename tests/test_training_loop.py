@@ -22,8 +22,10 @@ from rgb_lidar_fusion.training import (
     build_loss,
     describe_device_selection,
     load_training_config,
+    run_kitti_camera_depth_training,
     run_synthetic_smoke_training,
     train_one_step,
+    validate_camera_depth_training_config,
     validate_training_config,
 )
 
@@ -129,6 +131,17 @@ def test_validate_training_config_rejects_kitti_config_for_synthetic_runner() ->
 
     with pytest.raises(ValueError, match="synthetic smoke runner only supports dataset='synthetic'"):
         validate_training_config(config)
+
+
+def test_validate_camera_depth_config_rejects_invalid_holdout_fraction() -> None:
+    config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": "data/kitti/training",
+        "holdout_fraction": 1.0,
+    }
+
+    with pytest.raises(ValueError, match="holdout_fraction must be between 0 and 1"):
+        validate_camera_depth_training_config(config)
 
 
 def test_train_one_step_consumes_model_batch_adapter_and_updates_parameters() -> None:
@@ -242,6 +255,98 @@ def test_resumed_synthetic_training_preserves_metrics_history(tmp_path, monkeypa
     assert [row["epoch"] for row in metrics] == [1, 2]
     assert metrics_csv.read_text().splitlines()[1:][0].startswith("1,")
     assert metrics_csv.read_text().splitlines()[1:][1].startswith("2,")
+
+
+def _write_training_kitti_frame(root: Path, sample_id: str, depth_offset: float) -> None:
+    Image = pytest.importorskip("PIL.Image")
+    image_dir = root / "image_2"
+    velodyne_dir = root / "velodyne"
+    calibration_dir = root / "calib"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    velodyne_dir.mkdir(parents=True, exist_ok=True)
+    calibration_dir.mkdir(parents=True, exist_ok=True)
+
+    pixels = np.zeros((12, 16, 3), dtype=np.uint8)
+    pixels[..., 0] = 64
+    pixels[3:9, 4:12, 1] = 160
+    Image.fromarray(pixels, mode="RGB").save(image_dir / f"{sample_id}.png")
+    points = np.array(
+        [
+            [-3.0, -1.0, 6.0 + depth_offset, 0.5],
+            [-1.5, 0.0, 6.5 + depth_offset, 0.6],
+            [0.0, 0.0, 7.0 + depth_offset, 0.7],
+            [1.5, 0.0, 7.5 + depth_offset, 0.8],
+            [3.0, 1.0, 8.0 + depth_offset, 0.9],
+        ],
+        dtype=np.float32,
+    )
+    points.tofile(velodyne_dir / f"{sample_id}.bin")
+    (calibration_dir / f"{sample_id}.txt").write_text(
+        "\n".join(
+            (
+                "P2: 8 0 8 0 0 8 6 0 0 0 1 0",
+                "R0_rect: 1 0 0 0 1 0 0 0 1",
+                "Tr_velo_to_cam: 1 0 0 0 0 1 0 0 0 0 1 0",
+            )
+        )
+        + "\n"
+    )
+
+
+def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    data_root = tmp_path / "kitti" / "training"
+    _write_training_kitti_frame(data_root, "000000", 0.0)
+    _write_training_kitti_frame(data_root, "000001", 0.5)
+    output_dir = tmp_path / "camera-depth-training"
+    config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": str(data_root),
+        "sample_count": 2,
+        "seed": 29,
+        "device": "cpu",
+        "epochs": 1,
+        "batch_size": 2,
+        "learning_rate": 0.001,
+        "height": 12,
+        "width": 16,
+        "holdout_fraction": 0.4,
+        "splat_radius_px": 1,
+        "splat_sigma_px": 1.0,
+        "smooth_l1_beta": 0.1,
+        "output_dir": str(output_dir),
+    }
+
+    first = run_kitti_camera_depth_training(config)
+
+    assert first.device == "cpu"
+    assert first.epochs_completed == 1
+    assert first.metrics[0].step == 1
+    assert first.metrics[0].loss > 0.0
+    assert first.checkpoint_path.exists()
+
+    resumed = run_kitti_camera_depth_training(
+        {
+            **config,
+            "epochs": 2,
+            "resume_from": str(first.checkpoint_path),
+        }
+    )
+
+    assert resumed.start_epoch == 1
+    assert resumed.metrics[0].epoch == 2
+    assert resumed.metrics[0].step == 2
+    import json
+
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert [row["epoch"] for row in metrics] == [1, 2]
+    assert metadata["dataset"] == "kitti_camera_depth"
+    assert metadata["sample_count"] == 2
+    assert metadata["image_shape"] == [12, 16]
 
 
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:

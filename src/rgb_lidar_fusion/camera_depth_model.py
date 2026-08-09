@@ -45,10 +45,7 @@ class CameraDepthModel(nn.Module):
         )
         self.decoder_1 = _ConvBlock(96 + 64, 64)
         self.decoder_0 = _ConvBlock(64 + 32, 32)
-        self.depth_head = nn.Sequential(
-            nn.Conv2d(32, 1, kernel_size=1),
-            nn.Softplus(),
-        )
+        self.depth_head = nn.Conv2d(32, 1, kernel_size=1)
 
     def forward(self, rgb: torch.Tensor, lidar_maps: torch.Tensor) -> torch.Tensor:
         """Return normalized depth with shape ``[B, 1, H, W]``."""

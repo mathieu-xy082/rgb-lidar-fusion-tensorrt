@@ -19,6 +19,7 @@ dev = [
 ]
 ml = [
   "torch>=2.3",
+  "pillow>=10",
 ]
 onnx = [
   "onnx>=1.16",
@@ -34,6 +35,7 @@ test = "pytest"
 smoke = "python scripts/smoke_project_lidar.py"
 demo-artifacts = "python -m rgb_lidar_fusion.demo_artifacts"
 train-baseline = "python scripts/train_baseline.py"
+train-camera-depth = "python scripts/train_camera_depth.py"
 validate = { composite = ["test", "smoke", "demo-artifacts"] }
 export_onnx = "python scripts/export_onnx.py"
 validate_onnx = "python scripts/validate_onnx.py"

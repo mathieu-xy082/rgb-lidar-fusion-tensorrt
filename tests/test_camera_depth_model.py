@@ -43,7 +43,7 @@ def test_camera_depth_model_preserves_odd_input_resolution() -> None:
     prediction = model(rgb, lidar_maps)
 
     assert prediction.shape == (2, 1, 31, 47)
-    assert torch.all(prediction >= 0.0)
+    assert torch.isfinite(prediction).all()
 
 
 def test_masked_depth_loss_uses_only_selected_pixels_and_rejects_empty_mask() -> None:

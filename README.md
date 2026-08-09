@@ -322,9 +322,23 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run train-baseline -- \
   --resume-from results/training/synthetic_smoke/checkpoints/latest.pt
 ```
 
-`configs/training/kitti_tiny.yaml` documente le prochain incrément local KITTI,
-mais le runner actuel reste synthétique tant qu'un schéma de pseudo-targets KITTI
-n'est pas validé.
+Le backbone camera-depth possède désormais un runner KITTI local. Il masque une
+partie déterministe des mesures sparse, reconstruit les canaux splattés depuis
+les seuls points conservés, puis entraîne une prédiction dense avec une loss
+Smooth L1 évaluée uniquement sur les points masqués.
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python docs/onboarding/scripts/download_kitti_samples.py \
+  --source official \
+  --count 64
+
+PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
+  --config configs/training/kitti_camera_depth.yaml
+```
+
+Le runner exige le nombre de frames déclaré par `sample_count`; il échoue
+explicitement si le téléchargement local est incomplet. Les checkpoints et les
+métriques sont écrits sous `results/training/kitti_camera_depth/`.
 
 Les dépendances lourdes ONNX / TensorRT ne sont pas installées par défaut. Elles sont isolées par groupes PDM ou par setup runtime dédié au moment des milestones correspondants. Voir `docs/dependency-roadmap.md`, `docs/gpu-training-plan.md`, et `docs/onnx-export-validation.md`.
 

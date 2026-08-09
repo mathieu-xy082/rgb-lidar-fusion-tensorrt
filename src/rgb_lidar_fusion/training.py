@@ -12,10 +12,13 @@ from typing import Any
 import numpy as np
 
 from .baseline_model import BaselineFusionModel
-from .camera_depth_model import masked_depth_loss
+from .camera_depth_model import CameraDepthModel, masked_depth_loss
+from .dataset import KittiObjectDepthDataset
+from .lidar_splatting import SplattingConfig
 from .model_batch import (
     dataset_items_to_model_batch,
     model_batch_to_baseline_inputs,
+    model_batch_to_camera_depth_training_batch,
     model_batch_to_torch_tensors,
 )
 
@@ -112,6 +115,40 @@ def validate_training_config(config: dict[str, Any]) -> None:
             raise ValueError(f"{field} must be a positive integer.")
     if "learning_rate" in config and float(config["learning_rate"]) <= 0.0:
         raise ValueError("learning_rate must be positive.")
+
+
+def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
+    """Validate the local KITTI camera-depth runner configuration."""
+
+    dataset = str(config.get("dataset", ""))
+    if dataset != "kitti_camera_depth":
+        raise ValueError("camera-depth runner requires dataset='kitti_camera_depth'.")
+    positive_int_fields = (
+        "epochs",
+        "batch_size",
+        "height",
+        "width",
+        "sample_count",
+    )
+    for field in positive_int_fields:
+        if field in config and int(config[field]) <= 0:
+            raise ValueError(f"{field} must be a positive integer.")
+    positive_float_fields = (
+        "learning_rate",
+        "max_depth_m",
+        "splat_sigma_px",
+        "smooth_l1_beta",
+    )
+    for field in positive_float_fields:
+        if field in config and float(config[field]) <= 0.0:
+            raise ValueError(f"{field} must be positive.")
+    holdout_fraction = float(config.get("holdout_fraction", 0.2))
+    if not 0.0 < holdout_fraction < 1.0:
+        raise ValueError("holdout_fraction must be between 0 and 1.")
+    if int(config.get("splat_radius_px", 2)) < 0:
+        raise ValueError("splat_radius_px must be non-negative.")
+    if not str(config.get("data_root", "")).strip():
+        raise ValueError("data_root is required for KITTI camera-depth training.")
 
 
 def set_deterministic_seed(seed: int) -> None:
@@ -350,12 +387,19 @@ def write_run_metadata(
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "seed": int(config.get("seed", 0)),
+        "dataset": str(config.get("dataset", "synthetic")),
         "device": device,
         "device_diagnostic": device_diagnostic,
         "start_epoch": start_epoch,
         "epochs_completed": epochs_completed,
         "checkpoint_path": str(checkpoint_path),
     }
+    if "data_root" in config:
+        metadata["data_root"] = str(config["data_root"])
+    if "sample_count" in config:
+        metadata["sample_count"] = int(config["sample_count"])
+    if "height" in config and "width" in config:
+        metadata["image_shape"] = [int(config["height"]), int(config["width"])]
     (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
@@ -424,6 +468,122 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
                 step=step,
                 loss=step_metrics.loss,
                 grad_norm=step_metrics.grad_norm,
+            )
+        )
+        save_checkpoint(
+            path=checkpoint_path,
+            model=model,
+            optimizer=optimizer,
+            epoch=epoch + 1,
+            step=step,
+            config=config,
+        )
+
+    write_metrics(output_dir, metrics, append=bool(resume_from))
+    write_run_metadata(
+        output_dir,
+        config=config,
+        device=str(device),
+        device_diagnostic=device_diagnostic,
+        checkpoint_path=checkpoint_path,
+        start_epoch=start_epoch,
+        epochs_completed=epochs,
+    )
+    return TrainingRunResult(
+        device=str(device),
+        device_diagnostic=device_diagnostic,
+        start_epoch=start_epoch,
+        epochs_completed=epochs,
+        checkpoint_path=checkpoint_path,
+        metrics=metrics,
+    )
+
+
+def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult:
+    """Train dense camera depth against held-out KITTI LiDAR measurements."""
+
+    import torch
+
+    validate_camera_depth_training_config(config)
+    seed = int(config.get("seed", 0))
+    requested_device = str(config.get("device", "auto"))
+    set_deterministic_seed(seed)
+    device = select_device(requested_device)
+    device_diagnostic = describe_device_selection(requested_device)
+    epochs = int(config.get("epochs", 1))
+    batch_size = int(config.get("batch_size", 2))
+    learning_rate = float(config.get("learning_rate", 1e-3))
+    height = int(config.get("height", 128))
+    width = int(config.get("width", 416))
+    sample_count = int(config.get("sample_count", 64))
+    holdout_fraction = float(config.get("holdout_fraction", 0.2))
+    beta = float(config.get("smooth_l1_beta", 1.0))
+    output_dir = Path(
+        str(config.get("output_dir", "results/training/kitti_camera_depth"))
+    )
+    checkpoint_path = output_dir / "checkpoints" / "latest.pt"
+    splatting_config = SplattingConfig(
+        radius_px=int(config.get("splat_radius_px", 2)),
+        sigma_px=float(config.get("splat_sigma_px", 1.0)),
+    )
+    dataset = KittiObjectDepthDataset(
+        str(config["data_root"]),
+        image_shape=(height, width),
+        max_depth_m=float(config.get("max_depth_m", 80.0)),
+        sample_limit=sample_count,
+    )
+
+    model = CameraDepthModel(lidar_mode="enriched")
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    start_epoch = 0
+    step = 0
+    resume_from = config.get("resume_from")
+    if resume_from:
+        start_epoch, step = load_checkpoint(
+            path=Path(str(resume_from)),
+            model=model,
+            optimizer=optimizer,
+            device=device,
+        )
+
+    metrics: list[EpochMetrics] = []
+    for epoch in range(start_epoch, epochs):
+        epoch_losses: list[float] = []
+        epoch_grad_norms: list[float] = []
+        order = np.random.default_rng(seed + epoch).permutation(len(dataset))
+        for batch_start in range(0, len(order), batch_size):
+            indices = order[batch_start : batch_start + batch_size]
+            items = [dataset[int(index)] for index in indices]
+            model_batch = dataset_items_to_model_batch(
+                items,
+                include_splatted_depth=False,
+            )
+            depth_batch = model_batch_to_camera_depth_training_batch(
+                model_batch,
+                holdout_fraction=holdout_fraction,
+                seed=seed + epoch * len(dataset) + batch_start,
+                splatting_config=splatting_config,
+            )
+            step += 1
+            step_metrics = train_camera_depth_step(
+                model=model,
+                optimizer=optimizer,
+                rgb=torch.from_numpy(depth_batch["rgb"]),
+                lidar_maps=torch.from_numpy(depth_batch["lidar_maps"]),
+                depth_target=torch.from_numpy(depth_batch["depth_target"]),
+                loss_mask=torch.from_numpy(depth_batch["loss_mask"]),
+                device=device,
+                beta=beta,
+            )
+            epoch_losses.append(step_metrics.loss)
+            epoch_grad_norms.append(step_metrics.grad_norm)
+
+        metrics.append(
+            EpochMetrics(
+                epoch=epoch + 1,
+                step=step,
+                loss=float(np.mean(epoch_losses)),
+                grad_norm=float(np.mean(epoch_grad_norms)),
             )
         )
         save_checkpoint(

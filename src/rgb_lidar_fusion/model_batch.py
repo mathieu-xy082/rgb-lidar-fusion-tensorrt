@@ -224,3 +224,88 @@ def model_batch_to_torch_tensors(
             dtype=torch.float32,
         ),
     }
+
+
+def model_batch_to_camera_depth_training_batch(
+    batch: dict[str, Any],
+    *,
+    holdout_fraction: float = 0.2,
+    seed: int = 0,
+    include_splatted_depth: bool = True,
+    splatting_config: SplattingConfig | None = None,
+) -> dict[str, np.ndarray]:
+    """Create leakage-safe camera-depth inputs and held-out sparse targets.
+
+    Holdout pixels are removed from all six sparse LiDAR channels before the
+    optional splatted depth and confidence channels are recomputed. A splat from
+    another, retained point may still cover a holdout location; the held-out
+    measurement itself never contributes to any model input.
+    """
+
+    if not 0.0 < holdout_fraction < 1.0:
+        raise ValueError("holdout_fraction must be between 0 and 1.")
+    if "input_channels" not in batch:
+        raise ValueError("input_channels metadata is required for camera-depth slicing.")
+
+    inputs = np.asarray(batch.get("inputs"), dtype=np.float32)
+    sparse_maps = np.asarray(batch.get("sparse_lidar_maps"), dtype=np.float32)
+    if inputs.ndim != 4:
+        raise ValueError("inputs must have shape [B, C, H, W].")
+    if sparse_maps.ndim != 4 or sparse_maps.shape[1] != len(LIDAR_MAP_CHANNELS):
+        raise ValueError("sparse_lidar_maps must have shape [B, 6, H, W].")
+    if inputs.shape[0] != sparse_maps.shape[0] or inputs.shape[2:] != sparse_maps.shape[2:]:
+        raise ValueError("inputs and sparse_lidar_maps must share B, H, and W.")
+
+    input_channels = list(batch["input_channels"])
+    if len(input_channels) != inputs.shape[1]:
+        raise ValueError("input_channels length must match inputs channel dimension.")
+    rgb_indices = _baseline_channel_indices(input_channels, RGB_CHANNELS)
+    rgb = inputs[:, rgb_indices, :, :].copy()
+
+    rng = np.random.default_rng(seed)
+    kept_sparse_maps = sparse_maps.copy()
+    holdout_mask = np.zeros(
+        (sparse_maps.shape[0], 1, sparse_maps.shape[2], sparse_maps.shape[3]),
+        dtype=bool,
+    )
+    for batch_index in range(sparse_maps.shape[0]):
+        valid = (sparse_maps[batch_index, 5] > 0.0) & (
+            sparse_maps[batch_index, 0] > 0.0
+        )
+        valid_indices = np.flatnonzero(valid)
+        if valid_indices.size == 0:
+            raise ValueError(
+                f"batch sample {batch_index} has no valid sparse depth pixels."
+            )
+        holdout_count = max(1, int(round(valid_indices.size * holdout_fraction)))
+        if valid_indices.size > 1:
+            holdout_count = min(holdout_count, valid_indices.size - 1)
+        held_out = rng.choice(valid_indices, size=holdout_count, replace=False)
+        sample_mask = holdout_mask[batch_index, 0].reshape(-1)
+        sample_mask[held_out] = True
+        kept_sparse_maps[batch_index, :, holdout_mask[batch_index, 0]] = 0.0
+
+    lidar_channels = [kept_sparse_maps]
+    if include_splatted_depth:
+        config = splatting_config or SplattingConfig()
+        splatted = np.zeros(
+            (sparse_maps.shape[0], 2, sparse_maps.shape[2], sparse_maps.shape[3]),
+            dtype=np.float32,
+        )
+        for batch_index in range(sparse_maps.shape[0]):
+            result = splat_sparse_depth(
+                sparse_depth=kept_sparse_maps[batch_index, 0],
+                sparse_mask=kept_sparse_maps[batch_index, 5] > 0.0,
+                config=config,
+            )
+            splatted[batch_index, 0] = result.depth_expanded
+            splatted[batch_index, 1] = result.confidence
+        lidar_channels.append(splatted)
+
+    return {
+        "rgb": rgb.astype(np.float32, copy=False),
+        "lidar_maps": np.concatenate(lidar_channels, axis=1),
+        "depth_target": sparse_maps[:, 0:1].copy(),
+        "loss_mask": holdout_mask,
+        "kept_sparse_lidar_maps": kept_sparse_maps,
+    }

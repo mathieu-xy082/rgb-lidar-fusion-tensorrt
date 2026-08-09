@@ -1,0 +1,182 @@
+# Workstream — Camera-depth backbone
+
+Branch: `ec/camera-depth-backbone`
+
+Parent branch: `main`
+
+## Goal
+
+Replace the current scalar training smoke target with a dense camera-depth
+backbone that predicts:
+
+```text
+depth_pred: [B, 1, H, W]
+```
+
+The goal is not to implement BEV yet. The goal is to train and validate a useful
+image-space depth representation before using it for the future depth-aware lift
+to BEV.
+
+## Scope
+
+- Add a small CNN encoder/decoder consuming RGB plus sparse/enriched LiDAR maps.
+- Add a masked depth loss.
+- Add a deterministic sparse LiDAR holdout path.
+- Verify forward, loss, backward, finite gradients, and checkpoint compatibility.
+- Keep the implementation CPU-safe for tests and GPU-ready for later training.
+- Use a non-trivial local KITTI sample for the meaningful smoke training path.
+- Do not implement the BEV lift, YOLO-like auxiliary head, or CenterPoint-like
+  BEV heads in this branch.
+
+## Progress
+
+- [x] Create `ec/camera-depth-backbone` directly from `main`.
+- [x] Add the dense `CameraDepthModel` encoder/decoder.
+- [x] Add deterministic sparse LiDAR holdout and leakage-safe resplatting.
+- [x] Add masked depth loss and a finite CPU training-step test.
+- [ ] Connect the camera-depth path to downloaded KITTI object frames.
+- [ ] Add the local multi-frame KITTI smoke runner and its configuration.
+- [ ] Add checkpoint/resume and depth-specific training metrics.
+- [ ] Run and record the first meaningful KITTI smoke experiment.
+
+## Sparse LiDAR channels
+
+The six raw sparse LiDAR channels remain:
+
+```text
+0: normalized_camera_depth
+1: normalized_vehicle_x
+2: normalized_vehicle_y
+3: normalized_vehicle_z
+4: intensity
+5: point_mask
+```
+
+The enriched representation appends:
+
+```text
+6: depth_expanded
+7: confidence
+```
+
+## Holdout then splatting
+
+For sparse depth holdout training, the important rule is:
+
+```text
+Any channel given to the model must be computed only from kept points.
+Any point used as target must be absent from every input channel.
+```
+
+The correct order is:
+
+```text
+1. Project all LiDAR points into the image.
+2. Build the full sparse maps.
+3. Split valid LiDAR pixels into kept pixels and holdout pixels.
+4. Build the model input from kept pixels only.
+5. Recompute depth_expanded/confidence from the kept sparse depth and kept mask.
+6. Predict depth_pred.
+7. Compute the loss only on holdout pixels.
+```
+
+In other words, `depth_expanded` and `confidence` must be recomputed **after
+holdout**, from `sparse_depth_kept` and `sparse_mask_kept`.
+
+Correct:
+
+```text
+depth_expanded_kept, confidence_kept
+= splat_sparse_depth(sparse_depth_kept, sparse_mask_kept)
+```
+
+Incorrect:
+
+```text
+depth_expanded_full, confidence_full
+= splat_sparse_depth(sparse_depth_full, sparse_mask_full)
+```
+
+The incorrect path leaks target information into the model input because holdout
+points can influence the splatted channels.
+
+## Training target
+
+Recommended first useful target:
+
+```text
+Input:
+  RGB
+  sparse LiDAR kept
+  optional splatted channels recomputed from kept points only
+
+Target:
+  full sparse depth
+
+Loss mask:
+  holdout_lidar_mask
+```
+
+Loss:
+
+```text
+loss = SmoothL1(
+    depth_pred[holdout_lidar_mask],
+    sparse_depth_full[holdout_lidar_mask]
+)
+```
+
+This tests whether RGB plus visible LiDAR context can recover measured LiDAR
+depth at pixels deliberately hidden from the input.
+
+## Data policy for smoke training
+
+The CI test can remain tiny and synthetic, because its role is only to validate
+shape checks, deterministic holdout, finite loss, and backward propagation.
+
+The training smoke that is meant to say something useful about the camera-depth
+backbone should use a more substantial local KITTI sample:
+
+```text
+data/kitti/training/
+  image_2/
+  velodyne/
+  calib/
+```
+
+Recommended local bootstrap:
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python docs/onboarding/scripts/download_kitti_samples.py \
+  --source official \
+  --count 64
+```
+
+The exact count can be adjusted for the machine, but the default meaningful
+target should be dozens of frames rather than the 3-frame lightweight mirror.
+The downloaded data must stay ignored by Git.
+
+The branch should therefore support two validation levels:
+
+```text
+CI smoke:
+  synthetic or fixture-sized batch, no external downloads
+
+local KITTI smoke:
+  downloaded KITTI object frames, sparse holdout, masked depth loss
+```
+
+## Acceptance criteria
+
+- `CameraDepthModel` returns `depth_pred: [B, 1, H, W]`.
+- Masked depth loss validates shape compatibility and rejects empty masks.
+- Holdout generation is deterministic under a seed.
+- Splatted input channels, when enabled, are recomputed from kept points only.
+- Tests cover data-leakage-sensitive behavior: holdout pixels must be zeroed from
+  all six sparse LiDAR input channels. Splatted channels must be recomputed from
+  kept points only; a neighbouring kept point may legitimately splat onto the
+  holdout location.
+- A smoke training step produces finite loss and finite non-zero gradients.
+- A local KITTI smoke path can train on a non-trivial downloaded sample outside
+  Git, initially targeting roughly 64 frames when resources allow.
+- Generated checkpoints, metrics, and artifacts remain outside Git.

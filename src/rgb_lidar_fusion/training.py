@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from .baseline_model import BaselineFusionModel
+from .camera_depth_model import masked_depth_loss
 from .model_batch import (
     dataset_items_to_model_batch,
     model_batch_to_baseline_inputs,
@@ -176,6 +177,50 @@ def train_one_step(
     optimizer.zero_grad(set_to_none=True)
     predictions = model(rgb, lidar_maps)
     loss = criterion(predictions, targets)
+    if not torch.isfinite(loss):
+        raise ValueError("training loss must be finite.")
+    loss.backward()
+
+    grad_norm_sq = 0.0
+    for parameter in model.parameters():
+        if parameter.grad is None:
+            continue
+        if not torch.isfinite(parameter.grad).all():
+            raise ValueError("all gradients must be finite.")
+        grad_norm_sq += float(parameter.grad.detach().pow(2).sum().cpu())
+    grad_norm = grad_norm_sq**0.5
+    if grad_norm <= 0.0:
+        raise ValueError("at least one trainable parameter must receive a non-zero gradient.")
+
+    optimizer.step()
+    return StepMetrics(loss=float(loss.detach().cpu()), grad_norm=grad_norm)
+
+
+def train_camera_depth_step(
+    *,
+    model,
+    optimizer,
+    rgb,
+    lidar_maps,
+    depth_target,
+    loss_mask,
+    device,
+    beta: float = 1.0,
+) -> StepMetrics:
+    """Run one optimizer step against held-out sparse depth measurements."""
+
+    import torch
+
+    model.to(device)
+    model.train()
+    rgb = rgb.to(device)
+    lidar_maps = lidar_maps.to(device)
+    depth_target = depth_target.to(device)
+    loss_mask = loss_mask.to(device)
+
+    optimizer.zero_grad(set_to_none=True)
+    prediction = model(rgb, lidar_maps)
+    loss = masked_depth_loss(prediction, depth_target, loss_mask, beta=beta)
     if not torch.isfinite(loss):
         raise ValueError("training loss must be finite.")
     loss.backward()

@@ -206,6 +206,28 @@ value during training. Positivity can be applied at inference or revisited with
 a calibrated depth parameterization after the basic learning behavior has been
 measured.
 
+### GPU validation
+
+The same 64-frame smoke completed on the local GPU after pinning the PyTorch
+CUDA build to the installed driver capability:
+
+```text
+driver: NVIDIA 575.64.03 (CUDA 12.9 capability)
+PyTorch: 2.13.0+cu129
+GPU: NVIDIA RTX 500 Ada Generation Laptop GPU
+compute capability: 8.9
+CUDA available: true
+epochs: 1
+optimizer steps: 32
+mean training loss: 0.028765
+mean gradient norm: 0.243644
+checkpoint: results/training/kitti_camera_depth_gpu/checkpoints/latest.pt
+```
+
+The project binds `torch` to the official PyTorch CUDA 12.9 package index in
+`pyproject.toml`. This prevents dependency resolution from silently selecting a
+CUDA 13 build that requires a newer NVIDIA driver.
+
 ## Acceptance criteria
 
 - `CameraDepthModel` returns `depth_pred: [B, 1, H, W]`.

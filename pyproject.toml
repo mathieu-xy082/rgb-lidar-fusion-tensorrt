@@ -18,7 +18,7 @@ dev = [
   "pytest>=8",
 ]
 ml = [
-  "torch>=2.3",
+  "torch==2.13.0+cu129",
   "pillow>=10",
 ]
 onnx = [
@@ -29,6 +29,11 @@ onnx = [
 
 [tool.pdm]
 distribution = true
+
+[[tool.pdm.source]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+include_packages = ["torch"]
 
 [tool.pdm.scripts]
 test = "pytest"

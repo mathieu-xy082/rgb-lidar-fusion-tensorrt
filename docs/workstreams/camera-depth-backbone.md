@@ -163,10 +163,10 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
   --config configs/training/kitti_camera_depth.yaml
 ```
 
-The default configuration uses 64 frames resized to `128x416`, a 20% sparse
-LiDAR holdout, and local splatting with a 2-pixel radius. Checkpoints and metrics
-are written below `results/training/kitti_camera_depth/` and remain ignored by
-Git.
+The default configuration uses 64 frames resized to `320x1024`, batch size 2,
+a 20% sparse LiDAR holdout, and local splatting with a 2-pixel radius.
+Checkpoints and metrics are written below
+`results/training/kitti_camera_depth/` and remain ignored by Git.
 
 The branch should therefore support two validation levels:
 
@@ -227,6 +227,19 @@ checkpoint: results/training/kitti_camera_depth_gpu/checkpoints/latest.pt
 The project binds `torch` to the official PyTorch CUDA 12.9 package index in
 `pyproject.toml`. This prevents dependency resolution from silently selecting a
 CUDA 13 build that requires a newer NVIDIA driver.
+
+### Resolution decision
+
+The active training resolution is `320x1024` with batch size 2. A complete
+64-frame FP32 epoch ran on the RTX with 32 optimizer steps, mean loss `0.033595`,
+and mean gradient norm `0.331645`.
+
+The 4 GiB GPU has little remaining headroom at this setting: cuDNN reported one
+failed optional 240 MiB workspace allocation, selected a fallback algorithm,
+and completed the run. A subsequent mixed-precision experiment caused NVIDIA
+Xid 62 and left the GPU in `Reset Required` state, so mixed precision is not
+enabled in the committed configuration. The machine must be restarted before
+further CUDA validation.
 
 ## Acceptance criteria
 

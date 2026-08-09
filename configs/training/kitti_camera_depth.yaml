@@ -7,8 +7,8 @@ device: auto
 epochs: 1
 batch_size: 2
 learning_rate: 0.001
-height: 128
-width: 416
+height: 320
+width: 1024
 max_depth_m: 80.0
 holdout_fraction: 0.2
 splat_radius_px: 2

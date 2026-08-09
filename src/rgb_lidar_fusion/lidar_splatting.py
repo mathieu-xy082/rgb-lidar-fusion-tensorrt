@@ -9,8 +9,25 @@ concave surfaces.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import numpy as np
+
+
+SPLATTED_LIDAR_MAPS_SCHEMA_VERSION = "splatted-lidar-maps-v1"
+SPARSE_LIDAR_MAP_CHANNELS = (
+    "normalized_camera_depth_sparse",
+    "normalized_vehicle_x_sparse",
+    "normalized_vehicle_y_sparse",
+    "normalized_vehicle_z_sparse",
+    "intensity_sparse",
+    "point_mask_sparse",
+)
+SPLATTED_LIDAR_MAP_CHANNELS = SPARSE_LIDAR_MAP_CHANNELS + (
+    "normalized_camera_depth_splatted",
+    "splat_confidence",
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +70,92 @@ local Gaussian: ``depth_expanded == sparse_depth`` and
 zero. Use this when downstream code should always consume the enriched
 8-channel contract even if no real neighborhood expansion is desired.
 """
+
+
+def build_splatted_lidar_maps(
+    sparse_lidar_maps: np.ndarray,
+    *,
+    config: SplattingConfig | None = None,
+) -> np.ndarray:
+    """Build the v1 structured 8-channel splatted LiDAR map tensor.
+
+    The input is the existing sparse LiDAR map contract ``[6, H, W]``. The
+    returned ``float32 [8, H, W]`` tensor preserves those six sparse channels in
+    order, then appends normalized depth splats and splat confidence.
+    """
+
+    sparse_maps = np.asarray(sparse_lidar_maps, dtype=np.float32)
+    if sparse_maps.ndim != 3 or sparse_maps.shape[0] != 6:
+        raise ValueError("sparse_lidar_maps must have shape [6, H, W].")
+
+    splat = splat_sparse_depth(
+        sparse_depth=sparse_maps[0],
+        sparse_mask=sparse_maps[5] > 0.0,
+        config=config,
+    )
+    splatted_maps = np.zeros(
+        (8, sparse_maps.shape[1], sparse_maps.shape[2]), dtype=np.float32
+    )
+    splatted_maps[:6] = sparse_maps
+    splatted_maps[6] = splat.depth_expanded
+    splatted_maps[7] = splat.confidence
+    return splatted_maps
+
+
+def save_splatted_lidar_maps_npz(
+    path: str | Path,
+    *,
+    sparse_lidar_maps: np.ndarray,
+    splatted_lidar_maps: np.ndarray,
+    config: SplattingConfig | None = None,
+    source_sparse_maps: str | Path | None = None,
+) -> None:
+    """Persist the stable v1 structured splatted LiDAR map artifact."""
+
+    cfg = config or SplattingConfig()
+    sparse = np.asarray(sparse_lidar_maps, dtype=np.float32)
+    splatted = np.asarray(splatted_lidar_maps, dtype=np.float32)
+    if sparse.ndim != 3 or sparse.shape[0] != 6:
+        raise ValueError("sparse_lidar_maps must have shape [6, H, W].")
+    if splatted.ndim != 3 or splatted.shape[0] != 8:
+        raise ValueError("splatted_lidar_maps must have shape [8, H, W].")
+    if splatted.shape[1:] != sparse.shape[1:]:
+        raise ValueError("splatted_lidar_maps and sparse_lidar_maps must share H, W.")
+
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_path,
+        schema_version=np.array(SPLATTED_LIDAR_MAPS_SCHEMA_VERSION),
+        source_sparse_maps=np.array("" if source_sparse_maps is None else str(source_sparse_maps)),
+        splat_radius_px=np.array(cfg.radius_px, dtype=np.int32),
+        splat_sigma_px=np.array(cfg.sigma_px, dtype=np.float32),
+        splat_conflict_strategy=np.array(cfg.conflict_strategy),
+        sparse_lidar_maps=sparse,
+        splatted_lidar_maps=splatted,
+        splatted_channel_names=np.array(SPLATTED_LIDAR_MAP_CHANNELS),
+    )
+
+
+def load_splatted_lidar_maps_npz(path: str | Path) -> dict[str, Any]:
+    """Load a v1 structured splatted LiDAR map artifact into plain Python values."""
+
+    with np.load(path) as archive:
+        schema_version = str(archive["schema_version"].item())
+        if schema_version != SPLATTED_LIDAR_MAPS_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported splatted LiDAR maps schema_version: {schema_version!r}."
+            )
+        return {
+            "schema_version": schema_version,
+            "source_sparse_maps": str(archive["source_sparse_maps"].item()),
+            "splat_radius_px": int(archive["splat_radius_px"].item()),
+            "splat_sigma_px": float(archive["splat_sigma_px"].item()),
+            "splat_conflict_strategy": str(archive["splat_conflict_strategy"].item()),
+            "sparse_lidar_maps": archive["sparse_lidar_maps"].astype(np.float32),
+            "splatted_lidar_maps": archive["splatted_lidar_maps"].astype(np.float32),
+            "splatted_channel_names": [str(name) for name in archive["splatted_channel_names"]],
+        }
 
 
 @dataclass(frozen=True)

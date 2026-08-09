@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from .calibration import CameraCalibration
+from .lidar_splatting import SPLATTED_LIDAR_MAP_CHANNELS, build_splatted_lidar_maps
 from .project_lidar import LIDAR_MAP_CHANNELS, build_sparse_lidar_maps, project_lidar_to_image
 
 
@@ -26,10 +27,14 @@ class KittiSparseLidarDataset:
         root: str | Path,
         manifest_name: str = "manifest.json",
         max_depth_m: float = 80.0,
+        lidar_representation: str = "sparse",
     ) -> None:
+        if lidar_representation not in {"sparse", "splatted"}:
+            raise ValueError("lidar_representation must be 'sparse' or 'splatted'.")
         self.root = Path(root)
         self.manifest_path = self.root / manifest_name
         self.max_depth_m = max_depth_m
+        self.lidar_representation = lidar_representation
         with self.manifest_path.open("r", encoding="utf-8") as handle:
             manifest = json.load(handle)
         if "samples" not in manifest:
@@ -55,11 +60,17 @@ class KittiSparseLidarDataset:
         calibration = self._load_calibration(sample["calibration"])
         image_shape = (int(image.shape[1]), int(image.shape[2]))
         projected = project_lidar_to_image(points, calibration, image_shape=image_shape)
-        lidar_maps = build_sparse_lidar_maps(
+        sparse_lidar_maps = build_sparse_lidar_maps(
             projected,
             image_shape=image_shape,
             max_depth_m=self.max_depth_m,
         )
+        if self.lidar_representation == "splatted":
+            lidar_maps = build_splatted_lidar_maps(sparse_lidar_maps)
+            lidar_map_channels = list(SPLATTED_LIDAR_MAP_CHANNELS)
+        else:
+            lidar_maps = sparse_lidar_maps
+            lidar_map_channels = list(LIDAR_MAP_CHANNELS)
 
         return {
             "image": image,
@@ -70,7 +81,8 @@ class KittiSparseLidarDataset:
                 "image_shape": [image_shape[0], image_shape[1]],
                 "image_path": sample["image"],
                 "lidar_path": sample["lidar"],
-                "lidar_map_channels": list(LIDAR_MAP_CHANNELS),
+                "lidar_representation": self.lidar_representation,
+                "lidar_map_channels": lidar_map_channels,
             },
         }
 

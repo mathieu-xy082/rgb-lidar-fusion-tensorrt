@@ -7,7 +7,7 @@ from rgb_lidar_fusion.model_batch import (
     model_batch_to_baseline_inputs,
     model_batch_to_torch_tensors,
 )
-from rgb_lidar_fusion.lidar_splatting import SplattingConfig
+from rgb_lidar_fusion.lidar_splatting import SPLATTED_LIDAR_MAP_CHANNELS, SplattingConfig
 from rgb_lidar_fusion.project_lidar import LIDAR_MAP_CHANNELS
 
 
@@ -66,6 +66,28 @@ def test_dataset_item_batch_supports_explicit_sparse_only_ablation():
     ]
     np.testing.assert_allclose(batch["inputs"][0, 0:3], item["image"])
     np.testing.assert_allclose(batch["inputs"][0, 3:9], item["lidar_maps"])
+
+
+def test_dataset_item_batch_accepts_dataset_splatted_lidar_maps_without_recomputing():
+    item = synthetic_dataset_item()
+    splatted_maps = np.zeros((8, 2, 3), dtype=np.float32)
+    splatted_maps[:6] = item["lidar_maps"]
+    splatted_maps[6, 1, 0] = 0.125
+    splatted_maps[7, 1, 0] = 0.5
+    item["lidar_maps"] = splatted_maps
+    item["meta"] = {
+        "sample_id": "synthetic-1",
+        "lidar_representation": "splatted",
+        "lidar_map_channels": list(SPLATTED_LIDAR_MAP_CHANNELS),
+    }
+
+    batch = dataset_item_to_model_batch(item)
+
+    assert batch["inputs"].shape == (1, 11, 2, 3)
+    assert batch["input_channels"][-2:] == ["depth_expanded", "confidence"]
+    np.testing.assert_allclose(batch["inputs"][0, 3:9], splatted_maps[:6])
+    np.testing.assert_allclose(batch["inputs"][0, 9:11], splatted_maps[6:8])
+    np.testing.assert_allclose(batch["sparse_lidar_maps"], splatted_maps[:6][np.newaxis])
 
 
 def test_dataset_item_batch_rejects_mismatched_image_and_lidar_shapes():

@@ -1,11 +1,75 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from rgb_lidar_fusion.lidar_splatting import (
+    SPLATTED_LIDAR_MAP_CHANNELS,
+    SPLATTED_LIDAR_MAPS_SCHEMA_VERSION,
     SplattingConfig,
+    build_splatted_lidar_maps,
+    load_splatted_lidar_maps_npz,
+    save_splatted_lidar_maps_npz,
     splat_projected_depth,
     splat_sparse_depth,
 )
+
+
+def test_save_and_load_splatted_lidar_maps_npz_roundtrips_versioned_contract(tmp_path):
+    sparse_maps = np.zeros((6, 3, 4), dtype=np.float32)
+    sparse_maps[0, 1, 2] = 0.25
+    sparse_maps[5, 1, 2] = 1.0
+    splatted_maps = build_splatted_lidar_maps(
+        sparse_maps,
+        config=SplattingConfig(radius_px=1, sigma_px=1.5),
+    )
+    output_file = tmp_path / "splatted_maps_000123.npz"
+
+    save_splatted_lidar_maps_npz(
+        output_file,
+        sparse_lidar_maps=sparse_maps,
+        splatted_lidar_maps=splatted_maps,
+        config=SplattingConfig(radius_px=1, sigma_px=1.5),
+        source_sparse_maps=Path("results/onboarding/kitti_000123/sparse_maps_000123.npz"),
+    )
+    loaded = load_splatted_lidar_maps_npz(output_file)
+
+    assert loaded["schema_version"] == SPLATTED_LIDAR_MAPS_SCHEMA_VERSION
+    assert loaded["source_sparse_maps"] == "results/onboarding/kitti_000123/sparse_maps_000123.npz"
+    assert loaded["splat_radius_px"] == 1
+    assert loaded["splat_sigma_px"] == pytest.approx(1.5)
+    assert loaded["splat_conflict_strategy"] == "nearest_depth_then_confidence"
+    assert loaded["splatted_channel_names"] == list(SPLATTED_LIDAR_MAP_CHANNELS)
+    np.testing.assert_array_equal(loaded["sparse_lidar_maps"], sparse_maps)
+    np.testing.assert_array_equal(loaded["splatted_lidar_maps"], splatted_maps)
+
+
+def test_build_splatted_lidar_maps_preserves_sparse_channels_and_appends_splats():
+    sparse_maps = np.zeros((6, 5, 5), dtype=np.float32)
+    sparse_maps[0, 2, 2] = 10.0
+    sparse_maps[1, 2, 2] = 1.5
+    sparse_maps[2, 2, 2] = -0.25
+    sparse_maps[3, 2, 2] = 0.75
+    sparse_maps[4, 2, 2] = 0.8
+    sparse_maps[5, 2, 2] = 1.0
+
+    splatted_maps = build_splatted_lidar_maps(
+        sparse_maps,
+        config=SplattingConfig(radius_px=1, sigma_px=1.0),
+    )
+
+    assert splatted_maps.dtype == np.float32
+    assert splatted_maps.shape == (8, 5, 5)
+    np.testing.assert_array_equal(splatted_maps[:6], sparse_maps)
+    assert splatted_maps[6, 2, 2] == pytest.approx(10.0)
+    assert splatted_maps[6, 2, 3] == pytest.approx(10.0)
+    assert splatted_maps[7, 2, 2] == pytest.approx(1.0)
+    assert splatted_maps[7, 2, 3] == pytest.approx(np.exp(-0.5))
+
+
+def test_build_splatted_lidar_maps_rejects_non_six_channel_inputs():
+    with pytest.raises(ValueError, match=r"sparse_lidar_maps must have shape \[6, H, W\]"):
+        build_splatted_lidar_maps(np.zeros((5, 4, 4), dtype=np.float32))
 
 
 def test_single_sparse_point_expands_depth_and_confidence_locally():

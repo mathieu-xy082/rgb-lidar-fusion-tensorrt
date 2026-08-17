@@ -9,11 +9,8 @@ On veut comprendre :
 ```text
 overlay_<id>.ppm       = image de debug
 sparse_maps_<id>.npz   = tenseurs LiDAR sparse
-splatted_maps_<id>.npz = tenseurs LiDAR enrichis après splatting, selon branche dédiée
+splatted_maps_<id>.npz = tenseurs LiDAR enrichis après splatting
 ```
-
-Cette séance pourra être ajustée selon l'état de la branche
-`ec/splatted-structured-maps`.
 
 ## Prérequis
 
@@ -93,9 +90,7 @@ aucune mesure LiDAR directe.
 
 C'est une des raisons du splatting.
 
-## Étape C — Inspecter le futur `.npz` splatté si disponible
-
-Quand `ec/splatted-structured-maps` sera prête, on inspectera :
+## Étape C — Inspecter le `.npz` splatté
 
 ```bash
 python - <<'PY'
@@ -106,6 +101,7 @@ z = np.load(path)
 print(z.files)
 print("splatted_lidar_maps:", z["splatted_lidar_maps"].shape)
 print("channels:", z["splatted_channel_names"])
+print("schema:", z["schema_version"])
 PY
 ```
 
@@ -114,6 +110,9 @@ Forme attendue :
 ```text
 (8, H, W)
 ```
+
+Les six premiers canaux reproduisent les cartes sparse. Les canaux 6 et 7
+contiennent respectivement la profondeur splattée et la confiance.
 
 ## Mini-exercice
 

@@ -6,7 +6,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-No changes yet.
+### Added
+
+- Dense `CameraDepthModel` with deterministic sparse LiDAR holdout,
+  leakage-safe resplatting, masked Smooth L1 training, and checkpoint support.
+- Local KITTI camera-depth runner using a meaningful multi-frame sample.
+- Documentation index, current milestones, explicit BEV design links, and
+  separated active/archive workstreams.
+
+### Changed
+
+- Pinned PyTorch to `2.13.0+cu129` for compatibility with the local CUDA 12.9
+  driver.
+- Set the default camera-depth training configuration to `320x1024`, batch
+  size 2.
+- Reworked the README to distinguish the implemented pipeline, legacy baseline,
+  camera-depth representation, and target BEV architecture.
+
+### Validated
+
+- Camera-depth smoke training completed on 64 KITTI Object frames on CPU and
+  the local NVIDIA GPU.
+- Full validation passes with 109 tests plus deterministic smoke/demo artifact
+  generation.
+
+### Known limitations
+
+- The camera-depth run proves trainability, not depth generalization; validation
+  metrics and visualizations are still required.
+- The local 4 GiB GPU has limited headroom at `320x1024`. Mixed precision
+  remains disabled after an NVIDIA Xid 62 failure pending a clean CUDA retest.
 
 ## 1.0.0 - 2026-08-02
 

@@ -30,24 +30,26 @@ smoke_project_lidar.py
         ↓
 sparse_maps_<id>.npz
         ↓
-splatted_maps_<id>.npz         futur artefact structuré dédié ML
+splatted_maps_<id>.npz         artefact structuré enriched [8,H,W]
         ↓
 dataset.py
         ↓
 model_batch.py
-        ↓
-baseline_model.py
-        ↓
-training.py / train_baseline.py
-        ↓
-export_onnx.py
-        ↓
-tensorrt_build_engine.py
-        ↓
-tensorrt_infer.py / tensorrt_benchmark.py
+    |
+    +-- legacy deployment path
+    |     baseline_model.py
+    |     train_baseline.py
+    |     export_onnx.py
+    |     tensorrt_build_engine.py
+    |     tensorrt_infer.py / tensorrt_benchmark.py
+    |
+    +-- camera-depth path
+          camera_depth_model.py
+          train_camera_depth.py
+          futur lift camera-depth vers BEV
 ```
 
-## Étape A — Se placer sur la branche onboarding
+## Étape A — Vérifier le dépôt
 
 ```bash
 cd ~/codes/ai-projects/rgb-lidar-fusion-tensorrt/rgb-lidar-fusion-tensorrt
@@ -58,11 +60,11 @@ git status --short --branch
 Sortie attendue approximative :
 
 ```text
-## ec/onboarding...origin/ec/onboarding
+## main...origin/main
 ```
 
-Si tu es sur une autre branche, ce n'est pas bloquant pour lire les fichiers,
-mais pour suivre les séances versionnées on privilégie `ec/onboarding`.
+Une branche de travail peut naturellement remplacer `main`. L'important est
+de connaître son état avant d'exécuter ou de modifier le dépôt.
 
 ## Étape B — Voir les fichiers par grandes zones
 
@@ -176,23 +178,11 @@ tests/test_lidar_splatting.py
 docs/onboarding/scripts/render_splatting_ppm.py
 ```
 
-## Branche dédiée en cours
-
-```text
-ec/splatted-structured-maps
-```
-
-Objectif de cette branche : ajouter un vrai artefact :
-
-```text
-splatted_maps_<id>.npz
-```
-
 ## À retenir
 
 ```text
 sparse_maps_<id>.npz     = mesure brute projetée
-splatted_maps_<id>.npz   = future entrée ML enrichie
+splatted_maps_<id>.npz   = représentation ML enrichie
 ```
 
 ---
@@ -217,7 +207,7 @@ tests/test_model_batch.py
 ```python
 {
     "image": [3, H, W],
-    "lidar_maps": [6, H, W],        # sparse aujourd'hui
+    "lidar_maps": [6, H, W],        # mesure sparse conservée
     "target": ...,
     "meta": ...,
 }
@@ -226,7 +216,8 @@ tests/test_model_batch.py
 Puis le batch prépare une entrée modèle :
 
 ```text
-RGB 3 canaux + LiDAR 6 ou 8 canaux
+mode nominal: RGB 3 canaux + LiDAR enriched 8 canaux = 11
+ablation:     RGB 3 canaux + LiDAR sparse 6 canaux = 9
 ```
 
 ## À retenir
@@ -248,7 +239,9 @@ Définir le réseau qui consomme RGB + cartes LiDAR.
 
 ```text
 src/rgb_lidar_fusion/baseline_model.py
+src/rgb_lidar_fusion/camera_depth_model.py
 tests/test_baseline_model.py
+tests/test_camera_depth_model.py
 ```
 
 ## Contrat actuel
@@ -270,6 +263,10 @@ enriched mode: L = 8
 Le modèle PyTorch ne lit pas directement les fichiers KITTI. Il reçoit des
 tenseurs déjà préparés par le dataset/batch.
 
+Le `BaselineFusionModel` produit une sortie basse dimension utilisée pour
+valider la chaîne training/ONNX. Le `CameraDepthModel` produit une carte dense
+`[B, 1, H, W]` et prépare la future branche caméra BEV.
+
 ---
 
 # Bloc F — Entraînement
@@ -283,10 +280,13 @@ Faire tourner optimisation, loss, métriques et checkpoints.
 ```text
 src/rgb_lidar_fusion/training.py
 scripts/train_baseline.py
+scripts/train_camera_depth.py
 tests/test_training_loop.py
+tests/test_camera_depth_model.py
 configs/training/synthetic_smoke.yaml
 configs/training/kitti_tiny.yaml
-docs/gpu-training-plan.md
+configs/training/kitti_camera_depth.yaml
+docs/workstreams/camera-depth-backbone.md
 ```
 
 ## Sorties typiques
@@ -304,6 +304,10 @@ Ces sorties doivent rester hors Git.
 ```text
 training = boucle qui ajuste les poids du modèle
 ```
+
+La loss camera-depth est calculée uniquement sur des points LiDAR volontairement
+retirés des entrées. Les canaux splattés sont recalculés après ce holdout pour
+éviter toute fuite de la target.
 
 ---
 
@@ -353,7 +357,6 @@ scripts/tensorrt_benchmark.py
 tests/test_tensorrt_scripts.py
 tests/test_tensorrt_runtime.py
 docs/tensorrt-benchmark-plan.md
-docs/workstreams/tensorrt-runtime-environment-check.md
 ```
 
 ## Sorties
@@ -384,7 +387,9 @@ for f in \
   src/rgb_lidar_fusion/dataset.py \
   src/rgb_lidar_fusion/model_batch.py \
   src/rgb_lidar_fusion/baseline_model.py \
+  src/rgb_lidar_fusion/camera_depth_model.py \
   src/rgb_lidar_fusion/training.py \
+  scripts/train_camera_depth.py \
   scripts/export_onnx.py \
   src/rgb_lidar_fusion/tensorrt_runtime.py
  do

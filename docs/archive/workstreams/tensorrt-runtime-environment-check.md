@@ -1,5 +1,8 @@
 # Workstream — TensorRT runtime environment check
 
+> Workstream terminé et archivé le 2026-08-17. Voir
+> [l'index documentaire actif](../../README.md).
+
 Branch: `feature/tensorrt-runtime-environment-check`
 
 Parent branch: `feature/tensorrt-benchmark-plan`

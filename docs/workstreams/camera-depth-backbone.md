@@ -4,6 +4,15 @@ Branch: `ec/camera-depth-backbone`
 
 Parent branch: `main`
 
+Status: implementation complete for the v1 holdout smoke; representation
+validation remains active.
+
+Related documents:
+
+- [camera-depth design](../bev-cam-depth-backbone.md);
+- [target BEV architecture](../bev-model-roadmap.md);
+- [project milestones](../milestones.md).
+
 ## Goal
 
 Replace the current scalar training smoke target with a dense camera-depth

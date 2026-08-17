@@ -2,10 +2,21 @@
 
 Date: 2026-08-05.
 
+Statut : **design de référence**. Le backbone camera-depth préalable est
+implémenté, mais le lift BEV, la branche LiDAR BEV et les heads 3D ne le sont pas
+encore.
+
+Documents liés :
+
+- [milestones du projet](milestones.md) ;
+- [design du backbone camera-depth](bev-cam-depth-backbone.md) ;
+- [workstream camera-depth](workstreams/camera-depth-backbone.md).
+
 ## Question
 
-Le baseline actuel fusionne une image RGB avec des cartes LiDAR sparse/enriched
-dans le plan image. La prochaine direction possible est plus ambitieuse :
+Le dépôt a d'abord fusionné une image RGB avec des cartes LiDAR sparse/enriched
+dans le plan image, puis ajouté un backbone camera-depth dense. La prochaine
+direction est plus ambitieuse :
 combiner la sémantique image de type YOLO, la profondeur dense-ish apportée par
 le splatting, et une philosophie de détection 3D en BEV proche de CenterPoint.
 
@@ -153,9 +164,9 @@ La head YOLO-like ne devrait pas bloquer la branche BEV. Elle sert plutôt à
 renforcer la sémantique image et à fournir des pertes auxiliaires ou des priors
 soft.
 
-## Étape 1 recommandée
+## Phase BEV 1 - Lift camera-depth
 
-Construire le socle BEV minimal :
+Construire d'abord le chemin caméra vers BEV :
 
 ```text
 RGB + splatted depth/confidence
@@ -166,7 +177,16 @@ utilisant splatted depth + calibration + confidence
         |
         v
 BEV camera-depth features
+```
 
+Cette phase doit stabiliser le repère, la résolution, la projection
+image/depth -> BEV, les règles d'agrégation et le traitement de la confiance.
+Elle doit être testable sans dépendre encore d'un encodeur de point cloud ou
+d'une head de détection.
+
+## Phase BEV 2 - Branche LiDAR et fusion
+
+```text
 Point cloud
         |
         v
@@ -181,24 +201,17 @@ BEV camera-depth features + BEV LiDAR features
 Fusion BEV + petite head CenterPoint-like
 ```
 
-Objectif de cette étape :
+Objectif de cette phase :
 
 ```text
 Prouver que la représentation splattée + point cloud peut produire
 une carte BEV cohérente et exploitable par une head 3D.
 ```
 
-Cette étape ne nécessite pas encore une vraie head YOLO. Elle doit d'abord
-stabiliser :
+La branche LiDAR doit rester une source géométrique autonome. La fusion ne doit
+pas dépendre d'une détection 2D préalable.
 
-- le repère BEV ;
-- la résolution BEV ;
-- la projection image/depth -> BEV ;
-- l'encodage point cloud -> BEV ;
-- la concaténation/fusion des features BEV ;
-- une head CenterPoint-like minimale.
-
-## Étape 2 recommandée
+## Phase BEV 3 - Supervision image auxiliaire
 
 Ajouter une head image auxiliaire de type YOLO.
 
@@ -213,7 +226,7 @@ Objectif :
 Cette head peut rester légère au début. Elle n'a pas besoin d'être un YOLO
 complet pretrained tant que le contrat multimodal n'est pas stable.
 
-## Étape 3 recommandée
+## Phase BEV 4 - Raffinement objet
 
 Ajouter un raffinement frustum/object-level.
 
@@ -285,23 +298,21 @@ Le positionnement plus juste est :
 Créer une branche dédiée, par exemple :
 
 ```text
-feature/bev-fusion-prototype
+ec/camera-depth-bev-lift
 ```
 
 Livrables minimaux :
 
 ```text
 src/rgb_lidar_fusion/bev_projection.py
-src/rgb_lidar_fusion/bev_model.py
 tests/test_bev_projection.py
-tests/test_bev_model.py
-configs/training/bev_synthetic_smoke.yaml
+configs/training/camera_bev_smoke.yaml
 ```
 
 Critère de réussite du premier incrément :
 
 ```text
-Un batch synthétique RGB + enriched LiDAR + point cloud produit
-camera_bev, lidar_bev, fused_bev et des sorties CenterPoint-like
-avec shapes validées et backward PyTorch fonctionnel.
+Un batch synthétique RGB + enriched LiDAR + calibration produit
+camera_bev avec une grille métrique documentée, des shapes validées
+et un backward PyTorch fonctionnel.
 ```

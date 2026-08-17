@@ -2,18 +2,28 @@
 
 Date: 2026-08-05.
 
+Statut : **design partiellement implémenté**. La prédiction dense, le holdout,
+la resplatisation sans fuite et le runner KITTI existent. La généralisation de
+la profondeur et le lift vers BEV restent à valider ou implémenter.
+
+Documents liés :
+
+- [architecture BEV cible](bev-model-roadmap.md) ;
+- [milestones du projet](milestones.md) ;
+- [résultats du workstream](workstreams/camera-depth-backbone.md).
+
 ## Question
 
 Avant d'implémenter le lift complet vers BEV, faut-il ajouter une tâche
 intermédiaire pour tester et entraîner la branche image-depth ?
 
-Le modèle actuel produit :
+Le baseline à l'origine de cette réflexion produisait :
 
 ```text
 prediction: [B, 1]
 ```
 
-Cette sortie scalaire par image sert uniquement de smoke test de trainabilité. Elle
+Cette sortie scalaire par image servait uniquement de smoke test de trainabilité. Elle
 ne mesure pas une profondeur dense, une détection, une boîte 3D ou une carte BEV.
 
 Dans la perspective BEV, une tâche intermédiaire plus utile serait :
@@ -45,7 +55,7 @@ dans le plan image avant de lui demander de produire des features BEV.
 
 ## Pourquoi remplacer `prediction [B, 1]`
 
-La prédiction actuelle n'a pas de sens perception direct :
+La prédiction scalaire historique n'a pas de sens perception direct :
 
 - elle ne prédit pas une profondeur par pixel ;
 - elle ne prédit pas une boîte 2D ou 3D ;
@@ -226,12 +236,13 @@ les accumuler dans une grille BEV.
 ## Séquence recommandée
 
 ```text
-1. Remplacer prediction [B, 1] par depth_pred [B, 1, H, W]
-2. Ajouter une masked depth loss
-3. Tester sparse holdout depth prediction
-4. Réutiliser ce backbone/features pour camera-depth BEV lift
-5. Ajouter une branche lidar_bev
-6. Ajouter fusion BEV + CenterPoint-like head
+[fait]    1. Remplacer prediction [B, 1] par depth_pred [B, 1, H, W]
+[fait]    2. Ajouter une masked depth loss
+[fait]    3. Tester sparse holdout depth prediction
+[actif]   4. Évaluer la représentation camera-depth hors entraînement
+[prochain]5. Réutiliser ce backbone/features pour camera-depth BEV lift
+[prévu]   6. Ajouter une branche lidar_bev
+[prévu]   7. Ajouter fusion BEV + CenterPoint-like head
 ```
 
 ## Risques
@@ -246,26 +257,11 @@ les accumuler dans une grille BEV.
 
 ## Prochain incrément concret
 
-Créer une branche dédiée, par exemple :
+Avant le lift, ajouter une séparation entraînement/validation, des métriques sur
+les points holdout et des visualisations de profondeur/erreur. Le prochain
+chantier architectural est ensuite le module `camera-depth -> camera_bev`
+décrit dans l'[architecture BEV](bev-model-roadmap.md).
 
-```text
-feature/camera-depth-backbone
-```
-
-Livrables minimaux :
-
-```text
-src/rgb_lidar_fusion/camera_depth_model.py
-src/rgb_lidar_fusion/depth_losses.py
-tests/test_camera_depth_model.py
-tests/test_depth_losses.py
-configs/training/depth_holdout_smoke.yaml
-```
-
-Critère de réussite :
-
-```text
-Un batch synthétique ou KITTI-style produit depth_pred [B, 1, H, W],
-calcule une masked SmoothL1 sur un heldout_lidar_mask,
-et valide forward/backward/checkpoint avec gradients finis.
-```
+Les critères à jour sont suivis dans les
+[milestones](milestones.md), et les résultats d'exécution dans le
+[workstream](workstreams/camera-depth-backbone.md).

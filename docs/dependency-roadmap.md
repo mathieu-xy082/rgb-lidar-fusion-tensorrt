@@ -1,5 +1,7 @@
 # Dependency roadmap
 
+Status: **current dependency guide**.
+
 This repository keeps the default environment deliberately small so geometry, projection, CI, and documentation stay fast and reproducible. Heavy ML/runtime dependencies live in explicit PDM groups or external GPU/TensorRT setup notes.
 
 ## Active now
@@ -23,7 +25,9 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
 
 ### `ml` group
 
-- `torch` — baseline model, training loop, CPU smoke tests, checkpointing, and synthetic forward/backward validation.
+- `torch==2.13.0+cu129` — models, training loops, checkpointing and
+  forward/backward validation on CPU or a compatible NVIDIA runtime;
+- `pillow` — loading and resizing local KITTI images for camera-depth training.
 
 Commands:
 
@@ -32,7 +36,7 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
 PDM_IGNORE_ACTIVE_VENV=1 pdm run validate
 ```
 
-The first training branch should remain CPU-safe in CI. CUDA is selected at runtime only when available.
+Training tests remain CPU-safe. CUDA is selected at runtime only when available.
 
 ### `onnx` group
 
@@ -47,9 +51,10 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml -G onnx
 PDM_IGNORE_ACTIVE_VENV=1 pdm run validate_onnx
 ```
 
-Use this group for random/synthetic export first, then for exporting trained checkpoints once the training milestone exists.
+Use this group for the legacy synthetic export today, then for trained models
+once their export contracts are stable.
 
-## Add when the relevant milestone starts
+## Optional additions when justified
 
 ### Training configuration utilities
 
@@ -118,7 +123,9 @@ Before renting or configuring a GPU, document:
 - expected run duration/budget;
 - checkpoint and metrics output path.
 
-See `docs/gpu-training-plan.md`.
+The current local GPU results and warnings are recorded in
+[the camera-depth workstream](workstreams/camera-depth-backbone.md). Project
+gates are tracked in [milestones](milestones.md).
 
 ## TensorRT milestone
 
@@ -133,7 +140,9 @@ TensorRT installation is usually platform/CUDA-specific and may involve NVIDIA p
 - build path from ONNX to engine;
 - whether the ONNX input comes from random weights or a trained checkpoint.
 
-The actionable runtime/benchmark plan lives in `docs/tensorrt-benchmark-plan.md`. Current guarded scripts intentionally work as stubs on non-CUDA hosts:
+The actionable runtime/benchmark plan lives in
+[tensorrt-benchmark-plan.md](tensorrt-benchmark-plan.md). Current guarded scripts
+intentionally work as stubs on hosts without TensorRT:
 
 ```bash
 python scripts/tensorrt_benchmark.py --detect

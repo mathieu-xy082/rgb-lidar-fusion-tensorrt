@@ -4,6 +4,9 @@ Objectif : s'approprier le repo RGB-LiDAR Fusion TensorRT par la pratique, séan
 
 Repo étudié : `.`
 
+Pour distinguer le pipeline implémenté de l'architecture BEV cible, consulter
+d'abord l'[index documentaire](../README.md).
+
 ## Parcours
 
 1. [Séance 1 — Lancer et lire le repo](./seance-01-lancer-et-lire.md)

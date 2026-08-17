@@ -1,5 +1,9 @@
 # GPU training plan
 
+> Archive historique déplacée le 2026-08-17. Ce plan précède le backbone
+> camera-depth et ses runs GPU. Voir les
+> [milestones actuels](../milestones.md).
+
 This document prepares the first real training phase for the RGB-LiDAR fusion prototype. The goal is not to chase state-of-the-art KITTI detection yet; the goal is to prove an end-to-end ML ownership story:
 
 ```text

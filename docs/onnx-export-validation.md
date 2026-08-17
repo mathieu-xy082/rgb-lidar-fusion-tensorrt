@@ -1,6 +1,10 @@
 # ONNX export and parity validation plan
 
-Milestone 4 starts from the reviewed baseline model now available on `main`.
+Status: **legacy baseline deployment guide**.
+
+This document covers `BaselineFusionModel`. It validates the PyTorch-to-ONNX
+toolchain, but it does not yet describe export of `CameraDepthModel`, a BEV
+lift, or a 3D detector.
 
 Current status:
 
@@ -57,7 +61,8 @@ PyTorch should remain in the `ml` group or whichever reviewed group owns the bas
 - **Export smoke:** `pdm run export_onnx` creates an ONNX file under an ignored output directory.
 - **Shape validation:** `pdm run validate_onnx` loads the graph and confirms input/output names and shapes.
 - **Parity validation:** deterministic PyTorch and ONNX Runtime outputs match within a documented tolerance.
-- **Review-ready:** base validation plus ONNX validation pass on `feature/onnx-export-validation`, with docs updated and no generated model artifacts in git.
+- **Validated baseline:** base validation plus ONNX validation pass, with no
+  generated model artifacts in Git.
 
 ## Open limitations
 

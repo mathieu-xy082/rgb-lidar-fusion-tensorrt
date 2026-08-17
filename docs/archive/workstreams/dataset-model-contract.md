@@ -1,5 +1,8 @@
 # Workstream — Dataset to model contract
 
+> Workstream terminé et archivé le 2026-08-17. Voir
+> [l'index documentaire actif](../../README.md).
+
 Branch: `feature/dataset-model-contract`
 
 Parent branch: `main`

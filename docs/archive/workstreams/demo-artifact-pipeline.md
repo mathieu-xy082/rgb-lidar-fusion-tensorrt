@@ -1,5 +1,8 @@
 # Workstream — Demo artifact pipeline
 
+> Workstream terminé et archivé le 2026-08-17. Voir
+> [l'index documentaire actif](../../README.md).
+
 Branch: `feature/demo-artifact-pipeline`
 
 Parent branch: `main`

@@ -145,6 +145,49 @@ def test_validate_camera_depth_config_rejects_invalid_holdout_fraction() -> None
         validate_camera_depth_training_config(config)
 
 
+def test_validate_camera_depth_config_accepts_validation_split_settings() -> None:
+    validate_camera_depth_training_config(
+        {
+            "dataset": "kitti_camera_depth",
+            "data_root": "data/kitti/training",
+            "sample_count": 64,
+            "validation_fraction": 0.2,
+            "split_seed": 13,
+        }
+    )
+
+
+def test_validate_camera_depth_config_rejects_invalid_validation_split_settings() -> None:
+    base_config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": "data/kitti/training",
+        "sample_count": 64,
+        "validation_fraction": 0.2,
+        "split_seed": 13,
+    }
+
+    with pytest.raises(ValueError, match="sample_count must be at least 2"):
+        validate_camera_depth_training_config({**base_config, "sample_count": 1})
+    for validation_fraction in (0.0, 1.0, -0.1, 1.1):
+        with pytest.raises(
+            ValueError,
+            match="validation_fraction must be between 0 and 1",
+        ):
+            validate_camera_depth_training_config(
+                {
+                    **base_config,
+                    "validation_fraction": validation_fraction,
+                }
+            )
+    with pytest.raises(ValueError, match="split_seed must be an integer"):
+        validate_camera_depth_training_config(
+            {
+                **base_config,
+                "split_seed": "invalid",
+            }
+        )
+
+
 def test_split_dataset_indices_is_deterministic_disjoint_and_complete() -> None:
     first_train, first_validation = split_dataset_indices(
         10,

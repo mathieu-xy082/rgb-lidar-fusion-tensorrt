@@ -3,6 +3,7 @@ dataset: kitti_camera_depth
 data_root: data/kitti/training
 sample_count: 64
 seed: 13
+split_seed: 13
 device: auto
 epochs: 1
 batch_size: 2
@@ -11,6 +12,7 @@ height: 320
 width: 1024
 max_depth_m: 80.0
 holdout_fraction: 0.2
+validation_fraction: 0.2
 splat_radius_px: 2
 splat_sigma_px: 1.0
 smooth_l1_beta: 0.1

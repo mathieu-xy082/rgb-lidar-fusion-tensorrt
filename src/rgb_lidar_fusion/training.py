@@ -133,6 +133,9 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
     for field in positive_int_fields:
         if field in config and int(config[field]) <= 0:
             raise ValueError(f"{field} must be a positive integer.")
+    sample_count = int(config.get("sample_count", 64))
+    if sample_count < 2:
+        raise ValueError("sample_count must be at least 2 for a train/validation split.")
     positive_float_fields = (
         "learning_rate",
         "max_depth_m",
@@ -145,6 +148,13 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
     if not 0.0 < holdout_fraction < 1.0:
         raise ValueError("holdout_fraction must be between 0 and 1.")
+    validation_fraction = float(config.get("validation_fraction", 0.2))
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be between 0 and 1.")
+    try:
+        int(config.get("split_seed", config.get("seed", 0)))
+    except (TypeError, ValueError):
+        raise ValueError("split_seed must be an integer.") from None
     if int(config.get("splat_radius_px", 2)) < 0:
         raise ValueError("splat_radius_px must be non-negative.")
     if not str(config.get("data_root", "")).strip():

@@ -380,12 +380,15 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     data_root = tmp_path / "kitti" / "training"
     _write_training_kitti_frame(data_root, "000000", 0.0)
     _write_training_kitti_frame(data_root, "000001", 0.5)
+    _write_training_kitti_frame(data_root, "000002", 1.0)
+    _write_training_kitti_frame(data_root, "000003", 1.5)
     output_dir = tmp_path / "camera-depth-training"
     config = {
         "dataset": "kitti_camera_depth",
         "data_root": str(data_root),
-        "sample_count": 2,
+        "sample_count": 4,
         "seed": 29,
+        "split_seed": 37,
         "device": "cpu",
         "epochs": 1,
         "batch_size": 2,
@@ -393,6 +396,7 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
         "height": 12,
         "width": 16,
         "holdout_fraction": 0.4,
+        "validation_fraction": 0.5,
         "splat_radius_px": 1,
         "splat_sigma_px": 1.0,
         "smooth_l1_beta": 0.1,
@@ -424,8 +428,19 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     metadata = json.loads((output_dir / "run_metadata.json").read_text())
     assert [row["epoch"] for row in metrics] == [1, 2]
     assert metadata["dataset"] == "kitti_camera_depth"
-    assert metadata["sample_count"] == 2
+    assert metadata["sample_count"] == 4
     assert metadata["image_shape"] == [12, 16]
+    assert metadata["split"]["seed"] == 37
+    assert metadata["split"]["validation_fraction"] == 0.5
+    assert metadata["split"]["train_sample_count"] == 2
+    assert metadata["split"]["validation_sample_count"] == 2
+    assert set(metadata["split"]["train_indices"]).isdisjoint(
+        metadata["split"]["validation_indices"]
+    )
+    assert sorted(
+        metadata["split"]["train_indices"]
+        + metadata["split"]["validation_indices"]
+    ) == [0, 1, 2, 3]
 
 
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:

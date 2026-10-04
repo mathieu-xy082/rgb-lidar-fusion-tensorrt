@@ -413,6 +413,7 @@ def write_run_metadata(
     checkpoint_path: Path,
     start_epoch: int,
     epochs_completed: int,
+    split_metadata: dict[str, Any] | None = None,
 ) -> None:
     """Write lightweight run metadata for CPU/GPU training traceability."""
 
@@ -432,6 +433,8 @@ def write_run_metadata(
         metadata["sample_count"] = int(config["sample_count"])
     if "height" in config and "width" in config:
         metadata["image_shape"] = [int(config["height"]), int(config["width"])]
+    if split_metadata is not None:
+        metadata["split"] = split_metadata
     (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
@@ -549,6 +552,8 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     width = int(config.get("width", 1024))
     sample_count = int(config.get("sample_count", 64))
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
+    validation_fraction = float(config.get("validation_fraction", 0.2))
+    split_seed = int(config.get("split_seed", seed))
     beta = float(config.get("smooth_l1_beta", 1.0))
     output_dir = Path(
         str(config.get("output_dir", "results/training/kitti_camera_depth"))
@@ -563,6 +568,11 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         image_shape=(height, width),
         max_depth_m=float(config.get("max_depth_m", 80.0)),
         sample_limit=sample_count,
+    )
+    train_indices, validation_indices = split_dataset_indices(
+        len(dataset),
+        validation_fraction=validation_fraction,
+        seed=split_seed,
     )
 
     model = CameraDepthModel(lidar_mode="enriched")
@@ -582,7 +592,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     for epoch in range(start_epoch, epochs):
         epoch_losses: list[float] = []
         epoch_grad_norms: list[float] = []
-        order = np.random.default_rng(seed + epoch).permutation(len(dataset))
+        order = np.random.default_rng(seed + epoch).permutation(train_indices)
         for batch_start in range(0, len(order), batch_size):
             indices = order[batch_start : batch_start + batch_size]
             items = [dataset[int(index)] for index in indices]
@@ -636,6 +646,14 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         checkpoint_path=checkpoint_path,
         start_epoch=start_epoch,
         epochs_completed=epochs,
+        split_metadata={
+            "seed": split_seed,
+            "validation_fraction": validation_fraction,
+            "train_sample_count": len(train_indices),
+            "validation_sample_count": len(validation_indices),
+            "train_indices": train_indices,
+            "validation_indices": validation_indices,
+        },
     )
     return TrainingRunResult(
         device=str(device),

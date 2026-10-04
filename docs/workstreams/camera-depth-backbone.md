@@ -4,8 +4,8 @@ Branch: `ec/camera-depth-backbone`
 
 Parent branch: `main`
 
-Status: implementation complete for the v1 holdout smoke; representation
-validation remains active.
+Status: v1 implementation and meaningful CPU/GPU smoke complete; explicit
+sparse-mode model coverage and representation validation remain.
 
 Related documents:
 
@@ -39,14 +39,99 @@ to BEV.
 
 ## Progress
 
-- [x] Create `ec/camera-depth-backbone` directly from `main`.
-- [x] Add the dense `CameraDepthModel` encoder/decoder.
-- [x] Add deterministic sparse LiDAR holdout and leakage-safe resplatting.
-- [x] Add masked depth loss and a finite CPU training-step test.
-- [x] Connect the camera-depth path to downloaded KITTI object frames.
-- [x] Add the local multi-frame KITTI smoke runner and its configuration.
-- [x] Add checkpoint/resume and depth-specific training metrics.
-- [x] Run and record the first meaningful KITTI smoke experiment.
+The groups below mirror the `Scope` items so that implementation progress and
+remaining work can be reviewed without inferring coverage from commit history.
+
+### 1. CNN encoder/decoder for RGB plus sparse/enriched LiDAR
+
+Scope item: add a small CNN encoder/decoder consuming RGB plus sparse/enriched
+LiDAR maps.
+
+- [x] Add `CameraDepthModel` with a two-level encoder, skip-connected decoder,
+  and dense `depth_pred: [B, 1, H, W]` output.
+- [x] Support the six-channel sparse and eight-channel enriched LiDAR contracts
+  through `lidar_mode`.
+- [x] Validate RGB/LiDAR batch, channel, and spatial compatibility before the
+  forward pass.
+- [x] Test finite dense output while preserving an odd input resolution.
+- [ ] Add a direct forward test for `lidar_mode="sparse"`; the code path exists,
+  but current camera-depth forward coverage exercises enriched mode only.
+
+### 2. Masked depth loss
+
+Scope item: add a masked depth loss.
+
+- [x] Add masked Smooth L1 evaluated only on selected LiDAR target pixels.
+- [x] Validate prediction, target, and mask shapes.
+- [x] Reject empty masks and non-finite selected targets.
+- [x] Test that unselected pixels do not influence the loss and that an empty
+  mask fails explicitly.
+
+### 3. Deterministic sparse LiDAR holdout
+
+Scope item: add a deterministic sparse LiDAR holdout path.
+
+- [x] Select holdout pixels deterministically from a configured seed.
+- [x] Remove each held-out point from all six sparse LiDAR input channels.
+- [x] Recompute `depth_expanded` and `confidence` from kept points only.
+- [x] Test deterministic masks, target preservation, and leakage-safe
+  resplatting.
+
+### 4. Trainability and checkpoint compatibility
+
+Scope item: verify forward, loss, backward, finite gradients, and checkpoint
+compatibility.
+
+- [x] Test dense forward and masked loss.
+- [x] Run a CPU optimizer step with finite loss and finite non-zero gradients.
+- [x] Save model/optimizer state, epoch, step, and configuration.
+- [x] Test checkpoint resume and metrics-history preservation on the KITTI
+  camera-depth runner.
+
+### 5. CPU-safe and GPU-ready execution
+
+Scope item: keep the implementation CPU-safe for tests and GPU-ready for later
+training.
+
+- [x] Keep CI tests independent of CUDA and external datasets.
+- [x] Add explicit `auto`/`cpu`/`cuda` selection and device diagnostics.
+- [x] Pin the PyTorch CUDA 12.9 build to the local NVIDIA driver capability.
+- [x] Complete and record real GPU smoke runs, including the active
+  `320x1024`, batch-size-2 configuration.
+
+### 6. Meaningful local KITTI smoke
+
+Scope item: use a non-trivial local KITTI sample for the meaningful smoke
+training path.
+
+- [x] Add `KittiObjectDepthDataset` for RGB, Velodyne, and calibration frame
+  triplets.
+- [x] Add the configurable `train-camera-depth` runner.
+- [x] Require the configured sample count instead of silently accepting an
+  incomplete download.
+- [x] Complete and record a 64-frame KITTI Object smoke on CPU and GPU.
+
+### 7. Scope boundary
+
+Scope item: do not implement the BEV lift, YOLO-like auxiliary head, or
+CenterPoint-like BEV heads in this branch.
+
+- [x] Keep this branch limited to the image-space camera-depth representation.
+- [x] Track the BEV lift and detection heads as subsequent milestones.
+
+### Follow-up: representation validation
+
+These tasks are not missing pieces of the v1 holdout smoke. They are required
+before claiming that the learned image-space representation generalizes well
+enough to feed the BEV lift.
+
+- [ ] Separate training and validation samples.
+- [ ] Add held-out depth metrics on the validation split.
+- [ ] Visualize depth predictions, errors, holdout masks, and confidence.
+- [ ] Measure sensitivity to holdout fraction and splatting radius.
+- [ ] Repeat a clean GPU run after the recorded Xid 62 failure.
+- [ ] Document what sparse holdout supervision can and cannot establish about
+  dense depth quality.
 
 ## Sparse LiDAR channels
 

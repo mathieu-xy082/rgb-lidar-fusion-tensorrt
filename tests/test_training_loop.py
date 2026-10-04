@@ -24,6 +24,7 @@ from rgb_lidar_fusion.training import (
     load_training_config,
     run_kitti_camera_depth_training,
     run_synthetic_smoke_training,
+    split_dataset_indices,
     train_one_step,
     validate_camera_depth_training_config,
     validate_training_config,
@@ -142,6 +143,41 @@ def test_validate_camera_depth_config_rejects_invalid_holdout_fraction() -> None
 
     with pytest.raises(ValueError, match="holdout_fraction must be between 0 and 1"):
         validate_camera_depth_training_config(config)
+
+
+def test_split_dataset_indices_is_deterministic_disjoint_and_complete() -> None:
+    first_train, first_validation = split_dataset_indices(
+        10,
+        validation_fraction=0.2,
+        seed=41,
+    )
+    second_train, second_validation = split_dataset_indices(
+        10,
+        validation_fraction=0.2,
+        seed=41,
+    )
+
+    assert first_train == second_train
+    assert first_validation == second_validation
+    assert len(first_train) == 8
+    assert len(first_validation) == 2
+    assert set(first_train).isdisjoint(first_validation)
+    assert sorted(first_train + first_validation) == list(range(10))
+
+
+def test_split_dataset_indices_rejects_invalid_inputs() -> None:
+    with pytest.raises(ValueError, match="sample_count must be at least 2"):
+        split_dataset_indices(1, validation_fraction=0.2, seed=41)
+    for validation_fraction in (0.0, 1.0, -0.1, 1.1):
+        with pytest.raises(
+            ValueError,
+            match="validation_fraction must be between 0 and 1",
+        ):
+            split_dataset_indices(
+                10,
+                validation_fraction=validation_fraction,
+                seed=41,
+            )
 
 
 def test_train_one_step_consumes_model_batch_adapter_and_updates_parameters() -> None:

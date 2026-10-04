@@ -151,6 +151,28 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
         raise ValueError("data_root is required for KITTI camera-depth training.")
 
 
+def split_dataset_indices(
+    sample_count: int,
+    *,
+    validation_fraction: float,
+    seed: int,
+) -> tuple[list[int], list[int]]:
+    """Return deterministic, disjoint train and validation index lists."""
+
+    if sample_count < 2:
+        raise ValueError("sample_count must be at least 2 for a train/validation split.")
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be between 0 and 1.")
+
+    shuffled = np.random.default_rng(seed).permutation(sample_count)
+    validation_count = int(round(sample_count * validation_fraction))
+    validation_count = min(sample_count - 1, max(1, validation_count))
+
+    validation_indices = sorted(int(index) for index in shuffled[:validation_count])
+    train_indices = sorted(int(index) for index in shuffled[validation_count:])
+    return train_indices, validation_indices
+
+
 def set_deterministic_seed(seed: int) -> None:
     """Seed Python, NumPy, and Torch for deterministic smoke training."""
 

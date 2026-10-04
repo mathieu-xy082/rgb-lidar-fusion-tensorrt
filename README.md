@@ -17,7 +17,8 @@ Le socle implémenté couvre :
 - un baseline historique RGB/LiDAR utilisé pour valider training, ONNX et les
   outils TensorRT ;
 - un backbone camera-depth dense entraîné par holdout de mesures LiDAR ;
-- des smoke tests CPU, un runner KITTI local et le checkpointing ;
+- des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
+  profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
 
 La prochaine direction structurante est le lift des features camera-depth vers

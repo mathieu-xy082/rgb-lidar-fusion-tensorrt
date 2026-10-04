@@ -4,8 +4,8 @@ Branch: `ec/camera-depth-backbone`
 
 Parent branch: `main`
 
-Status: v1 implementation and meaningful CPU/GPU smoke complete; explicit
-sparse-mode model coverage and representation validation remain.
+Status: v1 implementation and meaningful CPU/GPU smoke complete; validation
+metrics are implemented, while visualization and sensitivity analysis remain.
 
 Related documents:
 
@@ -125,13 +125,38 @@ These tasks are not missing pieces of the v1 holdout smoke. They are required
 before claiming that the learned image-space representation generalizes well
 enough to feed the BEV lift.
 
-- [ ] Separate training and validation samples.
-- [ ] Add held-out depth metrics on the validation split.
+- [x] Separate training and validation samples deterministically.
+- [x] Add held-out depth metrics on the validation split, evaluated without
+  gradients or optimizer updates.
+- [x] Keep validation holdout masks fixed per dataset index and independent of
+  batch size.
+- [x] Compare model MAE/RMSE against the leakage-safe splatted-depth baseline.
 - [ ] Visualize depth predictions, errors, holdout masks, and confidence.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
 - [ ] Repeat a clean GPU run after the recorded Xid 62 failure.
 - [ ] Document what sparse holdout supervision can and cannot establish about
   dense depth quality.
+
+The epoch metrics written to `metrics.json` and `metrics.csv` now contain:
+
+```text
+loss / grad_norm             training diagnostics
+val_loss                     normalized masked Smooth L1
+val_mae_m / val_rmse_m       model errors in meters
+val_splat_mae_m / rmse_m     depth_expanded baseline errors in meters
+val_splat_coverage           holdout pixels reached by a kept-point splat
+val_pixel_count              number of held-out validation measurements
+```
+
+`validation_holdout_seed + dataset_index` defines each validation mask. The
+same pixels are therefore evaluated after every epoch, even if validation batch
+size changes. These are sparse-point generalization metrics, not dense ground
+truth metrics.
+
+The next working session should add a lightweight notebook that launches or
+loads a run, plots training/validation curves, and visualizes representative
+depth predictions and errors. Reusable loading and plotting logic should remain
+in `src/rgb_lidar_fusion/` rather than living only in the notebook.
 
 ## Sparse LiDAR channels
 

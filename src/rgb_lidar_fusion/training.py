@@ -21,6 +21,11 @@ from .model_batch import (
     model_batch_to_camera_depth_training_batch,
     model_batch_to_torch_tensors,
 )
+from .project_lidar import ENRICHED_LIDAR_MAP_CHANNELS
+
+
+DEPTH_EXPANDED_CHANNEL_INDEX = ENRICHED_LIDAR_MAP_CHANNELS.index("depth_expanded")
+SPLAT_CONFIDENCE_CHANNEL_INDEX = ENRICHED_LIDAR_MAP_CHANNELS.index("confidence")
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,19 @@ class StepMetrics:
 
 
 @dataclass(frozen=True)
+class DepthValidationMetrics:
+    """Held-out depth metrics accumulated over a validation split."""
+
+    loss: float
+    mae_m: float
+    rmse_m: float
+    splat_mae_m: float
+    splat_rmse_m: float
+    splat_coverage: float
+    pixel_count: int
+
+
+@dataclass(frozen=True)
 class EpochMetrics:
     """Serializable diagnostics for one completed epoch."""
 
@@ -39,6 +57,13 @@ class EpochMetrics:
     step: int
     loss: float
     grad_norm: float
+    val_loss: float | None = None
+    val_mae_m: float | None = None
+    val_rmse_m: float | None = None
+    val_splat_mae_m: float | None = None
+    val_splat_rmse_m: float | None = None
+    val_splat_coverage: float | None = None
+    val_pixel_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +180,15 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
         int(config.get("split_seed", config.get("seed", 0)))
     except (TypeError, ValueError):
         raise ValueError("split_seed must be an integer.") from None
+    try:
+        int(
+            config.get(
+                "validation_holdout_seed",
+                config.get("split_seed", config.get("seed", 0)),
+            )
+        )
+    except (TypeError, ValueError):
+        raise ValueError("validation_holdout_seed must be an integer.") from None
     if int(config.get("splat_radius_px", 2)) < 0:
         raise ValueError("splat_radius_px must be non-negative.")
     if not str(config.get("data_root", "")).strip():
@@ -309,6 +343,115 @@ def train_camera_depth_step(
     return StepMetrics(loss=float(loss.detach().cpu()), grad_norm=grad_norm)
 
 
+def evaluate_camera_depth(
+    *,
+    model,
+    dataset,
+    indices: list[int],
+    batch_size: int,
+    holdout_fraction: float,
+    holdout_seed: int,
+    splatting_config: SplattingConfig,
+    device,
+    max_depth_m: float,
+    beta: float = 1.0,
+) -> DepthValidationMetrics:
+    """Evaluate model and splatted-depth baseline on fixed held-out pixels."""
+
+    import torch
+
+    if not indices:
+        raise ValueError("validation indices must not be empty.")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive.")
+    if max_depth_m <= 0.0:
+        raise ValueError("max_depth_m must be positive.")
+
+    loss_sum = 0.0
+    absolute_error_m_sum = 0.0
+    squared_error_m_sum = 0.0
+    splat_absolute_error_m_sum = 0.0
+    splat_squared_error_m_sum = 0.0
+    splat_covered_count = 0
+    pixel_count = 0
+    was_training = model.training
+    model.to(device)
+    model.eval()
+
+    try:
+        with torch.no_grad():
+            for batch_start in range(0, len(indices), batch_size):
+                batch_indices = indices[batch_start : batch_start + batch_size]
+                prepared_samples = []
+                for index in batch_indices:
+                    model_batch = dataset_items_to_model_batch(
+                        [dataset[int(index)]],
+                        include_splatted_depth=False,
+                    )
+                    prepared_samples.append(
+                        model_batch_to_camera_depth_training_batch(
+                            model_batch,
+                            holdout_fraction=holdout_fraction,
+                            seed=holdout_seed + int(index),
+                            splatting_config=splatting_config,
+                        )
+                    )
+
+                depth_batch = {
+                    key: np.concatenate(
+                        [sample[key] for sample in prepared_samples],
+                        axis=0,
+                    )
+                    for key in prepared_samples[0]
+                }
+                rgb = torch.from_numpy(depth_batch["rgb"]).to(device)
+                lidar_maps = torch.from_numpy(depth_batch["lidar_maps"]).to(device)
+                depth_target = torch.from_numpy(depth_batch["depth_target"]).to(device)
+                loss_mask = torch.from_numpy(depth_batch["loss_mask"]).to(device)
+                prediction = model(rgb, lidar_maps)
+                if not torch.isfinite(prediction).all():
+                    raise ValueError("validation predictions must be finite.")
+
+                selected = loss_mask.to(dtype=torch.bool)
+                batch_pixel_count = int(selected.sum().item())
+                batch_loss = masked_depth_loss(
+                    prediction,
+                    depth_target,
+                    loss_mask,
+                    beta=beta,
+                )
+                error_m = (prediction[selected] - depth_target[selected]) * max_depth_m
+                splat_depth = lidar_maps[
+                    :, DEPTH_EXPANDED_CHANNEL_INDEX : DEPTH_EXPANDED_CHANNEL_INDEX + 1
+                ]
+                splat_error_m = (
+                    splat_depth[selected] - depth_target[selected]
+                ) * max_depth_m
+                splat_confidence = lidar_maps[
+                    :, SPLAT_CONFIDENCE_CHANNEL_INDEX : SPLAT_CONFIDENCE_CHANNEL_INDEX + 1
+                ]
+
+                loss_sum += float(batch_loss.cpu()) * batch_pixel_count
+                absolute_error_m_sum += float(error_m.abs().sum().cpu())
+                squared_error_m_sum += float(error_m.square().sum().cpu())
+                splat_absolute_error_m_sum += float(splat_error_m.abs().sum().cpu())
+                splat_squared_error_m_sum += float(splat_error_m.square().sum().cpu())
+                splat_covered_count += int((splat_confidence[selected] > 0.0).sum().item())
+                pixel_count += batch_pixel_count
+    finally:
+        model.train(was_training)
+
+    return DepthValidationMetrics(
+        loss=loss_sum / pixel_count,
+        mae_m=absolute_error_m_sum / pixel_count,
+        rmse_m=(squared_error_m_sum / pixel_count) ** 0.5,
+        splat_mae_m=splat_absolute_error_m_sum / pixel_count,
+        splat_rmse_m=(splat_squared_error_m_sum / pixel_count) ** 0.5,
+        splat_coverage=splat_covered_count / pixel_count,
+        pixel_count=pixel_count,
+    )
+
+
 def _synthetic_dataset_item(index: int, *, height: int, width: int) -> dict[str, Any]:
     image = np.zeros((3, height, width), dtype=np.float32)
     offset = index % max(1, width - 3)
@@ -399,7 +542,10 @@ def write_metrics(output_dir: Path, metrics: list[EpochMetrics], *, append: bool
     rows.extend(asdict(metric) for metric in metrics)
     (output_dir / "metrics.json").write_text(json.dumps(rows, indent=2) + "\n")
     with (output_dir / "metrics.csv").open("w", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=["epoch", "step", "loss", "grad_norm"])
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=list(asdict(EpochMetrics(0, 0, 0.0, 0.0))),
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -554,6 +700,10 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
     validation_fraction = float(config.get("validation_fraction", 0.2))
     split_seed = int(config.get("split_seed", seed))
+    validation_holdout_seed = int(
+        config.get("validation_holdout_seed", split_seed)
+    )
+    max_depth_m = float(config.get("max_depth_m", 80.0))
     beta = float(config.get("smooth_l1_beta", 1.0))
     output_dir = Path(
         str(config.get("output_dir", "results/training/kitti_camera_depth"))
@@ -566,7 +716,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     dataset = KittiObjectDepthDataset(
         str(config["data_root"]),
         image_shape=(height, width),
-        max_depth_m=float(config.get("max_depth_m", 80.0)),
+        max_depth_m=max_depth_m,
         sample_limit=sample_count,
     )
     train_indices, validation_indices = split_dataset_indices(
@@ -620,12 +770,31 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
             epoch_losses.append(step_metrics.loss)
             epoch_grad_norms.append(step_metrics.grad_norm)
 
+        validation_metrics = evaluate_camera_depth(
+            model=model,
+            dataset=dataset,
+            indices=validation_indices,
+            batch_size=batch_size,
+            holdout_fraction=holdout_fraction,
+            holdout_seed=validation_holdout_seed,
+            splatting_config=splatting_config,
+            device=device,
+            max_depth_m=max_depth_m,
+            beta=beta,
+        )
         metrics.append(
             EpochMetrics(
                 epoch=epoch + 1,
                 step=step,
                 loss=float(np.mean(epoch_losses)),
                 grad_norm=float(np.mean(epoch_grad_norms)),
+                val_loss=validation_metrics.loss,
+                val_mae_m=validation_metrics.mae_m,
+                val_rmse_m=validation_metrics.rmse_m,
+                val_splat_mae_m=validation_metrics.splat_mae_m,
+                val_splat_rmse_m=validation_metrics.splat_rmse_m,
+                val_splat_coverage=validation_metrics.splat_coverage,
+                val_pixel_count=validation_metrics.pixel_count,
             )
         )
         save_checkpoint(
@@ -648,6 +817,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         epochs_completed=epochs,
         split_metadata={
             "seed": split_seed,
+            "holdout_seed": validation_holdout_seed,
             "validation_fraction": validation_fraction,
             "train_sample_count": len(train_indices),
             "validation_sample_count": len(validation_indices),

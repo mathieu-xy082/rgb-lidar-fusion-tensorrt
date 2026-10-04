@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-08-17.
+Mise à jour : 2026-10-04.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -24,13 +24,20 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 
 ### Stabiliser la représentation camera-depth
 
-L'implémentation prouve que le pipeline complet fonctionne, mais pas encore que
-la profondeur prédite généralise.
+L'implémentation sépare maintenant les frames d'entraînement et de validation,
+mesure les erreurs holdout en mètres et les compare à la profondeur splattée.
+Elle ne prouve pas encore que la profondeur dense généralise.
 
-Critères avant de considérer cette représentation comme suffisamment validée :
+Déjà en place :
 
-- séparer clairement entraînement et validation ;
-- ajouter des métriques de profondeur sur les points holdout ;
+- split train/validation déterministe ;
+- holdout de validation fixe par frame ;
+- loss, MAE et RMSE de validation ;
+- MAE/RMSE et couverture de la baseline splattée.
+
+Critères restants avant de considérer cette représentation comme suffisamment
+validée :
+
 - visualiser les prédictions, erreurs et masques de confiance ;
 - vérifier la sensibilité au taux de holdout et au rayon de splatting ;
 - reproduire un run GPU après redémarrage de la machine ;

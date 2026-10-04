@@ -153,6 +153,7 @@ def test_validate_camera_depth_config_accepts_validation_split_settings() -> Non
             "sample_count": 64,
             "validation_fraction": 0.2,
             "split_seed": 13,
+            "validation_holdout_seed": 1013,
         }
     )
 
@@ -184,6 +185,13 @@ def test_validate_camera_depth_config_rejects_invalid_validation_split_settings(
             {
                 **base_config,
                 "split_seed": "invalid",
+            }
+        )
+    with pytest.raises(ValueError, match="validation_holdout_seed must be an integer"):
+        validate_camera_depth_training_config(
+            {
+                **base_config,
+                "validation_holdout_seed": "invalid",
             }
         )
 
@@ -389,6 +397,7 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
         "sample_count": 4,
         "seed": 29,
         "split_seed": 37,
+        "validation_holdout_seed": 1037,
         "device": "cpu",
         "epochs": 1,
         "batch_size": 2,
@@ -409,6 +418,13 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     assert first.epochs_completed == 1
     assert first.metrics[0].step == 1
     assert first.metrics[0].loss > 0.0
+    assert first.metrics[0].val_loss is not None
+    assert first.metrics[0].val_mae_m is not None
+    assert first.metrics[0].val_rmse_m is not None
+    assert first.metrics[0].val_splat_mae_m is not None
+    assert first.metrics[0].val_splat_rmse_m is not None
+    assert first.metrics[0].val_pixel_count is not None
+    assert first.metrics[0].val_pixel_count > 0
     assert first.checkpoint_path.exists()
 
     resumed = run_kitti_camera_depth_training(
@@ -431,6 +447,7 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     assert metadata["sample_count"] == 4
     assert metadata["image_shape"] == [12, 16]
     assert metadata["split"]["seed"] == 37
+    assert metadata["split"]["holdout_seed"] == 1037
     assert metadata["split"]["validation_fraction"] == 0.5
     assert metadata["split"]["train_sample_count"] == 2
     assert metadata["split"]["validation_sample_count"] == 2
@@ -441,6 +458,9 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
         metadata["split"]["train_indices"]
         + metadata["split"]["validation_indices"]
     ) == [0, 1, 2, 3]
+    assert "val_loss" in (output_dir / "metrics.csv").read_text().splitlines()[0]
+    assert metrics[0]["val_pixel_count"] > 0
+    assert metrics[0]["val_splat_mae_m"] >= 0.0
 
 
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:

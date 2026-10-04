@@ -49,11 +49,22 @@ def main() -> None:
     print(f"epochs_completed={result.epochs_completed}")
     print(f"checkpoint={result.checkpoint_path}")
     for metric in result.metrics:
-        print(
+        line = (
             "metric "
             f"epoch={metric.epoch} step={metric.step} "
             f"loss={metric.loss:.6f} grad_norm={metric.grad_norm:.6f}"
         )
+        if metric.val_loss is not None:
+            line += (
+                f" val_loss={metric.val_loss:.6f}"
+                f" val_mae_m={metric.val_mae_m:.6f}"
+                f" val_rmse_m={metric.val_rmse_m:.6f}"
+                f" val_splat_mae_m={metric.val_splat_mae_m:.6f}"
+                f" val_splat_rmse_m={metric.val_splat_rmse_m:.6f}"
+                f" val_splat_coverage={metric.val_splat_coverage:.6f}"
+                f" val_pixel_count={metric.val_pixel_count}"
+            )
+        print(line)
 
 
 if __name__ == "__main__":

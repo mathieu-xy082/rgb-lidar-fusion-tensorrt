@@ -4,6 +4,7 @@ data_root: data/kitti/training
 sample_count: 64
 seed: 13
 split_seed: 13
+validation_holdout_seed: 1013
 device: auto
 epochs: 1
 batch_size: 2

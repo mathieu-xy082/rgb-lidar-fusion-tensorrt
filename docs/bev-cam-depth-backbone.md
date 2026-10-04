@@ -257,10 +257,12 @@ les accumuler dans une grille BEV.
 
 ## Prochain incrément concret
 
-Avant le lift, ajouter une séparation entraînement/validation, des métriques sur
-les points holdout et des visualisations de profondeur/erreur. Le prochain
-chantier architectural est ensuite le module `camera-depth -> camera_bev`
-décrit dans l'[architecture BEV](bev-model-roadmap.md).
+La séparation entraînement/validation et les métriques sur points holdout sont
+maintenant implémentées. Avant le lift, analyser leurs courbes sur plusieurs
+époques et ajouter des visualisations de profondeur, erreur, masque et
+confiance. Le prochain chantier architectural sera ensuite le module
+`camera-depth -> camera_bev` décrit dans
+l'[architecture BEV](bev-model-roadmap.md).
 
 Les critères à jour sont suivis dans les
 [milestones](milestones.md), et les résultats d'exécution dans le

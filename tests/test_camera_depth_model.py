@@ -11,7 +11,7 @@ from rgb_lidar_fusion.model_batch import (
     dataset_items_to_model_batch,
     model_batch_to_camera_depth_training_batch,
 )
-from rgb_lidar_fusion.training import train_camera_depth_step
+from rgb_lidar_fusion.training import evaluate_camera_depth, train_camera_depth_step
 
 
 def _item(offset: int = 0) -> dict:
@@ -119,3 +119,56 @@ def test_camera_depth_training_step_has_finite_non_zero_gradients() -> None:
     assert np.isfinite(metrics.loss)
     assert np.isfinite(metrics.grad_norm)
     assert metrics.grad_norm > 0.0
+
+
+def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> None:
+    torch.manual_seed(11)
+    model = CameraDepthModel()
+    dataset = [_item(0), _item(1)]
+    parameters_before = [parameter.detach().clone() for parameter in model.parameters()]
+
+    first = evaluate_camera_depth(
+        model=model,
+        dataset=dataset,
+        indices=[0, 1],
+        batch_size=2,
+        holdout_fraction=0.4,
+        holdout_seed=101,
+        splatting_config=SplattingConfig(radius_px=1, sigma_px=1.0),
+        device=torch.device("cpu"),
+        max_depth_m=80.0,
+        beta=0.1,
+    )
+    second = evaluate_camera_depth(
+        model=model,
+        dataset=dataset,
+        indices=[0, 1],
+        batch_size=1,
+        holdout_fraction=0.4,
+        holdout_seed=101,
+        splatting_config=SplattingConfig(radius_px=1, sigma_px=1.0),
+        device=torch.device("cpu"),
+        max_depth_m=80.0,
+        beta=0.1,
+    )
+
+    assert first.pixel_count == second.pixel_count
+    assert first.loss == pytest.approx(second.loss, rel=1e-6)
+    assert first.mae_m == pytest.approx(second.mae_m, rel=1e-6)
+    assert first.rmse_m == pytest.approx(second.rmse_m, rel=1e-6)
+    assert first.splat_mae_m == pytest.approx(second.splat_mae_m, rel=1e-6)
+    assert first.splat_rmse_m == pytest.approx(second.splat_rmse_m, rel=1e-6)
+    assert first.splat_coverage == pytest.approx(second.splat_coverage)
+    assert first.pixel_count == 4
+    assert first.loss >= 0.0
+    assert first.mae_m >= 0.0
+    assert first.rmse_m >= first.mae_m
+    assert first.splat_mae_m >= 0.0
+    assert first.splat_rmse_m >= first.splat_mae_m
+    assert 0.0 <= first.splat_coverage <= 1.0
+    assert model.training
+    assert all(parameter.grad is None for parameter in model.parameters())
+    assert all(
+        torch.equal(before, after)
+        for before, after in zip(parameters_before, model.parameters())
+    )

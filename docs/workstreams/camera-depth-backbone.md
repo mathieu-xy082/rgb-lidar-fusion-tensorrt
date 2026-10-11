@@ -5,8 +5,8 @@ Branch: `ec/camera-depth-backbone`
 Parent branch: `main`
 
 Status: v1 implementation, validation metrics, analysis notebook, and clean
-multi-epoch GPU runs are complete; sensitivity and dense-depth validation
-remain.
+multi-epoch GPU runs are complete; structured LiDAR holdout, dataset scale-up,
+sensitivity, and dense-depth validation remain.
 
 Related documents:
 
@@ -139,10 +139,98 @@ enough to feed the BEV lift.
 - [x] Add a reproducible sparse-versus-enriched input ablation path.
 - [x] Run the sparse-input ablation and record whether splatting improves
   held-out validation MAE/RMSE.
+- [ ] Add deterministic LiDAR block dropout while keeping RGB visible.
+- [ ] Recompute the fixed splatting channels after block dropout and verify
+  that every target measurement is absent from all model inputs.
+- [ ] Report random-point and spatial-block validation metrics separately.
+- [ ] Scale the representation experiment beyond the 64-frame smoke sample.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
 - [x] Repeat a clean GPU run after the recorded Xid 62 failure.
 - [ ] Document what sparse holdout supervision can and cannot establish about
   dense depth quality.
+
+### Next experiment: LiDAR block dropout
+
+The enriched input remains the primary representation. The current fixed
+Gaussian splatting is a strong baseline and should not be removed while testing
+generalization. Instead of hiding only isolated LiDAR pixels, training should
+also hide spatially coherent image regions:
+
+```text
+1. Build the full six-channel sparse LiDAR maps.
+2. Sample one or more deterministic image-space blocks.
+3. Mark sparse LiDAR measurements inside the blocks as holdout targets.
+4. Remove those measurements from all six sparse input channels.
+5. Recompute depth_expanded and confidence from kept points only.
+6. Keep RGB visible inside the blocks.
+7. Evaluate the prediction only at the removed raw LiDAR measurements.
+```
+
+This is a LiDAR-modality dropout, not RGB cutout. It asks the network to use RGB
+semantics and surrounding geometry to complete partially observed surfaces such
+as vegetation, pedestrians, vehicles, and walls. Masking RGB and LiDAR together
+is a separate robustness experiment and is not the initial priority.
+
+The first implementation should support both holdout modes under configuration:
+
+```text
+random_points: current independent sparse-point holdout
+spatial_blocks: variable-size rectangular or irregular LiDAR holes
+```
+
+Tests must cover deterministic masks, non-empty kept and target sets, removal
+from all six sparse channels, and leakage-safe resplatting. Validation should
+retain fixed masks per sample and publish metrics by holdout mode and block-size
+bucket; a single aggregate score would hide whether performance collapses as
+the missing region grows.
+
+No model architecture change is required to start this experiment. Block
+dropout changes input and target preparation while preserving the enriched
+eight-channel LiDAR contract and `depth_pred: [B, 1, H, W]`. The current model
+has only two downsampling levels, so its useful spatial context may become a
+limit for larger holes. Freeze the architecture for the first comparison; add
+a deeper pyramid level, dilation, or another context module only if validation
+error clearly increases with block size.
+
+### Dataset scale-up
+
+The existing 64 KITTI Object frames are a smoke and debugging dataset. They are
+enough to validate projection, holdout, resplatting, optimization, and the first
+sparse-versus-enriched comparison, but they are not enough to establish
+generalization across scenes and object appearances.
+
+Use the official range downloader to extend the existing local dataset; files
+already present are skipped:
+
+```bash
+# First meaningful block-dropout pilot: 512 frame triplets.
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python docs/onboarding/scripts/download_kitti_samples.py \
+  --source official \
+  --count 512
+```
+
+Then set `sample_count: 512` in an experiment-specific training configuration.
+Keep the 64-frame configuration as the fast smoke path instead of silently
+changing its purpose. The official KITTI Object training set contains 7,481
+image/Velodyne/calibration triplets, and the current downloader accepts
+`--count 7481`; downloading the complete archives directly is more efficient
+than thousands of range requests when the full set is desired.
+
+Recommended progression:
+
+```text
+64 frames:    functional smoke and fast regression checks
+512 frames:   first block-dropout pilot and hyperparameter debugging
+7,481 frames: final KITTI Object representation experiments
+```
+
+Each scale must use a fixed train/validation split and fixed validation masks.
+Once block sizes or other hyperparameters have been selected, reserve a final
+untouched test subset rather than repeatedly interpreting validation results as
+test performance. Additional datasets such as KITTI Raw, nuScenes, or Waymo can
+improve environmental diversity later, but they require dataset-specific
+calibration adapters and should not be mixed into the first block-dropout
+implementation.
 
 ### Splatting ablation result
 
@@ -288,7 +376,7 @@ data/kitti/training/
   calib/
 ```
 
-Recommended local bootstrap:
+Fast local smoke bootstrap:
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm run python docs/onboarding/scripts/download_kitti_samples.py \
@@ -296,9 +384,10 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python docs/onboarding/scripts/download_kitti_s
   --count 64
 ```
 
-The exact count can be adjusted for the machine, but the default meaningful
-target should be dozens of frames rather than the 3-frame lightweight mirror.
-The downloaded data must stay ignored by Git.
+The 64-frame configuration is intentionally retained as a fast local smoke. A
+representation experiment intended to measure generalization should use the
+512-frame pilot or the full 7,481-frame KITTI Object training set described
+above. The downloaded data must stay ignored by Git.
 
 Run the camera-depth smoke after the download:
 
@@ -307,8 +396,8 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
   --config configs/training/kitti_camera_depth.yaml
 ```
 
-The default configuration uses 64 frames resized to `320x1024`, batch size 2,
-a 20% sparse LiDAR holdout, and local splatting with a 2-pixel radius.
+The default smoke configuration uses 64 frames resized to `320x1024`, batch
+size 2, a 20% sparse LiDAR holdout, and local splatting with a 2-pixel radius.
 Checkpoints and metrics are written below
 `results/training/kitti_camera_depth/` and remain ignored by Git.
 
@@ -320,6 +409,9 @@ CI smoke:
 
 local KITTI smoke:
   downloaded KITTI object frames, sparse holdout, masked depth loss
+
+representation experiment:
+  fixed split over at least the 512-frame pilot, random and block holdout metrics
 ```
 
 ## First KITTI smoke result

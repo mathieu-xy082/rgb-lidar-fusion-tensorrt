@@ -34,11 +34,11 @@ Déjà en place :
 - holdout de validation fixe par frame ;
 - loss, MAE et RMSE de validation ;
 - MAE/RMSE et couverture de la baseline splattée.
+- notebook de courbes train/validation et d'inspection des prédictions.
 
 Critères restants avant de considérer cette représentation comme suffisamment
 validée :
 
-- visualiser les prédictions, erreurs et masques de confiance ;
 - vérifier la sensibilité au taux de holdout et au rayon de splatting ;
 - reproduire un run GPU après redémarrage de la machine ;
 - documenter les limites de la supervision sparse.

@@ -77,29 +77,27 @@ Add to the existing `ml` group only when image transforms, pretrained backbones,
 
 ### `visualization` group — overlays and notebooks
 
-Add when real KITTI samples, plots, or richer visual artifacts are needed.
-
-Candidate dependencies:
+Implemented for camera-depth metric and prediction plots:
 
 ```toml
 visualization = [
-  "opencv-python",
-  "matplotlib",
+  "matplotlib>=3.8",
 ]
 ```
 
 ### `notebook` group — exploration
 
-Add when interactive exploration becomes useful.
-
-Candidate dependencies:
+Implemented for the camera-depth training analysis notebook:
 
 ```toml
 notebook = [
-  "jupyterlab",
-  "ipykernel",
+  "jupyterlab>=4.2",
+  "ipykernel>=6.29",
 ]
 ```
+
+Install both optional groups with `-G visualization -G notebook`. Open the
+repository notebooks with `pdm run notebooks`.
 
 ## GPU training environment
 

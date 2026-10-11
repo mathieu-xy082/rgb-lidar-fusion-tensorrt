@@ -382,28 +382,13 @@ def evaluate_camera_depth(
         with torch.no_grad():
             for batch_start in range(0, len(indices), batch_size):
                 batch_indices = indices[batch_start : batch_start + batch_size]
-                prepared_samples = []
-                for index in batch_indices:
-                    model_batch = dataset_items_to_model_batch(
-                        [dataset[int(index)]],
-                        include_splatted_depth=False,
-                    )
-                    prepared_samples.append(
-                        model_batch_to_camera_depth_training_batch(
-                            model_batch,
-                            holdout_fraction=holdout_fraction,
-                            seed=holdout_seed + int(index),
-                            splatting_config=splatting_config,
-                        )
-                    )
-
-                depth_batch = {
-                    key: np.concatenate(
-                        [sample[key] for sample in prepared_samples],
-                        axis=0,
-                    )
-                    for key in prepared_samples[0]
-                }
+                depth_batch = prepare_camera_depth_evaluation_batch(
+                    dataset=dataset,
+                    indices=[int(index) for index in batch_indices],
+                    holdout_fraction=holdout_fraction,
+                    holdout_seed=holdout_seed,
+                    splatting_config=splatting_config,
+                )
                 rgb = torch.from_numpy(depth_batch["rgb"]).to(device)
                 lidar_maps = torch.from_numpy(depth_batch["lidar_maps"]).to(device)
                 depth_target = torch.from_numpy(depth_batch["depth_target"]).to(device)
@@ -450,6 +435,43 @@ def evaluate_camera_depth(
         splat_coverage=splat_covered_count / pixel_count,
         pixel_count=pixel_count,
     )
+
+
+def prepare_camera_depth_evaluation_batch(
+    *,
+    dataset,
+    indices: list[int],
+    holdout_fraction: float,
+    holdout_seed: int,
+    splatting_config: SplattingConfig,
+) -> dict[str, np.ndarray]:
+    """Build a leakage-safe batch with a stable holdout mask per dataset index."""
+
+    if not indices:
+        raise ValueError("evaluation indices must not be empty.")
+
+    prepared_samples = []
+    for index in indices:
+        model_batch = dataset_items_to_model_batch(
+            [dataset[int(index)]],
+            include_splatted_depth=False,
+        )
+        prepared_samples.append(
+            model_batch_to_camera_depth_training_batch(
+                model_batch,
+                holdout_fraction=holdout_fraction,
+                seed=holdout_seed + int(index),
+                splatting_config=splatting_config,
+            )
+        )
+
+    return {
+        key: np.concatenate(
+            [sample[key] for sample in prepared_samples],
+            axis=0,
+        )
+        for key in prepared_samples[0]
+    }
 
 
 def _synthetic_dataset_item(index: int, *, height: int, width: int) -> dict[str, Any]:

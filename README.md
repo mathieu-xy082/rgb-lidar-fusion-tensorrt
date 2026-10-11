@@ -129,6 +129,13 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
 PyTorch est actuellement fixé à `2.13.0+cu129`. Une machine sans GPU NVIDIA
 peut exécuter les tests et les smoke trainings sur CPU.
 
+Pour analyser interactivement les entraînements camera-depth :
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm install -G ml -G visualization -G notebook
+PDM_IGNORE_ACTIVE_VENV=1 pdm run notebooks
+```
+
 ## Commandes principales
 
 ```bash
@@ -140,6 +147,9 @@ pdm run train-baseline -- --config configs/training/synthetic_smoke.yaml
 
 # Backbone camera-depth sur un échantillon KITTI local
 pdm run train-camera-depth -- --config configs/training/kitti_camera_depth.yaml
+
+# Notebook d'entraînement et d'analyse camera-depth
+pdm run notebooks
 
 # Export et parité du baseline historique
 pdm install -G dev -G ml -G onnx

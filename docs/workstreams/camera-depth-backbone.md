@@ -5,7 +5,8 @@ Branch: `ec/camera-depth-backbone`
 Parent branch: `main`
 
 Status: v1 implementation and meaningful CPU/GPU smoke complete; validation
-metrics are implemented, while visualization and sensitivity analysis remain.
+metrics and their analysis notebook are implemented, while sensitivity analysis
+and a clean multi-epoch GPU run remain.
 
 Related documents:
 
@@ -131,7 +132,8 @@ enough to feed the BEV lift.
 - [x] Keep validation holdout masks fixed per dataset index and independent of
   batch size.
 - [x] Compare model MAE/RMSE against the leakage-safe splatted-depth baseline.
-- [ ] Visualize depth predictions, errors, holdout masks, and confidence.
+- [x] Visualize depth predictions, errors, holdout targets, and confidence in
+  `notebooks/03_camera_depth_training_analysis.ipynb`.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
 - [ ] Repeat a clean GPU run after the recorded Xid 62 failure.
 - [ ] Document what sparse holdout supervision can and cannot establish about
@@ -153,10 +155,10 @@ same pixels are therefore evaluated after every epoch, even if validation batch
 size changes. These are sparse-point generalization metrics, not dense ground
 truth metrics.
 
-The next working session should add a lightweight notebook that launches or
-loads a run, plots training/validation curves, and visualizes representative
-depth predictions and errors. Reusable loading and plotting logic should remain
-in `src/rgb_lidar_fusion/` rather than living only in the notebook.
+The analysis notebook can launch or load a run, plot training/validation curves,
+compare the model against the splatted-depth baseline, and visualize a
+representative validation frame. Reusable loading and plotting logic lives in
+`src/rgb_lidar_fusion/camera_depth_analysis.py` rather than only in the notebook.
 
 ## Sparse LiDAR channels
 

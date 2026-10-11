@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from .baseline_model import BaselineFusionModel
+from .baseline_model import BaselineFusionModel, LIDAR_CHANNELS_BY_MODE
 from .camera_depth_model import CameraDepthModel, masked_depth_loss
 from .dataset import KittiObjectDepthDataset
 from .lidar_splatting import SplattingConfig
@@ -26,6 +26,21 @@ from .project_lidar import ENRICHED_LIDAR_MAP_CHANNELS
 
 DEPTH_EXPANDED_CHANNEL_INDEX = ENRICHED_LIDAR_MAP_CHANNELS.index("depth_expanded")
 SPLAT_CONFIDENCE_CHANNEL_INDEX = ENRICHED_LIDAR_MAP_CHANNELS.index("confidence")
+
+
+def select_camera_depth_lidar_maps(lidar_maps, *, lidar_mode: str):
+    """Select sparse or enriched channels from a prepared camera-depth batch."""
+
+    if lidar_mode not in LIDAR_CHANNELS_BY_MODE:
+        valid_modes = ", ".join(sorted(LIDAR_CHANNELS_BY_MODE))
+        raise ValueError(f"lidar_mode must be one of: {valid_modes}.")
+    if lidar_maps.ndim != 4 or lidar_maps.shape[1] != len(
+        ENRICHED_LIDAR_MAP_CHANNELS
+    ):
+        raise ValueError(
+            "prepared lidar_maps must have shape [B, 8, H, W] before selection."
+        )
+    return lidar_maps[:, : LIDAR_CHANNELS_BY_MODE[lidar_mode]]
 
 
 @dataclass(frozen=True)
@@ -148,6 +163,10 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
     dataset = str(config.get("dataset", ""))
     if dataset != "kitti_camera_depth":
         raise ValueError("camera-depth runner requires dataset='kitti_camera_depth'.")
+    lidar_mode = str(config.get("lidar_mode", "enriched"))
+    if lidar_mode not in LIDAR_CHANNELS_BY_MODE:
+        valid_modes = ", ".join(sorted(LIDAR_CHANNELS_BY_MODE))
+        raise ValueError(f"lidar_mode must be one of: {valid_modes}.")
     positive_int_fields = (
         "epochs",
         "batch_size",
@@ -355,6 +374,7 @@ def evaluate_camera_depth(
     device,
     max_depth_m: float,
     beta: float = 1.0,
+    lidar_mode: str = "enriched",
 ) -> DepthValidationMetrics:
     """Evaluate model and splatted-depth baseline on fixed held-out pixels."""
 
@@ -390,7 +410,13 @@ def evaluate_camera_depth(
                     splatting_config=splatting_config,
                 )
                 rgb = torch.from_numpy(depth_batch["rgb"]).to(device)
-                lidar_maps = torch.from_numpy(depth_batch["lidar_maps"]).to(device)
+                prepared_lidar_maps = torch.from_numpy(
+                    depth_batch["lidar_maps"]
+                ).to(device)
+                lidar_maps = select_camera_depth_lidar_maps(
+                    prepared_lidar_maps,
+                    lidar_mode=lidar_mode,
+                )
                 depth_target = torch.from_numpy(depth_batch["depth_target"]).to(device)
                 loss_mask = torch.from_numpy(depth_batch["loss_mask"]).to(device)
                 prediction = model(rgb, lidar_maps)
@@ -406,13 +432,13 @@ def evaluate_camera_depth(
                     beta=beta,
                 )
                 error_m = (prediction[selected] - depth_target[selected]) * max_depth_m
-                splat_depth = lidar_maps[
+                splat_depth = prepared_lidar_maps[
                     :, DEPTH_EXPANDED_CHANNEL_INDEX : DEPTH_EXPANDED_CHANNEL_INDEX + 1
                 ]
                 splat_error_m = (
                     splat_depth[selected] - depth_target[selected]
                 ) * max_depth_m
-                splat_confidence = lidar_maps[
+                splat_confidence = prepared_lidar_maps[
                     :, SPLAT_CONFIDENCE_CHANNEL_INDEX : SPLAT_CONFIDENCE_CHANNEL_INDEX + 1
                 ]
 
@@ -597,6 +623,8 @@ def write_run_metadata(
     }
     if "data_root" in config:
         metadata["data_root"] = str(config["data_root"])
+    if "lidar_mode" in config:
+        metadata["lidar_mode"] = str(config["lidar_mode"])
     if "sample_count" in config:
         metadata["sample_count"] = int(config["sample_count"])
     if "height" in config and "width" in config:
@@ -725,6 +753,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     validation_holdout_seed = int(
         config.get("validation_holdout_seed", split_seed)
     )
+    lidar_mode = str(config.get("lidar_mode", "enriched"))
     max_depth_m = float(config.get("max_depth_m", 80.0))
     beta = float(config.get("smooth_l1_beta", 1.0))
     output_dir = Path(
@@ -747,7 +776,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         seed=split_seed,
     )
 
-    model = CameraDepthModel(lidar_mode="enriched")
+    model = CameraDepthModel(lidar_mode=lidar_mode)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     start_epoch = 0
     step = 0
@@ -778,12 +807,16 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
                 seed=seed + epoch * len(dataset) + batch_start,
                 splatting_config=splatting_config,
             )
+            lidar_maps = select_camera_depth_lidar_maps(
+                depth_batch["lidar_maps"],
+                lidar_mode=lidar_mode,
+            )
             step += 1
             step_metrics = train_camera_depth_step(
                 model=model,
                 optimizer=optimizer,
                 rgb=torch.from_numpy(depth_batch["rgb"]),
-                lidar_maps=torch.from_numpy(depth_batch["lidar_maps"]),
+                lidar_maps=torch.from_numpy(lidar_maps),
                 depth_target=torch.from_numpy(depth_batch["depth_target"]),
                 loss_mask=torch.from_numpy(depth_batch["loss_mask"]),
                 device=device,
@@ -803,6 +836,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
             device=device,
             max_depth_m=max_depth_m,
             beta=beta,
+            lidar_mode=lidar_mode,
         )
         metrics.append(
             EpochMetrics(

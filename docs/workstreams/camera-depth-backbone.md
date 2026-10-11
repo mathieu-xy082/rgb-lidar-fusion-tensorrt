@@ -4,9 +4,9 @@ Branch: `ec/camera-depth-backbone`
 
 Parent branch: `main`
 
-Status: v1 implementation and meaningful CPU/GPU smoke complete; validation
-metrics and their analysis notebook are implemented, while sensitivity analysis
-and a clean multi-epoch GPU run remain.
+Status: v1 implementation, validation metrics, analysis notebook, and clean
+multi-epoch GPU runs are complete; sensitivity and dense-depth validation
+remain.
 
 Related documents:
 
@@ -136,10 +136,31 @@ enough to feed the BEV lift.
   `notebooks/03_camera_depth_training_analysis.ipynb`.
 - [x] Add a notebook GPU preflight that blocks training on driver recovery,
   insufficient free memory, competing CUDA processes, or a failed CUDA probe.
+- [x] Add a reproducible sparse-versus-enriched input ablation path.
+- [x] Run the sparse-input ablation and record whether splatting improves
+  held-out validation MAE/RMSE.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
-- [ ] Repeat a clean GPU run after the recorded Xid 62 failure.
+- [x] Repeat a clean GPU run after the recorded Xid 62 failure.
 - [ ] Document what sparse holdout supervision can and cannot establish about
   dense depth quality.
+
+### Splatting ablation result
+
+The matched five-epoch GPU runs completed on 2026-10-11 with seed 13, the same
+51/13 train/validation split, and the same fixed validation holdout masks. Both
+runs reached their best validation MAE at epoch 4:
+
+```text
+input mode   best MAE   best RMSE
+sparse        3.513 m     5.634 m
+enriched      1.302 m     3.031 m
+```
+
+Adding `depth_expanded` and `confidence` reduced MAE by 2.211 m (63%) and RMSE
+by 2.603 m (46%) in this run. The enriched model remained better at every
+epoch. This is strong evidence that splatting helps the current architecture on
+held-out LiDAR reconstruction, but it is still a single-seed result and does
+not validate depth at pixels without LiDAR ground truth.
 
 The epoch metrics written to `metrics.json` and `metrics.csv` now contain:
 

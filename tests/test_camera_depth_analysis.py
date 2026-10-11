@@ -16,6 +16,7 @@ from rgb_lidar_fusion.camera_depth_analysis import (
     load_camera_depth_checkpoint,
     load_camera_depth_metrics,
     plot_camera_depth_metrics,
+    plot_camera_depth_ablation,
     plot_camera_depth_sample,
     require_gpu_ready,
     run_gpu_preflight,
@@ -99,6 +100,25 @@ def test_load_camera_depth_checkpoint_restores_model_and_metadata(tmp_path) -> N
     assert not loaded.model.training
 
 
+def test_load_camera_depth_checkpoint_restores_sparse_input_mode(tmp_path) -> None:
+    model = CameraDepthModel(lidar_mode="sparse")
+    checkpoint_path = tmp_path / "sparse.pt"
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "config": {"lidar_mode": "sparse"},
+            "epoch": 1,
+            "step": 2,
+        },
+        checkpoint_path,
+    )
+
+    loaded = load_camera_depth_checkpoint(checkpoint_path, device="cpu")
+
+    assert loaded.model.lidar_mode == "sparse"
+    assert loaded.model.lidar_channels == 6
+
+
 def test_analyze_camera_depth_sample_returns_aligned_metric_maps() -> None:
     torch.manual_seed(17)
     model = CameraDepthModel()
@@ -134,6 +154,12 @@ def test_camera_depth_plot_helpers_return_figures() -> None:
     import matplotlib.pyplot as plt
 
     metric_figure = plot_camera_depth_metrics([_metric_row(1), _metric_row(2)])
+    ablation_figure = plot_camera_depth_ablation(
+        {
+            "sparse": [_metric_row(1), _metric_row(2)],
+            "enriched": [_metric_row(1), _metric_row(2)],
+        }
+    )
     mask = np.zeros((4, 6), dtype=bool)
     mask[1, 2] = True
     target = np.full((4, 6), np.nan, dtype=np.float32)
@@ -152,8 +178,10 @@ def test_camera_depth_plot_helpers_return_figures() -> None:
     sample_figure = plot_camera_depth_sample(analysis)
 
     assert len(metric_figure.axes) == 2
+    assert len(ablation_figure.axes) == 2
     assert len(sample_figure.axes) == 11
     plt.close(metric_figure)
+    plt.close(ablation_figure)
     plt.close(sample_figure)
 
 

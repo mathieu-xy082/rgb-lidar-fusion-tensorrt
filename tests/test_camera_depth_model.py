@@ -46,6 +46,17 @@ def test_camera_depth_model_preserves_odd_input_resolution() -> None:
     assert torch.isfinite(prediction).all()
 
 
+def test_camera_depth_model_accepts_sparse_lidar_input() -> None:
+    model = CameraDepthModel(lidar_mode="sparse")
+    rgb = torch.zeros((2, 3, 15, 21), dtype=torch.float32)
+    lidar_maps = torch.zeros((2, 6, 15, 21), dtype=torch.float32)
+
+    prediction = model(rgb, lidar_maps)
+
+    assert prediction.shape == (2, 1, 15, 21)
+    assert torch.isfinite(prediction).all()
+
+
 def test_masked_depth_loss_uses_only_selected_pixels_and_rejects_empty_mask() -> None:
     prediction = torch.tensor([[[[0.0, 100.0], [0.0, 0.0]]]])
     target = torch.tensor([[[[1.0, -100.0], [0.0, 0.0]]]])
@@ -172,3 +183,24 @@ def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> No
         torch.equal(before, after)
         for before, after in zip(parameters_before, model.parameters())
     )
+
+
+def test_camera_depth_validation_supports_sparse_lidar_ablation() -> None:
+    model = CameraDepthModel(lidar_mode="sparse")
+
+    metrics = evaluate_camera_depth(
+        model=model,
+        dataset=[_item(0), _item(1)],
+        indices=[0, 1],
+        batch_size=2,
+        holdout_fraction=0.4,
+        holdout_seed=101,
+        splatting_config=SplattingConfig(radius_px=1, sigma_px=1.0),
+        device=torch.device("cpu"),
+        max_depth_m=80.0,
+        beta=0.1,
+        lidar_mode="sparse",
+    )
+
+    assert metrics.pixel_count == 4
+    assert np.isfinite(metrics.mae_m)

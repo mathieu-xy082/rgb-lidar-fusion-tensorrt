@@ -25,3 +25,7 @@ The camera-depth notebook does not start training on `Run All` by default. Set
 directory have been reviewed. Before training, its GPU preflight reports the
 driver recovery state, free memory, competing CUDA processes, and the result of
 a synchronized CUDA smoke test. A failed preflight blocks GPU training.
+
+Set `RUN_SPLATTING_ABLATION = True` to train the sparse-input counterpart of
+the primary enriched run. The notebook then compares their best held-out
+MAE/RMSE using the same dataset split, holdout seeds, and hyperparameters.

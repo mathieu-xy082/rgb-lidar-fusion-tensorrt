@@ -154,8 +154,20 @@ def test_validate_camera_depth_config_accepts_validation_split_settings() -> Non
             "validation_fraction": 0.2,
             "split_seed": 13,
             "validation_holdout_seed": 1013,
+            "lidar_mode": "sparse",
         }
     )
+
+
+def test_validate_camera_depth_config_rejects_unknown_lidar_mode() -> None:
+    with pytest.raises(ValueError, match="lidar_mode must be one of"):
+        validate_camera_depth_training_config(
+            {
+                "dataset": "kitti_camera_depth",
+                "data_root": "data/kitti/training",
+                "lidar_mode": "dense",
+            }
+        )
 
 
 def test_validate_camera_depth_config_rejects_invalid_validation_split_settings() -> None:
@@ -380,9 +392,11 @@ def _write_training_kitti_frame(root: Path, sample_id: str, depth_offset: float)
     )
 
 
+@pytest.mark.parametrize("lidar_mode", ("sparse", "enriched"))
 def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     tmp_path,
     monkeypatch,
+    lidar_mode,
 ) -> None:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     data_root = tmp_path / "kitti" / "training"
@@ -390,7 +404,7 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     _write_training_kitti_frame(data_root, "000001", 0.5)
     _write_training_kitti_frame(data_root, "000002", 1.0)
     _write_training_kitti_frame(data_root, "000003", 1.5)
-    output_dir = tmp_path / "camera-depth-training"
+    output_dir = tmp_path / f"camera-depth-training-{lidar_mode}"
     config = {
         "dataset": "kitti_camera_depth",
         "data_root": str(data_root),
@@ -399,6 +413,7 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
         "split_seed": 37,
         "validation_holdout_seed": 1037,
         "device": "cpu",
+        "lidar_mode": lidar_mode,
         "epochs": 1,
         "batch_size": 2,
         "learning_rate": 0.001,
@@ -444,6 +459,7 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     metadata = json.loads((output_dir / "run_metadata.json").read_text())
     assert [row["epoch"] for row in metrics] == [1, 2]
     assert metadata["dataset"] == "kitti_camera_depth"
+    assert metadata["lidar_mode"] == lidar_mode
     assert metadata["sample_count"] == 4
     assert metadata["image_shape"] == [12, 16]
     assert metadata["split"]["seed"] == 37

@@ -18,6 +18,7 @@ from .training import (
     DEPTH_EXPANDED_CHANNEL_INDEX,
     SPLAT_CONFIDENCE_CHANNEL_INDEX,
     prepare_camera_depth_evaluation_batch,
+    select_camera_depth_lidar_maps,
     select_device,
 )
 
@@ -332,13 +333,14 @@ def load_camera_depth_checkpoint(
     if "model_state_dict" not in payload:
         raise ValueError("checkpoint does not contain model_state_dict.")
 
-    model = CameraDepthModel(lidar_mode="enriched")
+    config = dict(payload.get("config", {}))
+    model = CameraDepthModel(lidar_mode=str(config.get("lidar_mode", "enriched")))
     model.load_state_dict(payload["model_state_dict"])
     model.to(selected_device)
     model.eval()
     return LoadedCameraDepthCheckpoint(
         model=model,
-        config=dict(payload.get("config", {})),
+        config=config,
         epoch=int(payload.get("epoch", 0)),
         step=int(payload.get("step", 0)),
         device=selected_device,
@@ -372,7 +374,13 @@ def analyze_camera_depth_sample(
         splatting_config=splatting_config,
     )
     rgb = torch.from_numpy(depth_batch["rgb"]).to(device)
-    lidar_maps = torch.from_numpy(depth_batch["lidar_maps"]).to(device)
+    prepared_lidar_maps = depth_batch["lidar_maps"]
+    lidar_maps = torch.from_numpy(
+        select_camera_depth_lidar_maps(
+            prepared_lidar_maps,
+            lidar_mode=str(model.lidar_mode),
+        )
+    ).to(device)
     was_training = model.training
     model.to(device)
     model.eval()
@@ -460,6 +468,44 @@ def plot_camera_depth_metrics(metrics: list[dict[str, Any]]):
     axes[1].set(title="Held-out depth error", xlabel="Epoch", ylabel="Meters")
     axes[1].grid(alpha=0.25)
     axes[1].legend()
+    return figure
+
+
+def plot_camera_depth_ablation(
+    metrics_by_mode: dict[str, list[dict[str, Any]]],
+):
+    """Compare validation errors for camera-depth LiDAR input modes."""
+
+    if set(metrics_by_mode) != {"sparse", "enriched"}:
+        raise ValueError("ablation metrics must contain sparse and enriched runs.")
+    if not all(
+        has_camera_depth_validation_metrics(metrics)
+        for metrics in metrics_by_mode.values()
+    ):
+        raise ValueError("every ablation run must contain validation metrics.")
+
+    import matplotlib.pyplot as plt
+
+    figure, axes = plt.subplots(1, 2, figsize=(13, 4.5), constrained_layout=True)
+    for mode, metrics in metrics_by_mode.items():
+        epochs = [int(row["epoch"]) for row in metrics]
+        axes[0].plot(
+            epochs,
+            [row["val_mae_m"] for row in metrics],
+            marker="o",
+            label=mode,
+        )
+        axes[1].plot(
+            epochs,
+            [row["val_rmse_m"] for row in metrics],
+            marker="o",
+            label=mode,
+        )
+    axes[0].set(title="Held-out MAE", xlabel="Epoch", ylabel="Meters")
+    axes[1].set(title="Held-out RMSE", xlabel="Epoch", ylabel="Meters")
+    for axis in axes:
+        axis.grid(alpha=0.25)
+        axis.legend()
     return figure
 
 

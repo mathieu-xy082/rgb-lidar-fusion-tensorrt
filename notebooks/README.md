@@ -22,4 +22,6 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run notebooks
 
 The camera-depth notebook does not start training on `Run All` by default. Set
 `RUN_TRAINING = True` in its parameter cell when the configuration and output
-directory have been reviewed.
+directory have been reviewed. Before training, its GPU preflight reports the
+driver recovery state, free memory, competing CUDA processes, and the result of
+a synchronized CUDA smoke test. A failed preflight blocks GPU training.

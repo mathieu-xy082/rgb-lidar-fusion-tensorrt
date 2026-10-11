@@ -134,6 +134,8 @@ enough to feed the BEV lift.
 - [x] Compare model MAE/RMSE against the leakage-safe splatted-depth baseline.
 - [x] Visualize depth predictions, errors, holdout targets, and confidence in
   `notebooks/03_camera_depth_training_analysis.ipynb`.
+- [x] Add a notebook GPU preflight that blocks training on driver recovery,
+  insufficient free memory, competing CUDA processes, or a failed CUDA probe.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
 - [ ] Repeat a clean GPU run after the recorded Xid 62 failure.
 - [ ] Document what sparse holdout supervision can and cannot establish about

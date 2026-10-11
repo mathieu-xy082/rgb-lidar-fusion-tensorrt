@@ -7,14 +7,18 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
+import rgb_lidar_fusion.camera_depth_analysis as camera_depth_analysis
 from rgb_lidar_fusion.camera_depth_analysis import (
     CameraDepthSampleAnalysis,
+    GpuPreflightReport,
     analyze_camera_depth_sample,
     has_camera_depth_validation_metrics,
     load_camera_depth_checkpoint,
     load_camera_depth_metrics,
     plot_camera_depth_metrics,
     plot_camera_depth_sample,
+    require_gpu_ready,
+    run_gpu_preflight,
 )
 from rgb_lidar_fusion.camera_depth_model import CameraDepthModel
 from rgb_lidar_fusion.lidar_splatting import SplattingConfig
@@ -151,3 +155,52 @@ def test_camera_depth_plot_helpers_return_figures() -> None:
     assert len(sample_figure.axes) == 11
     plt.close(metric_figure)
     plt.close(sample_figure)
+
+
+def test_gpu_preflight_accepts_healthy_idle_gpu_without_running_cuda(
+    monkeypatch,
+) -> None:
+    def fake_nvidia_smi(*arguments: str) -> str:
+        if arguments[0].startswith("--query-gpu="):
+            return "RTX Test, 575.64.03, 4096, 700, 3396, 2\n"
+        if arguments[0].startswith("--query-compute-apps="):
+            return ""
+        assert arguments == ("-q",)
+        return "GPU Recovery Action : None\n"
+
+    monkeypatch.setattr(camera_depth_analysis, "_run_nvidia_smi", fake_nvidia_smi)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    report = run_gpu_preflight(
+        minimum_free_memory_mib=2500,
+        run_smoke_test=False,
+    )
+
+    assert report.ready
+    assert report.device_name == "RTX Test"
+    assert report.memory_free_mib == 3396
+    assert report.recovery_action == "None"
+    assert report.issues == ()
+
+
+def test_gpu_preflight_guard_reports_reset_memory_and_process_issues() -> None:
+    report = GpuPreflightReport(
+        ready=False,
+        torch_version="2.13.0+cu129",
+        cuda_available=False,
+        device_name="RTX Test",
+        driver_version="575.64.03",
+        memory_total_mib=4096,
+        memory_used_mib=3000,
+        memory_free_mib=900,
+        utilization_percent=94,
+        recovery_action="Reset",
+        other_compute_processes=(),
+        smoke_test_passed=False,
+        issues=("NVIDIA reports recovery action 'Reset'.",),
+    )
+
+    with pytest.raises(RuntimeError, match="GPU preflight failed") as error:
+        require_gpu_ready(report)
+
+    assert "recovery_action=Reset" in str(error.value)

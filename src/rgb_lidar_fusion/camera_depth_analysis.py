@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +30,15 @@ VALIDATION_METRIC_NAMES = (
     "val_splat_rmse_m",
     "val_splat_coverage",
     "val_pixel_count",
+)
+
+NVIDIA_GPU_QUERY_FIELDS = (
+    "name",
+    "driver_version",
+    "memory.total",
+    "memory.used",
+    "memory.free",
+    "utilization.gpu",
 )
 
 
@@ -54,6 +66,216 @@ class CameraDepthSampleAnalysis:
     holdout_target_m: np.ndarray
     holdout_absolute_error_m: np.ndarray
     holdout_mask: np.ndarray
+
+
+@dataclass(frozen=True)
+class GpuProcess:
+    """One CUDA compute process reported by NVIDIA SMI."""
+
+    pid: int
+    name: str
+    memory_mib: int
+
+
+@dataclass(frozen=True)
+class GpuPreflightReport:
+    """GPU readiness diagnostics collected before notebook training."""
+
+    ready: bool
+    torch_version: str
+    cuda_available: bool
+    device_name: str | None
+    driver_version: str | None
+    memory_total_mib: int | None
+    memory_used_mib: int | None
+    memory_free_mib: int | None
+    utilization_percent: int | None
+    recovery_action: str | None
+    other_compute_processes: tuple[GpuProcess, ...]
+    smoke_test_passed: bool
+    issues: tuple[str, ...]
+
+    def format(self) -> str:
+        """Return a compact multi-line summary suitable for a notebook cell."""
+
+        lines = [
+            f"ready={self.ready}",
+            f"PyTorch={self.torch_version} cuda_available={self.cuda_available}",
+        ]
+        if self.device_name is not None:
+            lines.append(
+                f"GPU={self.device_name} driver={self.driver_version} "
+                f"memory={self.memory_used_mib}/{self.memory_total_mib} MiB "
+                f"free={self.memory_free_mib} MiB utilization={self.utilization_percent}%"
+            )
+        if self.recovery_action is not None:
+            lines.append(f"recovery_action={self.recovery_action}")
+        if self.other_compute_processes:
+            processes = ", ".join(
+                f"pid={process.pid} {process.name} ({process.memory_mib} MiB)"
+                for process in self.other_compute_processes
+            )
+            lines.append(f"other_compute_processes={processes}")
+        lines.extend(f"ISSUE: {issue}" for issue in self.issues)
+        return "\n".join(lines)
+
+
+def _run_nvidia_smi(*arguments: str) -> str:
+    completed = subprocess.run(
+        ["nvidia-smi", *arguments],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return completed.stdout
+
+
+def _parse_nvidia_gpu_row(output: str) -> dict[str, Any]:
+    rows = [row.strip() for row in output.splitlines() if row.strip()]
+    if not rows:
+        raise ValueError("nvidia-smi returned no GPU rows.")
+    values = [value.strip() for value in rows[0].split(",")]
+    if len(values) != len(NVIDIA_GPU_QUERY_FIELDS):
+        raise ValueError("nvidia-smi returned an unexpected GPU query schema.")
+    return {
+        "device_name": values[0],
+        "driver_version": values[1],
+        "memory_total_mib": int(values[2]),
+        "memory_used_mib": int(values[3]),
+        "memory_free_mib": int(values[4]),
+        "utilization_percent": int(values[5]),
+    }
+
+
+def _parse_nvidia_compute_processes(output: str) -> tuple[GpuProcess, ...]:
+    processes = []
+    for row in output.splitlines():
+        if not row.strip():
+            continue
+        values = [value.strip() for value in row.split(",", maxsplit=2)]
+        if len(values) != 3:
+            raise ValueError("nvidia-smi returned an unexpected process schema.")
+        processes.append(
+            GpuProcess(
+                pid=int(values[0]),
+                name=values[1],
+                memory_mib=int(values[2]),
+            )
+        )
+    return tuple(processes)
+
+
+def _parse_nvidia_recovery_action(output: str) -> str | None:
+    match = re.search(r"GPU Recovery Action\s*:\s*([^\r\n]+)", output)
+    return None if match is None else match.group(1).strip()
+
+
+def run_gpu_preflight(
+    *,
+    minimum_free_memory_mib: int = 2500,
+    run_smoke_test: bool = True,
+) -> GpuPreflightReport:
+    """Check NVIDIA/PyTorch state and optionally run a synchronized CUDA probe."""
+
+    import torch
+
+    if minimum_free_memory_mib <= 0:
+        raise ValueError("minimum_free_memory_mib must be positive.")
+
+    issues: list[str] = []
+    gpu_status: dict[str, Any] = {}
+    recovery_action = None
+    processes: tuple[GpuProcess, ...] = ()
+    try:
+        query_fields = ",".join(NVIDIA_GPU_QUERY_FIELDS)
+        gpu_status = _parse_nvidia_gpu_row(
+            _run_nvidia_smi(
+                f"--query-gpu={query_fields}",
+                "--format=csv,noheader,nounits",
+            )
+        )
+        processes = _parse_nvidia_compute_processes(
+            _run_nvidia_smi(
+                "--query-compute-apps=pid,process_name,used_gpu_memory",
+                "--format=csv,noheader,nounits",
+            )
+        )
+        recovery_action = _parse_nvidia_recovery_action(_run_nvidia_smi("-q"))
+    except (FileNotFoundError, subprocess.SubprocessError, ValueError) as exc:
+        issues.append(f"NVIDIA SMI diagnostics failed: {exc}")
+
+    other_processes = tuple(process for process in processes if process.pid != os.getpid())
+    if other_processes:
+        issues.append("another CUDA compute process is already using the GPU.")
+
+    memory_free_mib = gpu_status.get("memory_free_mib")
+    if memory_free_mib is not None and memory_free_mib < minimum_free_memory_mib:
+        issues.append(
+            f"only {memory_free_mib} MiB GPU memory is free; "
+            f"at least {minimum_free_memory_mib} MiB is required."
+        )
+
+    if recovery_action is not None and recovery_action.lower() not in {
+        "none",
+        "n/a",
+        "not required",
+    }:
+        issues.append(f"NVIDIA reports recovery action {recovery_action!r}.")
+
+    try:
+        cuda_available = bool(torch.cuda.is_available())
+    except Exception as exc:  # pragma: no cover - depends on broken driver state.
+        cuda_available = False
+        issues.append(f"PyTorch CUDA availability check failed: {exc}")
+    if not cuda_available:
+        issues.append("PyTorch reports CUDA as unavailable.")
+
+    smoke_test_passed = False
+    if run_smoke_test and cuda_available and not issues:
+        probe = None
+        try:
+            probe = torch.arange(1024, dtype=torch.float32, device="cuda")
+            probe_result = probe.square().sum()
+            torch.cuda.synchronize()
+            if not torch.isfinite(probe_result):
+                raise ValueError("CUDA probe returned a non-finite result.")
+            smoke_test_passed = True
+        except Exception as exc:  # pragma: no cover - depends on real CUDA failures.
+            issues.append(f"synchronized CUDA smoke test failed: {exc}")
+        finally:
+            del probe
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+    elif not run_smoke_test and cuda_available and not issues:
+        smoke_test_passed = True
+
+    return GpuPreflightReport(
+        ready=not issues and smoke_test_passed,
+        torch_version=str(torch.__version__),
+        cuda_available=cuda_available,
+        device_name=gpu_status.get("device_name"),
+        driver_version=gpu_status.get("driver_version"),
+        memory_total_mib=gpu_status.get("memory_total_mib"),
+        memory_used_mib=gpu_status.get("memory_used_mib"),
+        memory_free_mib=memory_free_mib,
+        utilization_percent=gpu_status.get("utilization_percent"),
+        recovery_action=recovery_action,
+        other_compute_processes=other_processes,
+        smoke_test_passed=smoke_test_passed,
+        issues=tuple(issues),
+    )
+
+
+def require_gpu_ready(report: GpuPreflightReport) -> None:
+    """Stop notebook training when the GPU preflight did not pass."""
+
+    if not report.ready:
+        raise RuntimeError(
+            "GPU preflight failed; do not start training.\n" + report.format()
+        )
 
 
 def load_camera_depth_metrics(path: str | Path) -> list[dict[str, Any]]:

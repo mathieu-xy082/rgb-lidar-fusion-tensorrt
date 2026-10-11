@@ -129,12 +129,16 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G dev -G ml
 PyTorch est actuellement fixé à `2.13.0+cu129`. Une machine sans GPU NVIDIA
 peut exécuter les tests et les smoke trainings sur CPU.
 
-Pour analyser interactivement les entraînements camera-depth :
+Pour vérifier la projection LiDAR, inspecter l'entrée hybride et analyser
+interactivement les entraînements camera-depth :
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm install -G ml -G visualization -G notebook
 PDM_IGNORE_ACTIVE_VENV=1 pdm run notebooks
 ```
+
+Suivre les notebooks `01`, `02`, puis `03` décrits dans leur
+[README](notebooks/README.md).
 
 ## Commandes principales
 

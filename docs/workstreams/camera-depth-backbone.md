@@ -582,6 +582,26 @@ Xid 62 and left the GPU in `Reset Required` state, so mixed precision is not
 enabled in the committed configuration. The machine must be restarted before
 further CUDA validation.
 
+### Interrupted 512-frame GPU run
+
+On 2026-10-13, the matched random-point pilot at `320x1024`, batch size 1,
+failed after its first completed epoch. Kernel logs reported Xid 62 followed
+by Xid 154, and NVIDIA SMI reported `GPU Recovery Action: Reset`. This run used
+FP32 without mixed precision; the exact trigger has not been established.
+
+The last checkpoint was inspected on CPU: epoch 1, step 410, finite model
+weights, and optimizer state present. A separate copy was retained under
+`results/training/kitti_camera_depth_random_holdout_512/checkpoints/` before
+recovery. Training can resume from that completed epoch once the GPU is healthy;
+progress within the interrupted epoch was not saved.
+
+The failure exposed delayed sidecar persistence: metrics and run metadata had
+only been written at the end of the entire run, so epoch-1 metrics were not
+retained despite the valid checkpoint. The camera-depth runner now writes JSON,
+CSV, and metadata after each completed epoch alongside its checkpoint. CPU
+tests simulate a later-epoch failure and verify that completed metric rows
+survive and remain intact after resume.
+
 ## Acceptance criteria
 
 - `CameraDepthModel` returns `depth_pred: [B, 1, H, W]`.

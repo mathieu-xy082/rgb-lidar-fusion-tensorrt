@@ -563,6 +563,63 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     assert metrics[0]["val_holdout_fraction"] == first.metrics[0].val_holdout_fraction
 
 
+@pytest.mark.parametrize("holdout_mode", ("random_points", "spatial_blocks"))
+def test_camera_depth_interruption_preserves_epoch_history_and_can_resume(
+    tmp_path, monkeypatch, holdout_mode,
+) -> None:
+    import json
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    data_root = tmp_path / "kitti/training"
+    for index in range(4):
+        _write_training_kitti_frame(data_root, f"{index:06d}", index * 0.5)
+    output_dir = tmp_path / "interrupted-run"
+    config = {
+        "dataset": "kitti_camera_depth", "data_root": str(data_root),
+        "sample_count": 4, "height": 12, "width": 16,
+        "device": "cpu", "seed": 29, "epochs": 3, "batch_size": 2,
+        "holdout_fraction": 0.4, "validation_fraction": 0.5,
+        "holdout_mode": holdout_mode,
+        "block_height_min_px": 2, "block_height_max_px": 3,
+        "block_width_min_px": 3, "block_width_max_px": 5,
+        "splat_radius_px": 1, "output_dir": str(output_dir),
+    }
+    original_step = training.train_camera_depth_step
+    calls = 0
+
+    def fail_in_third_epoch(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise RuntimeError("simulated accelerator failure")
+        return original_step(**kwargs)
+
+    monkeypatch.setattr(training, "train_camera_depth_step", fail_in_third_epoch)
+    with pytest.raises(RuntimeError, match="simulated accelerator failure"):
+        run_kitti_camera_depth_training(config)
+
+    checkpoint_path = output_dir / "checkpoints/latest.pt"
+    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert payload["epoch"] == payload["step"] == 2
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+    assert [row["epoch"] for row in metrics] == [1, 2]
+    assert len((output_dir / "metrics.csv").read_text().splitlines()) == 3
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert metadata["epochs_completed"] == 2
+
+    monkeypatch.setattr(training, "train_camera_depth_step", original_step)
+    resumed = run_kitti_camera_depth_training({**config, "resume_from": str(checkpoint_path)})
+
+    assert resumed.start_epoch == 2
+    assert resumed.metrics[0].epoch == resumed.metrics[0].step == 3
+    history = json.loads((output_dir / "metrics.json").read_text())
+    assert [row["epoch"] for row in history] == [1, 2, 3]
+    assert history[:2] == metrics
+    assert len((output_dir / "metrics.csv").read_text().splitlines()) == 4
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert metadata["epochs_completed"] == 3
+
+
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:
     config_path = tmp_path / "kitti_tiny.yaml"
     config_path.write_text(

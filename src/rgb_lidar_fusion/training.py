@@ -944,26 +944,30 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
             step=step,
             config=config,
         )
-
-    write_metrics(output_dir, metrics, append=bool(resume_from))
-    write_run_metadata(
-        output_dir,
-        config=config,
-        device=str(device),
-        device_diagnostic=device_diagnostic,
-        checkpoint_path=checkpoint_path,
-        start_epoch=start_epoch,
-        epochs_completed=epochs,
-        split_metadata={
-            "seed": split_seed,
-            "holdout_seed": validation_holdout_seed,
-            "validation_fraction": validation_fraction,
-            "train_sample_count": len(train_indices),
-            "validation_sample_count": len(validation_indices),
-            "train_indices": train_indices,
-            "validation_indices": validation_indices,
-        },
-    )
+        # Persist each completed epoch before the next CUDA work can fail.
+        write_metrics(
+            output_dir,
+            [metrics[-1]],
+            append=bool(resume_from) or epoch > start_epoch,
+        )
+        write_run_metadata(
+            output_dir,
+            config=config,
+            device=str(device),
+            device_diagnostic=device_diagnostic,
+            checkpoint_path=checkpoint_path,
+            start_epoch=start_epoch,
+            epochs_completed=epoch + 1,
+            split_metadata={
+                "seed": split_seed,
+                "holdout_seed": validation_holdout_seed,
+                "validation_fraction": validation_fraction,
+                "train_sample_count": len(train_indices),
+                "validation_sample_count": len(validation_indices),
+                "train_indices": train_indices,
+                "validation_indices": validation_indices,
+            },
+        )
     return TrainingRunResult(
         device=str(device),
         device_diagnostic=device_diagnostic,

@@ -27,6 +27,11 @@ directory have been reviewed. Before training, its GPU preflight reports the
 driver recovery state, free memory, competing CUDA processes, and the result of
 a synchronized CUDA smoke test. A failed preflight blocks GPU training.
 
+The default parameters select the 512-frame random-point pilot on CUDA with a
+batch size of 1. To continue an interrupted run, set `RESUME_EXISTING = True`;
+`EPOCHS` is the total target epoch count, including epochs already completed.
+Metrics and run metadata are persisted after every completed camera-depth epoch.
+
 Set `RUN_SPLATTING_ABLATION = True` to train the sparse-input counterpart of
 the primary enriched run. The notebook then compares their best held-out
 MAE/RMSE using the same dataset split, holdout seeds, and hyperparameters.

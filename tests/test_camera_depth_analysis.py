@@ -232,3 +232,114 @@ def test_gpu_preflight_guard_reports_reset_memory_and_process_issues() -> None:
         require_gpu_ready(report)
 
     assert "recovery_action=Reset" in str(error.value)
+
+
+def test_gpu_preflight_releases_cache_before_checking_free_memory(monkeypatch) -> None:
+    events = []
+    reserved = 1600 * 2**20
+
+    def fake_nvidia_smi(*arguments: str) -> str:
+        if arguments[0].startswith("--query-gpu="):
+            events.append("memory_query")
+            free = 1100 if reserved else 2700
+            return f"RTX Test, 575.64.03, 4096, {4096 - free}, {free}, 2\n"
+        if arguments[0].startswith("--query-compute-apps="):
+            return ""
+        return "GPU Recovery Action : None\n"
+
+    def empty_cache() -> None:
+        nonlocal reserved
+        events.append("empty_cache")
+        reserved = 0
+
+    monkeypatch.setattr(camera_depth_analysis, "_run_nvidia_smi", fake_nvidia_smi)
+    monkeypatch.setattr(camera_depth_analysis.gc, "collect", lambda: events.append("gc"))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda: 0)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda: reserved)
+    monkeypatch.setattr(torch.cuda, "empty_cache", empty_cache)
+
+    report = run_gpu_preflight(run_smoke_test=False, release_cached_memory=True)
+
+    assert report.ready
+    assert events == ["memory_query", "gc", "empty_cache", "memory_query"]
+    assert report.memory_free_mib == 2700
+    assert report.torch_memory_allocated_mib == 0.0
+    assert report.torch_memory_reserved_mib == 0.0
+    assert report.torch_cache_released_mib == 1600.0
+    assert "released_cache=1600.0 MiB" in report.format()
+
+
+def test_gpu_preflight_keeps_guard_when_live_allocations_remain(monkeypatch) -> None:
+    def fake_nvidia_smi(*arguments: str) -> str:
+        if arguments[0].startswith("--query-gpu="):
+            return "RTX Test, 575.64.03, 4096, 2996, 1100, 2\n"
+        if arguments[0].startswith("--query-compute-apps="):
+            return ""
+        return "GPU Recovery Action : None\n"
+
+    monkeypatch.setattr(camera_depth_analysis, "_run_nvidia_smi", fake_nvidia_smi)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.cuda, "memory_allocated", lambda: 1500 * 2**20)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda: 1600 * 2**20)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+
+    report = run_gpu_preflight(run_smoke_test=False, release_cached_memory=True)
+
+    assert not report.ready
+    assert report.torch_memory_allocated_mib == 1500.0
+    assert report.torch_cache_released_mib == 0.0
+    assert any("at least 2500 MiB" in issue for issue in report.issues)
+
+
+@pytest.mark.parametrize("recovery_action", ["Reset", "None"])
+def test_gpu_preflight_skips_cache_operations_when_reset_or_uninitialized(
+    monkeypatch, recovery_action,
+) -> None:
+    def fake_nvidia_smi(*arguments: str) -> str:
+        if arguments[0].startswith("--query-gpu="):
+            return "RTX Test, 575.64.03, 4096, 700, 3396, 2\n"
+        if arguments[0].startswith("--query-compute-apps="):
+            return ""
+        return f"GPU Recovery Action : {recovery_action}\n"
+
+    def unexpected_cuda_call(*args, **kwargs):
+        pytest.fail("CUDA memory operations must be skipped")
+
+    monkeypatch.setattr(camera_depth_analysis, "_run_nvidia_smi", fake_nvidia_smi)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: recovery_action == "Reset")
+    monkeypatch.setattr(torch.cuda, "empty_cache", unexpected_cuda_call)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", unexpected_cuda_call)
+    monkeypatch.setattr(torch.cuda, "memory_allocated", unexpected_cuda_call)
+
+    report = run_gpu_preflight(run_smoke_test=False, release_cached_memory=True)
+
+    assert report.ready == (recovery_action == "None")
+    assert report.torch_cache_released_mib is None
+
+
+def test_gpu_preflight_stops_after_cache_cleanup_failure(monkeypatch) -> None:
+    def fake_nvidia_smi(*arguments: str) -> str:
+        if arguments[0].startswith("--query-gpu="):
+            return "RTX Test, 575.64.03, 4096, 700, 3396, 2\n"
+        if arguments[0].startswith("--query-compute-apps="):
+            return ""
+        return "GPU Recovery Action : None\n"
+
+    def fail_empty_cache():
+        raise RuntimeError("simulated CUDA failure")
+
+    monkeypatch.setattr(camera_depth_analysis, "_run_nvidia_smi", fake_nvidia_smi)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.cuda, "memory_reserved", lambda: 1600 * 2**20)
+    monkeypatch.setattr(torch.cuda, "empty_cache", fail_empty_cache)
+    monkeypatch.setattr(torch, "arange", lambda *args, **kwargs: pytest.fail("no CUDA retry"))
+
+    report = run_gpu_preflight(release_cached_memory=True)
+
+    assert not report.ready
+    assert any("simulated CUDA failure" in issue for issue in report.issues)

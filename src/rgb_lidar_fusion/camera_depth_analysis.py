@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import re
@@ -102,6 +103,9 @@ class GpuPreflightReport:
     other_compute_processes: tuple[GpuProcess, ...]
     smoke_test_passed: bool
     issues: tuple[str, ...]
+    torch_memory_allocated_mib: float | None = None
+    torch_memory_reserved_mib: float | None = None
+    torch_cache_released_mib: float | None = None
 
     def format(self) -> str:
         """Return a compact multi-line summary suitable for a notebook cell."""
@@ -118,6 +122,14 @@ class GpuPreflightReport:
             )
         if self.recovery_action is not None:
             lines.append(f"recovery_action={self.recovery_action}")
+        if self.torch_memory_allocated_mib is not None:
+            memory_line = (
+                f"PyTorch memory: allocated={self.torch_memory_allocated_mib:.1f} MiB "
+                f"reserved={self.torch_memory_reserved_mib:.1f} MiB"
+            )
+            if self.torch_cache_released_mib is not None:
+                memory_line += f" released_cache={self.torch_cache_released_mib:.1f} MiB"
+            lines.append(memory_line)
         if self.other_compute_processes:
             processes = ", ".join(
                 f"pid={process.pid} {process.name} ({process.memory_mib} MiB)"
@@ -183,8 +195,15 @@ def run_gpu_preflight(
     *,
     minimum_free_memory_mib: int = 2500,
     run_smoke_test: bool = True,
+    release_cached_memory: bool = False,
 ) -> GpuPreflightReport:
-    """Check NVIDIA/PyTorch state and optionally run a synchronized CUDA probe."""
+    """Check NVIDIA/PyTorch state and optionally run a synchronized CUDA probe.
+
+    For sequential notebook runs, release_cached_memory collects unreachable
+    Python objects and returns unused allocator blocks before checking free
+    memory. It cannot free live tensors or repair a failed CUDA context. Never
+    call this while training is running in another thread of this process.
+    """
 
     import torch
 
@@ -217,13 +236,6 @@ def run_gpu_preflight(
     if other_processes:
         issues.append("another CUDA compute process is already using the GPU.")
 
-    memory_free_mib = gpu_status.get("memory_free_mib")
-    if memory_free_mib is not None and memory_free_mib < minimum_free_memory_mib:
-        issues.append(
-            f"only {memory_free_mib} MiB GPU memory is free; "
-            f"at least {minimum_free_memory_mib} MiB is required."
-        )
-
     if recovery_action is not None and recovery_action.lower() not in {
         "none",
         "n/a",
@@ -239,9 +251,41 @@ def run_gpu_preflight(
     if not cuda_available:
         issues.append("PyTorch reports CUDA as unavailable.")
 
+    torch_allocated_mib = None
+    torch_reserved_mib = None
+    cache_released_mib = None
+    if cuda_available and not issues and torch.cuda.is_initialized():
+        try:
+            if release_cached_memory:
+                reserved_before = torch.cuda.memory_reserved()
+                gc.collect()
+                torch.cuda.empty_cache()
+                cache_released_mib = max(
+                    0.0, (reserved_before - torch.cuda.memory_reserved()) / 2**20,
+                )
+                # NVIDIA free memory must be measured after returning the cache.
+                gpu_status = _parse_nvidia_gpu_row(
+                    _run_nvidia_smi(
+                        f"--query-gpu={','.join(NVIDIA_GPU_QUERY_FIELDS)}",
+                        "--format=csv,noheader,nounits",
+                    )
+                )
+            torch_allocated_mib = torch.cuda.memory_allocated() / 2**20
+            torch_reserved_mib = torch.cuda.memory_reserved() / 2**20
+        except Exception as exc:  # Includes failures from an unhealthy CUDA context.
+            issues.append(f"PyTorch CUDA memory diagnostics/cleanup failed: {exc}")
+
+    memory_free_mib = gpu_status.get("memory_free_mib")
+    if memory_free_mib is not None and memory_free_mib < minimum_free_memory_mib:
+        issues.append(
+            f"only {memory_free_mib} MiB GPU memory is free; "
+            f"at least {minimum_free_memory_mib} MiB is required."
+        )
+
     smoke_test_passed = False
     if run_smoke_test and cuda_available and not issues:
         probe = None
+        probe_result = None
         try:
             probe = torch.arange(1024, dtype=torch.float32, device="cuda")
             probe_result = probe.square().sum()
@@ -252,11 +296,12 @@ def run_gpu_preflight(
         except Exception as exc:  # pragma: no cover - depends on real CUDA failures.
             issues.append(f"synchronized CUDA smoke test failed: {exc}")
         finally:
-            del probe
-            try:
-                torch.cuda.empty_cache()
-            except Exception:
-                pass
+            del probe, probe_result
+            if smoke_test_passed:
+                try:
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
     elif not run_smoke_test and cuda_available and not issues:
         smoke_test_passed = True
 
@@ -274,6 +319,9 @@ def run_gpu_preflight(
         other_compute_processes=other_processes,
         smoke_test_passed=smoke_test_passed,
         issues=tuple(issues),
+        torch_memory_allocated_mib=torch_allocated_mib,
+        torch_memory_reserved_mib=torch_reserved_mib,
+        torch_cache_released_mib=cache_released_mib,
     )
 
 

@@ -27,6 +27,19 @@ directory have been reviewed. Before training, its GPU preflight reports the
 driver recovery state, free memory, competing CUDA processes, and the result of
 a synchronized CUDA smoke test. A failed preflight blocks GPU training.
 
+The first code cell sets `CUDA_LAUNCH_BLOCKING=1` before importing PyTorch for
+the ongoing GPU investigation. Keep it before imports in a fresh kernel;
+synchronized execution helps locate failures but does not fix driver faults.
+Versioned notebooks contain no saved outputs or execution counters.
+
+Between completed runs, the notebook preflight collects unreachable objects and
+releases unused PyTorch CUDA cache before measuring free memory. The report
+distinguishes memory allocated to live tensors from memory reserved by the
+allocator. This does not delete referenced models/tensors, lower the free-memory
+threshold, or recover a failed GPU. If active allocations remain unexpectedly
+high (for example after a traceback), restart the kernel and rerun setup before
+training. Never run the cleanup concurrently with training.
+
 The default parameters select the 512-frame random-point pilot on CUDA with a
 batch size of 1. To continue an interrupted run, set `RESUME_EXISTING = True`;
 `EPOCHS` is the total target epoch count, including epochs already completed.

@@ -684,6 +684,33 @@ This short synthetic success does not explain the earlier long-run failures;
 the next diagnostic should increase the step count without changing backend,
 input dimensions, or batch size, before returning to KITTI training.
 
+### Notebook memory between completed runs
+
+An idle notebook can retain unused CUDA allocator cache after a successful run.
+The original preflight compared NVIDIA free memory against the safety threshold
+before releasing that cache, potentially blocking a sequential run even though
+PyTorch could reuse the reserved blocks. The notebook now opts into
+`run_gpu_preflight(release_cached_memory=True)`: after driver/process checks,
+it collects unreachable objects, releases unused cache, and refreshes the NVIDIA
+memory measurement. The report separates live PyTorch allocations, reserved
+memory, and the cache released. The 2500 MiB threshold remains unchanged.
+
+This is not a GPU reset or a fix for Xid failures. Referenced tensors and models
+remain allocated; unexpectedly high active memory can require deleting their
+owning references or restarting the kernel. Cleanup is skipped for an unhealthy
+driver or an uninitialized CUDA context and must not run concurrently with
+training in the same process. Regression tests cover remeasurement after cache
+release, retained active allocations, reset/uninitialized states, and stopping
+after a cleanup failure without attempting another CUDA probe.
+
+The notebook user confirmed that cache cleanup restored preflight readiness.
+The resumed random-point run subsequently completed epochs 3 and 4 and saved
+the epoch-4/step-1640 checkpoint. Validation MAE/RMSE were `0.637557 m` /
+`1.737027 m` on 386015 held-out pixels. Epochs 2 through 4 have persisted metric
+rows; epoch-1 metrics remain unavailable from the original interrupted run.
+The pilot still needs its fifth epoch and the matched block-holdout run.
+These successful runs do not establish the cause of the earlier Xid failures.
+
 ## Acceptance criteria
 
 - `CameraDepthModel` returns `depth_pred: [B, 1, H, W]`.

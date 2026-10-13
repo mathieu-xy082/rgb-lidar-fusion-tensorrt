@@ -160,7 +160,7 @@ def validate_training_config(config: dict[str, Any]) -> None:
         raise ValueError("learning_rate must be positive.")
 
 
-def _camera_depth_holdout_options(config: dict[str, Any]) -> dict[str, Any]:
+def camera_depth_holdout_options(config: dict[str, Any]) -> dict[str, Any]:
     """Validate scalar config settings and adapt block ranges to batch options."""
 
     mode = config.get("holdout_mode", "random_points")
@@ -232,7 +232,7 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
     if not 0.0 < holdout_fraction < 1.0:
         raise ValueError("holdout_fraction must be between 0 and 1.")
-    _camera_depth_holdout_options(config)
+    camera_depth_holdout_options(config)
     validation_fraction = float(config.get("validation_fraction", 0.2))
     if not 0.0 < validation_fraction < 1.0:
         raise ValueError("validation_fraction must be between 0 and 1.")
@@ -695,7 +695,7 @@ def write_run_metadata(
         metadata["image_shape"] = [int(config["height"]), int(config["width"])]
     if config.get("dataset") == "kitti_camera_depth":
         metadata["holdout"] = {
-            **_camera_depth_holdout_options(config),
+            **camera_depth_holdout_options(config),
             "requested_fraction": float(config.get("holdout_fraction", 0.2)),
         }
     if split_metadata is not None:
@@ -817,7 +817,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     width = int(config.get("width", 1024))
     sample_count = int(config.get("sample_count", 64))
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
-    holdout_options = _camera_depth_holdout_options(config)
+    holdout_options = camera_depth_holdout_options(config)
     validation_fraction = float(config.get("validation_fraction", 0.2))
     split_seed = int(config.get("split_seed", seed))
     validation_holdout_seed = int(

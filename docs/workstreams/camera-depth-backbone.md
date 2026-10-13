@@ -143,7 +143,7 @@ enough to feed the BEV lift.
   RGB visible.
 - [x] Recompute the fixed splatting channels after block dropout and verify
   that every target measurement is absent from all model inputs.
-- [ ] Report random-point and spatial-block validation metrics separately.
+- [x] Report random-point and spatial-block validation metrics separately.
 - [ ] Scale the representation experiment beyond the 64-frame smoke sample.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
 - [x] Repeat a clean GPU run after the recorded Xid 62 failure.
@@ -159,7 +159,9 @@ Development increments:
 - [x] Add spatial block selection and its region mask with deterministic tests.
 - [x] Connect block masks to input removal and leakage-safe resplatting.
 - [x] Expose holdout settings in the runner and a dedicated pilot configuration.
-- [ ] Add separate random-point/block validation and notebook visualizations.
+- [x] Add separate random-point/block validation and notebook visualizations.
+- [ ] Evaluate fixed small/medium/large block sizes before drawing conclusions
+  about the model's spatial context.
 - [ ] Run the smoke and matched 512-frame experiments.
 
 The extracted random-point helper accepts a valid-depth mask `[B, 1, H, W]`
@@ -170,9 +172,8 @@ as its target and has no kept LiDAR context.
 `build_spatial_depth_holdout_masks()` returns `(holdout_mask, region_mask)`:
 the first selects only real measurements to supervise; the second covers entire
 rectangles for visualization. This helper is tested independently. It samples
-blocks around
-not-yet-held-out measurements, preserves complete rectangles at image borders,
-and rejects candidates that would remove every valid measurement. It requires
+blocks around not-yet-held-out measurements, preserves complete rectangles at
+image borders, and rejects candidates that would remove every valid measurement. It requires
 at least two measurements per sample and raises if no safe block is found
 within its bounded attempt budget; it does not fall back to random points.
 
@@ -224,11 +225,36 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
   --config configs/training/kitti_camera_depth_block_dropout.yaml
 ```
 
+The matched random-point pilot config is
+[`kitti_camera_depth_random_holdout_512.yaml`](../../configs/training/kitti_camera_depth_random_holdout_512.yaml).
+It uses the same dataset, split, seeds, normalization, input mode, and training
+hyperparameters as the spatial pilot, with its own output directory.
+
+The analysis notebook now offers a CPU holdout preview before training: regions,
+kept sparse depth, removed measurements, and recomputed splat depth/confidence.
+It requires KITTI data but no checkpoint. Sample prediction plots reconstruct
+the holdout from the saved checkpoint configuration, including spatial regions.
+
+`compare_camera_depth_holdout_checkpoints()` evaluates both checkpoints on both
+holdout modes over the same validation split. It rejects incompatible dataset
+protocols, training hyperparameters, epochs, or optimizer-step counts. Each
+evaluation mode uses the same fixed per-frame masks for both models; spatial
+validation uses the block ranges from the spatial checkpoint. Evaluation batch
+size may differ from training batch size. The notebook flag
+`RUN_HOLDOUT_COMPARISON` only evaluates existing checkpoints and saves a JSON
+report with metric rows, checkpoint paths, evaluation settings, and achieved
+holdout fractions. MAE/RMSE matrices show training mode by evaluation mode;
+these are checkpoint scores, not historical best-epoch scores.
+
 CPU fixture tests cover both holdout modes, sparse/enriched inputs, validation,
-metrics persistence, and checkpoint resume. The 512-frame experiment has not
-been run yet. Cross-evaluation of each model on both holdout modes and spatial
-sample diagnostics in the analysis notebook are the next increment; the current
-notebook sample-analysis path still defaults to random-point holdout.
+metrics persistence, checkpoint resume, cross-evaluation consistency, and
+execution of the preview/comparison/sample notebook cells. The notebook has
+also been executed on local KITTI data on CPU with all training flags disabled.
+The matched 512-frame training experiments and block-size sensitivity study
+remain pending. Sparse LiDAR supervision still does not establish depth quality
+at pixels without LiDAR measurements. In large holes, splat coverage may be low:
+the current splat baseline errors include zero-valued predictions outside its
+support and must be interpreted together with coverage.
 
 The enriched input remains the primary representation. The current fixed
 Gaussian splatting is a strong baseline and should not be removed while testing

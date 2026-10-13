@@ -6,20 +6,25 @@ import json
 import os
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from .camera_depth_model import CameraDepthModel
+from .dataset import KittiObjectDepthDataset
 from .lidar_splatting import SplattingConfig
 from .training import (
     DEPTH_EXPANDED_CHANNEL_INDEX,
     SPLAT_CONFIDENCE_CHANNEL_INDEX,
+    camera_depth_holdout_options,
+    evaluate_camera_depth,
     prepare_camera_depth_evaluation_batch,
     select_camera_depth_lidar_maps,
     select_device,
+    split_dataset_indices,
+    validate_camera_depth_training_config,
 )
 
 
@@ -67,6 +72,8 @@ class CameraDepthSampleAnalysis:
     holdout_target_m: np.ndarray
     holdout_absolute_error_m: np.ndarray
     holdout_mask: np.ndarray
+    holdout_region_mask: np.ndarray | None = None
+    holdout_mode: str = "random_points"
 
 
 @dataclass(frozen=True)
@@ -357,6 +364,10 @@ def analyze_camera_depth_sample(
     splatting_config: SplattingConfig,
     device,
     max_depth_m: float,
+    holdout_mode: str = "random_points",
+    block_height_px: tuple[int, int] = (16, 48),
+    block_width_px: tuple[int, int] = (32, 128),
+    block_max_count: int = 8,
 ) -> CameraDepthSampleAnalysis:
     """Predict and collect image-space diagnostics for one held-out sample."""
 
@@ -372,6 +383,10 @@ def analyze_camera_depth_sample(
         holdout_fraction=holdout_fraction,
         holdout_seed=holdout_seed + int(dataset_index),
         splatting_config=splatting_config,
+        holdout_mode=holdout_mode,
+        block_height_px=block_height_px,
+        block_width_px=block_width_px,
+        block_max_count=block_max_count,
     )
     rgb = torch.from_numpy(depth_batch["rgb"]).to(device)
     prepared_lidar_maps = depth_batch["lidar_maps"]
@@ -416,7 +431,202 @@ def analyze_camera_depth_sample(
         holdout_target_m=holdout_target_m,
         holdout_absolute_error_m=holdout_absolute_error_m,
         holdout_mask=holdout_mask,
+        holdout_region_mask=depth_batch["holdout_region_mask"][0, 0].copy(),
+        holdout_mode=holdout_mode,
     )
+
+
+def _holdout_comparison_protocol(
+    config: dict[str, Any], *, project_root: Path
+) -> dict[str, Any]:
+    """Normalize settings that must match to isolate the holdout strategy."""
+
+    defaults = {
+        "sample_count": 64,
+        "height": 320,
+        "width": 1024,
+        "max_depth_m": 80.0,
+        "validation_fraction": 0.2,
+        "seed": 0,
+        "holdout_fraction": 0.2,
+        "splat_radius_px": 2,
+        "splat_sigma_px": 1.0,
+        "lidar_mode": "enriched",
+    }
+    protocol = {key: config.get(key, default) for key, default in defaults.items()}
+    protocol["split_seed"] = config.get("split_seed", protocol["seed"])
+    protocol["validation_holdout_seed"] = config.get(
+        "validation_holdout_seed", protocol["split_seed"]
+    )
+    protocol["data_root"] = str((project_root / str(config["data_root"])).resolve())
+    return protocol
+
+
+def compare_camera_depth_holdout_checkpoints(
+    checkpoint_paths: dict[str, str | Path],
+    *,
+    evaluation_config: dict[str, Any],
+    device: str = "auto",
+    project_root: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Cross-evaluate matched random/block checkpoints on both fixed holdouts.
+
+    The two checkpoints must share the dataset, split, normalization, input
+    mode, optimization settings, epoch, and step. Block validation uses the
+    spatial checkpoint's ranges. Evaluation never trains or writes artifacts.
+    Relative dataset paths use ``project_root`` (the working directory by default).
+    """
+
+    modes = ("random_points", "spatial_blocks")
+    if set(checkpoint_paths) != set(modes):
+        raise ValueError("comparison requires random_points and spatial_blocks checkpoints.")
+    validate_camera_depth_training_config(evaluation_config)
+    root = Path.cwd() if project_root is None else Path(project_root)
+    expected = _holdout_comparison_protocol(evaluation_config, project_root=root)
+    loaded = {}
+    for mode in modes:
+        checkpoint = load_camera_depth_checkpoint(checkpoint_paths[mode], device="cpu")
+        validate_camera_depth_training_config(checkpoint.config)
+        if checkpoint.config.get("holdout_mode", "random_points") != mode:
+            raise ValueError(f"checkpoint labeled {mode!r} has a different training holdout mode.")
+        actual = _holdout_comparison_protocol(checkpoint.config, project_root=root)
+        differences = [key for key in expected if actual[key] != expected[key]]
+        if differences:
+            raise ValueError(f"{mode} checkpoint protocol mismatch: {', '.join(differences)}.")
+        loaded[mode] = checkpoint
+    if (loaded[modes[0]].epoch, loaded[modes[0]].step) != (
+        loaded[modes[1]].epoch, loaded[modes[1]].step
+    ):
+        raise ValueError("comparison checkpoints must have the same epoch and step.")
+    for key, default in (("learning_rate", 1e-3), ("smooth_l1_beta", 1.0), ("batch_size", 2)):
+        if loaded[modes[0]].config.get(key, default) != loaded[modes[1]].config.get(key, default):
+            raise ValueError(f"comparison checkpoints have different training {key}.")
+
+    dataset = KittiObjectDepthDataset(
+        expected["data_root"],
+        image_shape=(int(expected["height"]), int(expected["width"])),
+        max_depth_m=float(expected["max_depth_m"]),
+        sample_limit=int(expected["sample_count"]),
+    )
+    _, indices = split_dataset_indices(
+        len(dataset), validation_fraction=float(expected["validation_fraction"]),
+        seed=int(expected["split_seed"]),
+    )
+    spatial_options = camera_depth_holdout_options(loaded["spatial_blocks"].config)
+    selected_device = select_device(device)
+    rows = []
+    for training_mode in modes:
+        checkpoint = loaded[training_mode]
+        try:
+            for evaluation_mode in modes:
+                metrics = evaluate_camera_depth(
+                    model=checkpoint.model, dataset=dataset, indices=indices,
+                    batch_size=int(evaluation_config.get("batch_size", 2)),
+                    holdout_fraction=float(expected["holdout_fraction"]),
+                    holdout_seed=int(expected["validation_holdout_seed"]),
+                    splatting_config=SplattingConfig(
+                        radius_px=int(expected["splat_radius_px"]),
+                        sigma_px=float(expected["splat_sigma_px"]),
+                    ),
+                    device=selected_device, max_depth_m=float(expected["max_depth_m"]),
+                    beta=float(evaluation_config.get("smooth_l1_beta", 1.0)),
+                    lidar_mode=str(expected["lidar_mode"]),
+                    **{**spatial_options, "holdout_mode": evaluation_mode},
+                )
+                rows.append({
+                    "training_holdout_mode": training_mode,
+                    "evaluation_holdout_mode": evaluation_mode,
+                    "checkpoint": str(Path(checkpoint_paths[training_mode]).resolve()),
+                    "epoch": checkpoint.epoch, "step": checkpoint.step,
+                    "evaluation_options": {**spatial_options, "holdout_mode": evaluation_mode},
+                    **asdict(metrics),
+                })
+        finally:
+            checkpoint.model.to("cpu")
+    return rows
+
+
+def _overlay_holdout_regions(axis, rgb: np.ndarray, regions: np.ndarray) -> None:
+    axis.imshow(np.clip(rgb, 0.0, 1.0))
+    overlay = np.zeros((*regions.shape, 4), dtype=np.float32)
+    overlay[..., 0] = 1.0
+    overlay[..., 3] = regions * 0.3
+    axis.imshow(overlay)
+
+
+def plot_camera_depth_holdout_input(
+    depth_batch: dict[str, np.ndarray], *, max_depth_m: float, sample_index: int = 0
+):
+    """Inspect regions, kept/removed points and resplats without a model."""
+
+    import matplotlib.pyplot as plt
+
+    if max_depth_m <= 0.0:
+        raise ValueError("max_depth_m must be positive.")
+    if depth_batch["lidar_maps"].shape[1] != 8:
+        raise ValueError("holdout input preview requires enriched eight-channel LiDAR maps.")
+    rgb = np.moveaxis(depth_batch["rgb"][sample_index], 0, 2)
+    regions = depth_batch["holdout_region_mask"][sample_index, 0]
+    held_out = depth_batch["loss_mask"][sample_index, 0]
+    kept = depth_batch["kept_sparse_lidar_maps"][sample_index]
+    lidar = depth_batch["lidar_maps"][sample_index]
+    targets = depth_batch["depth_target"][sample_index, 0] * max_depth_m
+    figure, axes = plt.subplots(2, 3, figsize=(16, 8), constrained_layout=True)
+    axes[0, 0].imshow(np.clip(rgb, 0.0, 1.0))
+    axes[0, 0].set_title("RGB (unchanged)")
+    _overlay_holdout_regions(axes[0, 1], rgb, regions)
+    axes[0, 1].set_title("Selected regions (red)")
+    kept_y, kept_x = np.nonzero(kept[5] > 0)
+    points = axes[0, 2].scatter(
+        kept_x, kept_y, c=kept[0, kept_y, kept_x] * max_depth_m, s=2, cmap="viridis"
+    )
+    axes[0, 2].set_xlim(-0.5, targets.shape[1] - 0.5)
+    axes[0, 2].set_ylim(targets.shape[0] - 0.5, -0.5)
+    axes[0, 2].set_aspect("equal")
+    axes[0, 2].set_title("Kept sparse depth (m)")
+    figure.colorbar(points, ax=axes[0, 2], fraction=0.046)
+    splat = np.where(lidar[SPLAT_CONFIDENCE_CHANNEL_INDEX] > 0,
+                    lidar[DEPTH_EXPANDED_CHANNEL_INDEX] * max_depth_m, np.nan)
+    image = axes[1, 0].imshow(splat, cmap="viridis")
+    axes[1, 0].set_title("Recomputed splatted depth (m)")
+    figure.colorbar(image, ax=axes[1, 0], fraction=0.046)
+    image = axes[1, 1].imshow(lidar[SPLAT_CONFIDENCE_CHANNEL_INDEX], cmap="magma", vmin=0, vmax=1)
+    axes[1, 1].set_title("Recomputed confidence")
+    figure.colorbar(image, ax=axes[1, 1], fraction=0.046)
+    held_y, held_x = np.nonzero(held_out)
+    _overlay_holdout_regions(axes[1, 2], rgb, regions)
+    points = axes[1, 2].scatter(held_x, held_y, c=targets[held_out], s=3, cmap="viridis")
+    axes[1, 2].set_title("Removed LiDAR targets (m)")
+    figure.colorbar(points, ax=axes[1, 2], fraction=0.046)
+    for axis in axes.flat:
+        axis.set_axis_off()
+    return figure
+
+
+def plot_camera_depth_holdout_comparison(rows: list[dict[str, Any]]):
+    """Plot MAE/RMSE matrices: training mode by evaluation holdout mode."""
+
+    import matplotlib.pyplot as plt
+
+    modes = ("random_points", "spatial_blocks")
+    cells = {(row["training_holdout_mode"], row["evaluation_holdout_mode"]): row for row in rows}
+    expected = {(training, evaluation) for training in modes for evaluation in modes}
+    if len(rows) != 4 or set(cells) != expected:
+        raise ValueError("holdout comparison requires all four train/evaluation combinations.")
+    figure, axes = plt.subplots(1, 2, figsize=(12, 4.5), constrained_layout=True)
+    for axis, metric in zip(axes, ("mae_m", "rmse_m")):
+        values = np.array([[cells[(training, evaluation)][metric] for evaluation in modes]
+                           for training in modes])
+        image = axis.imshow(values, cmap="viridis_r")
+        axis.set_xticks([0, 1], labels=modes)
+        axis.set_yticks([0, 1], labels=modes)
+        axis.set(xlabel="Evaluation holdout", ylabel="Training holdout", title=metric.upper())
+        for row in range(2):
+            for column in range(2):
+                axis.text(column, row, f"{values[row, column]:.3f}", ha="center", va="center",
+                          bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"})
+        figure.colorbar(image, ax=axis, label="Meters")
+    return figure
 
 
 def plot_camera_depth_metrics(metrics: list[dict[str, Any]]):
@@ -517,6 +727,9 @@ def plot_camera_depth_sample(analysis: CameraDepthSampleAnalysis):
     figure, axes = plt.subplots(2, 3, figsize=(16, 8), constrained_layout=True)
     axes[0, 0].imshow(np.clip(analysis.rgb, 0.0, 1.0))
     axes[0, 0].set_title(f"RGB - {analysis.sample_id}")
+    if analysis.holdout_mode == "spatial_blocks" and analysis.holdout_region_mask is not None:
+        _overlay_holdout_regions(axes[0, 0], analysis.rgb, analysis.holdout_region_mask)
+        axes[0, 0].set_title(f"RGB + held-out regions - {analysis.sample_id}")
 
     splatted = np.where(
         analysis.splat_confidence > 0.0,

@@ -8,7 +8,8 @@ Notebooks disponibles, dans l'ordre recommandé :
    splatted maps, and the complete 11-channel RGB + LiDAR model input.
 3. `03_camera_depth_training_analysis.ipynb` — launch or load a camera-depth run,
    plot training/validation curves, compare against the splatted-depth baseline,
-   and inspect representative depth/error maps.
+   preview random/spatial holdout regions before training, cross-evaluate matched
+   checkpoints, and inspect representative depth/error maps.
 
 Keep notebooks lightweight; move reusable code into `src/rgb_lidar_fusion/`.
 
@@ -29,3 +30,20 @@ a synchronized CUDA smoke test. A failed preflight blocks GPU training.
 Set `RUN_SPLATTING_ABLATION = True` to train the sparse-input counterpart of
 the primary enriched run. The notebook then compares their best held-out
 MAE/RMSE using the same dataset split, holdout seeds, and hyperparameters.
+
+The holdout preview cell uses CPU and KITTI data only; it needs no checkpoint.
+It shows the selected regions, kept and removed measurements, and recomputed
+depth/confidence maps for both `random_points` and `spatial_blocks`.
+
+For the 512-frame block-dropout experiment, the matched training configurations
+are `configs/training/kitti_camera_depth_random_holdout_512.yaml` and
+`configs/training/kitti_camera_depth_block_dropout.yaml`. After both runs exist,
+set `RUN_HOLDOUT_COMPARISON = True` and review `HOLDOUT_CHECKPOINTS`. This flag
+only runs validation. It compares each checkpoint on both fixed holdout modes
+and writes the four metric rows to
+`results/analysis/camera_depth_holdout_comparison.json`. Dataset, split,
+normalization, input mode, training settings, epoch, and step must match.
+Evaluation batch size can differ from training batch size.
+
+Sample prediction plots use the saved checkpoint configuration to reconstruct
+the validation split and holdout mode. Spatial regions appear in red on RGB.

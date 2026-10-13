@@ -226,6 +226,44 @@ def model_batch_to_torch_tensors(
     }
 
 
+def build_depth_holdout_mask(
+    valid_mask: np.ndarray,
+    *,
+    holdout_fraction: float = 0.2,
+    seed: int = 0,
+) -> np.ndarray:
+    """Select random target pixels from a valid-depth mask ``[B, 1, H, W]``.
+
+    Selection uses one seeded generator across the batch, preserving the
+    original camera-depth holdout sequence. Each sample contributes at least
+    one target and keeps at least one measurement when it has two or more.
+    A singleton sample contributes its only point as a target, leaving no
+    LiDAR context. The input mask is never modified.
+    """
+
+    if not 0.0 < holdout_fraction < 1.0:
+        raise ValueError("holdout_fraction must be between 0 and 1.")
+    valid = np.asarray(valid_mask, dtype=bool)
+    if valid.ndim != 4 or valid.shape[1] != 1 or any(size == 0 for size in valid.shape):
+        raise ValueError("valid_mask must have non-empty shape [B, 1, H, W].")
+
+    rng = np.random.default_rng(seed)
+    holdout_mask = np.zeros_like(valid)
+    for batch_index in range(valid.shape[0]):
+        valid_indices = np.flatnonzero(valid[batch_index, 0])
+        if valid_indices.size == 0:
+            raise ValueError(
+                f"batch sample {batch_index} has no valid sparse depth pixels."
+            )
+        holdout_count = max(1, int(round(valid_indices.size * holdout_fraction)))
+        if valid_indices.size > 1:
+            holdout_count = min(holdout_count, valid_indices.size - 1)
+        held_out = rng.choice(valid_indices, size=holdout_count, replace=False)
+        sample_mask = holdout_mask[batch_index, 0].reshape(-1)
+        sample_mask[held_out] = True
+    return holdout_mask
+
+
 def model_batch_to_camera_depth_training_batch(
     batch: dict[str, Any],
     *,
@@ -262,27 +300,14 @@ def model_batch_to_camera_depth_training_batch(
     rgb_indices = _baseline_channel_indices(input_channels, RGB_CHANNELS)
     rgb = inputs[:, rgb_indices, :, :].copy()
 
-    rng = np.random.default_rng(seed)
-    kept_sparse_maps = sparse_maps.copy()
-    holdout_mask = np.zeros(
-        (sparse_maps.shape[0], 1, sparse_maps.shape[2], sparse_maps.shape[3]),
-        dtype=bool,
+    valid_mask = (sparse_maps[:, 5:6] > 0.0) & (sparse_maps[:, 0:1] > 0.0)
+    holdout_mask = build_depth_holdout_mask(
+        valid_mask,
+        holdout_fraction=holdout_fraction,
+        seed=seed,
     )
+    kept_sparse_maps = sparse_maps.copy()
     for batch_index in range(sparse_maps.shape[0]):
-        valid = (sparse_maps[batch_index, 5] > 0.0) & (
-            sparse_maps[batch_index, 0] > 0.0
-        )
-        valid_indices = np.flatnonzero(valid)
-        if valid_indices.size == 0:
-            raise ValueError(
-                f"batch sample {batch_index} has no valid sparse depth pixels."
-            )
-        holdout_count = max(1, int(round(valid_indices.size * holdout_fraction)))
-        if valid_indices.size > 1:
-            holdout_count = min(holdout_count, valid_indices.size - 1)
-        held_out = rng.choice(valid_indices, size=holdout_count, replace=False)
-        sample_mask = holdout_mask[batch_index, 0].reshape(-1)
-        sample_mask[held_out] = True
         kept_sparse_maps[batch_index, :, holdout_mask[batch_index, 0]] = 0.0
 
     lidar_channels = [kept_sparse_maps]

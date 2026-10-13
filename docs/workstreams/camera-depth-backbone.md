@@ -151,6 +151,22 @@ enough to feed the BEV lift.
 
 ### Next experiment: LiDAR block dropout
 
+Development increments:
+
+- [x] Extract `build_depth_holdout_mask()` from batch preparation; preserve the
+  seeded random-point selection and test it independently of PyTorch.
+- [ ] Add spatial block selection and its region mask with deterministic tests.
+- [ ] Connect block masks to input removal and leakage-safe resplatting.
+- [ ] Expose holdout settings in the runner and a dedicated pilot configuration.
+- [ ] Add separate random-point/block validation and notebook visualizations.
+- [ ] Run the smoke and matched 512-frame experiments.
+
+The extracted random-point helper accepts a valid-depth mask `[B, 1, H, W]`
+and returns a boolean target mask of the same shape. It retains the previous
+singleton behavior: a sample with only one valid measurement uses that point
+as its target and has no kept LiDAR context. Spatial block selection must define
+its own explicit policy for samples too sparse to keep both input and targets.
+
 The enriched input remains the primary representation. The current fixed
 Gaussian splatting is a strong baseline and should not be removed while testing
 generalization. Instead of hiding only isolated LiDAR pixels, training should

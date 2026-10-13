@@ -602,6 +602,20 @@ CSV, and metadata after each completed epoch alongside its checkpoint. CPU
 tests simulate a later-epoch failure and verify that completed metric rows
 survive and remain intact after resume.
 
+The first GPU resume attempt exposed a separate device-placement bug: Adam's
+moments were restored against CPU parameters before the training step moved
+the model to CUDA. Both runners now move the model before optimizer creation.
+Checkpoint tensors are loaded through CPU, then PyTorch restores optimizer
+moments onto the parameter device while preserving the step-counter policy.
+Regression coverage checks initialization order and includes a CUDA-only
+checkpoint-resume optimizer step.
+
+The CUDA regression test passed on the local GPU. A separate tiny-input probe
+also loaded the actual epoch-1/step-410 camera-depth checkpoint and completed
+one GPU optimizer step with finite loss and gradients. The checkpoint SHA-256
+was unchanged before and after the probe; the long resumed epoch remains to
+be validated.
+
 ## Acceptance criteria
 
 - `CameraDepthModel` returns `depth_pred: [B, 1, H, W]`.

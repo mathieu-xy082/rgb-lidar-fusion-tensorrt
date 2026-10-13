@@ -624,13 +624,18 @@ def save_checkpoint(
 
 
 def load_checkpoint(*, path: Path, model, optimizer, device) -> tuple[int, int]:
-    """Load a checkpoint and return the next start epoch plus step count."""
+    """Restore a model already placed on device and its optimizer.
+
+    The caller must move the model before constructing the optimizer. Loading
+    through CPU lets optimizer.load_state_dict place moments with parameters
+    while retaining the optimizer's special policy for scalar step counters.
+    """
 
     import torch
 
     if not path.exists():
         raise ValueError(f"resume checkpoint does not exist: {path}")
-    payload = torch.load(path, map_location=device, weights_only=False)
+    payload = torch.load(path, map_location="cpu", weights_only=False)
     model.load_state_dict(payload["model_state_dict"])
     optimizer.load_state_dict(payload["optimizer_state_dict"])
     return int(payload["epoch"]), int(payload.get("step", 0))
@@ -729,7 +734,7 @@ def run_synthetic_smoke_training(config: dict[str, Any]) -> TrainingRunResult:
     output_dir = Path(str(config.get("output_dir", "results/training/synthetic_smoke")))
     checkpoint_path = output_dir / "checkpoints" / "latest.pt"
 
-    model = BaselineFusionModel(output_dim=1, lidar_mode="enriched")
+    model = BaselineFusionModel(output_dim=1, lidar_mode="enriched").to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = build_loss(str(config.get("loss", "smooth_l1")))
 
@@ -846,7 +851,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         seed=split_seed,
     )
 
-    model = CameraDepthModel(lidar_mode=lidar_mode)
+    model = CameraDepthModel(lidar_mode=lidar_mode).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     start_epoch = 0
     step = 0

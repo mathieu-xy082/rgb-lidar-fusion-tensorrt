@@ -23,9 +23,11 @@ from rgb_lidar_fusion.training import (
     build_loss,
     describe_device_selection,
     load_training_config,
+    load_checkpoint,
     run_kitti_camera_depth_training,
     run_synthetic_smoke_training,
     split_dataset_indices,
+    save_checkpoint,
     train_one_step,
     validate_camera_depth_training_config,
     validate_training_config,
@@ -618,6 +620,76 @@ def test_camera_depth_interruption_preserves_epoch_history_and_can_resume(
     assert len((output_dir / "metrics.csv").read_text().splitlines()) == 4
     metadata = json.loads((output_dir / "run_metadata.json").read_text())
     assert metadata["epochs_completed"] == 3
+
+
+@pytest.mark.parametrize("runner_kind", ("synthetic", "camera_depth"))
+def test_runner_moves_model_before_constructing_adam(tmp_path, monkeypatch, runner_kind):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    model_class = BaselineFusionModel if runner_kind == "synthetic" else training.CameraDepthModel
+    original_to = model_class.to
+    original_adam = torch.optim.Adam
+    events = []
+
+    def record_model_move(model, *args, **kwargs):
+        result = original_to(model, *args, **kwargs)
+        events.append("model moved")
+        return result
+
+    def record_adam_creation(*args, **kwargs):
+        assert events == ["model moved"]
+        events.append("optimizer created")
+        return original_adam(*args, **kwargs)
+
+    monkeypatch.setattr(model_class, "to", record_model_move)
+    monkeypatch.setattr(torch.optim, "Adam", record_adam_creation)
+    config = {
+        "device": "cpu", "epochs": 1, "batch_size": 2,
+        "height": 12, "width": 16, "output_dir": str(tmp_path / "run"),
+    }
+    if runner_kind == "synthetic":
+        run_synthetic_smoke_training(config)
+    else:
+        data_root = tmp_path / "kitti/training"
+        for index in range(4):
+            _write_training_kitti_frame(data_root, f"{index:06d}", index * 0.5)
+        run_kitti_camera_depth_training({
+            **config, "dataset": "kitti_camera_depth",
+            "data_root": str(data_root), "sample_count": 4,
+        })
+    assert events[:2] == ["model moved", "optimizer created"]
+
+
+def test_adam_checkpoint_resume_on_cuda_keeps_moments_with_parameters(tmp_path):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for the cross-device resume regression test.")
+
+    source = torch.nn.Linear(3, 1)
+    source_optimizer = torch.optim.Adam(source.parameters(), lr=0.001, foreach=True)
+    source(torch.ones((2, 3))).square().mean().backward()
+    source_optimizer.step()
+    path = tmp_path / "cpu_checkpoint.pt"
+    save_checkpoint(
+        path=path, model=source, optimizer=source_optimizer,
+        epoch=1, step=1, config={},
+    )
+
+    model = torch.nn.Linear(3, 1).to("cuda")
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, foreach=True)
+    epoch, step = load_checkpoint(path=path, model=model, optimizer=optimizer, device="cuda")
+
+    assert (epoch, step) == (1, 1)
+    for parameter in model.parameters():
+        state = optimizer.state[parameter]
+        assert state["exp_avg"].device == parameter.device
+        assert state["exp_avg_sq"].device == parameter.device
+        assert state["step"].device.type == "cpu"
+    optimizer.zero_grad(set_to_none=True)
+    loss = model(torch.ones((2, 3), device="cuda")).square().mean()
+    loss.backward()
+    optimizer.step()
+    torch.cuda.synchronize()
+    assert torch.isfinite(loss)
+    assert all(optimizer.state[parameter]["step"].item() == 2 for parameter in model.parameters())
 
 
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:

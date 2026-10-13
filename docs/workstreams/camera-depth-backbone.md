@@ -616,6 +616,74 @@ one GPU optimizer step with finite loss and gradients. The checkpoint SHA-256
 was unchanged before and after the probe; the long resumed epoch remains to
 be validated.
 
+The subsequent resumed run failed again on 2026-10-13 at 18:19:58 local time,
+this time reporting `CUDNN_STATUS_EXECUTION_FAILED` during backward. Kernel logs
+again recorded Xid 62, channel cleanup events (Xid 45), and Xid 154 requesting
+a GPU reset. NVIDIA SMI confirmed `GPU Recovery Action: Reset`; the displayed
+98% utilization must not be interpreted as successful training progress.
+The checkpoint still matches the retained epoch-1/step-410 copy byte for byte;
+no additional completed epoch was saved.
+
+This recurrence is distinct from the corrected Adam device-placement bug.
+Neither an out-of-memory condition nor a specific cuDNN defect has been
+established. Recover the GPU before running further CUDA operations. Because
+desktop applications also use this GPU, prefer a controlled machine reboot
+over attempting an in-session GPU reset. Before another full training run,
+isolate repeated forward/backward steps at the actual input resolution in a
+standalone process, record the PyTorch/CUDA/cuDNN/driver versions and GPU memory
+usage, and compare backend settings one at a time if needed. A short passing
+probe does not establish long-run stability.
+
+### Standalone GPU diagnostic
+
+Run this from the repository root, with no notebook training or other CUDA
+compute process running. It requires the project's ML dependencies. The script
+sets `CUDA_LAUNCH_BLOCKING=1` before importing PyTorch and refuses to proceed
+when the existing GPU preflight reports insufficient memory, competing compute
+processes, or a required GPU recovery action.
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run python scripts/probe_camera_depth_gpu.py \
+  --steps 5 --height 320 --width 1024 --batch-size 1 \
+  --checkpoint results/training/kitti_camera_depth_random_holdout_512/checkpoints/latest.pt
+```
+
+The diagnostic uses `CameraDepthModel`, the masked depth loss, and Adam in FP32.
+It repeatedly processes a fixed synthetic batch, not KITTI frames; this isolates
+the model/backend from dataset preparation but does not measure prediction
+quality or reproduce every condition of the interrupted training run. Loading
+the optional checkpoint exercises optimizer resume, but updated weights are
+discarded when the process exits. No training checkpoint or metrics are saved.
+
+A fresh JSONL log under `results/diagnostics/` records library versions, NVIDIA
+SMI snapshots, the checkpoint epoch/step, and synchronized phase markers for
+input transfer, forward, backward, gradient checking, and the optimizer update.
+Each completed step reports loss, gradient norm, duration, and CUDA allocated,
+reserved, peak-allocated, and globally free memory. Log rows are flushed as they
+are written. After a failure, diagnostics use NVIDIA SMI rather than issuing
+more CUDA work; there is no automatic retry. Existing log files are not
+overwritten, including when `--output` explicitly selects a path.
+
+Only after a healthy-device baseline, repeat the same command with
+`--disable-cudnn` to isolate that backend if needed. This is a diagnostic
+comparison, not a permanent training change or a guaranteed workaround.
+`--device cpu --height 9 --width 13 --steps 1` checks the script itself without
+validating CUDA. A passing five-step GPU test is necessary evidence for further
+investigation, not proof that a full epoch will be stable.
+
+After the reboot on 2026-10-13, the five-step cuDNN-enabled diagnostic passed
+at `320x1024`, batch size 1, with the actual epoch-1/step-410 checkpoint.
+It recorded PyTorch `2.13.0+cu129`, CUDA build `12.9`, cuDNN version `92000`,
+and NVIDIA driver `575.64.03`. Peak PyTorch allocation was approximately
+848 MiB, reserved memory 1586 MiB, and device-wide free memory during completed
+steps approximately 1294 MiB. All losses and gradients were finite. The
+checkpoint SHA-256 was unchanged afterward, NVIDIA reported recovery action
+`None`, and no Xid entries were present in the current boot's kernel journal.
+The log is `results/diagnostics/camera_depth_gpu_20261013T163247Z_16672.jsonl`.
+This short synthetic success does not explain the earlier long-run failures;
+the next diagnostic should increase the step count without changing backend,
+input dimensions, or batch size, before returning to KITTI training.
+
 ## Acceptance criteria
 
 - `CameraDepthModel` returns `depth_pred: [B, 1, H, W]`.

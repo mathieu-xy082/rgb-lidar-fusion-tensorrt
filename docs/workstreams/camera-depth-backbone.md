@@ -155,7 +155,7 @@ Development increments:
 
 - [x] Extract `build_depth_holdout_mask()` from batch preparation; preserve the
   seeded random-point selection and test it independently of PyTorch.
-- [ ] Add spatial block selection and its region mask with deterministic tests.
+- [x] Add spatial block selection and its region mask with deterministic tests.
 - [ ] Connect block masks to input removal and leakage-safe resplatting.
 - [ ] Expose holdout settings in the runner and a dedicated pilot configuration.
 - [ ] Add separate random-point/block validation and notebook visualizations.
@@ -164,8 +164,23 @@ Development increments:
 The extracted random-point helper accepts a valid-depth mask `[B, 1, H, W]`
 and returns a boolean target mask of the same shape. It retains the previous
 singleton behavior: a sample with only one valid measurement uses that point
-as its target and has no kept LiDAR context. Spatial block selection must define
-its own explicit policy for samples too sparse to keep both input and targets.
+as its target and has no kept LiDAR context.
+
+`build_spatial_depth_holdout_masks()` returns `(holdout_mask, region_mask)`:
+the first selects only real measurements to supervise; the second covers entire
+rectangles for visualization. This helper is tested independently and is not
+yet connected to batch preparation or the runner. It samples blocks around
+not-yet-held-out measurements, preserves complete rectangles at image borders,
+and rejects candidates that would remove every valid measurement. It requires
+at least two measurements per sample and raises if no safe block is found
+within its bounded attempt budget; it does not fall back to random points.
+
+The holdout fraction is a target rather than an exact constraint: a complete
+block may exceed it, and the maximum block count may stop selection earlier.
+Future run metrics must record the achieved fraction. For example, on KITTI
+frame `000000` at `320x1024`, seed 13 and the default 16..48 by 32..128 pixel
+blocks (maximum 8) select 3,128 of 20,195 measurements (15.49%) for a requested
+20%. This is a mask-generation check, not a training result.
 
 The enriched input remains the primary representation. The current fixed
 Gaussian splatting is a strong baseline and should not be removed while testing

@@ -62,6 +62,7 @@ class DepthValidationMetrics:
     splat_rmse_m: float
     splat_coverage: float
     pixel_count: int
+    holdout_fraction: float
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,8 @@ class EpochMetrics:
     val_splat_rmse_m: float | None = None
     val_splat_coverage: float | None = None
     val_pixel_count: int | None = None
+    train_holdout_fraction: float | None = None
+    val_holdout_fraction: float | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +160,43 @@ def validate_training_config(config: dict[str, Any]) -> None:
         raise ValueError("learning_rate must be positive.")
 
 
+def _camera_depth_holdout_options(config: dict[str, Any]) -> dict[str, Any]:
+    """Validate scalar config settings and adapt block ranges to batch options."""
+
+    mode = config.get("holdout_mode", "random_points")
+    if mode not in ("random_points", "spatial_blocks"):
+        raise ValueError("holdout_mode must be 'random_points' or 'spatial_blocks'.")
+    options: dict[str, Any] = {"holdout_mode": mode}
+    if mode == "random_points":
+        return options
+
+    for axis, default_bounds in (("height", (16, 48)), ("width", (32, 128))):
+        bounds = []
+        for bound, default in zip(("min", "max"), default_bounds):
+            key = f"block_{axis}_{bound}_px"
+            value = config.get(key, default)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, np.integer))
+                or value <= 0
+            ):
+                raise ValueError(f"{key} must be a positive integer.")
+            bounds.append(int(value))
+        if bounds[0] > bounds[1]:
+            raise ValueError(f"block_{axis}_min_px must not exceed block_{axis}_max_px.")
+        options[f"block_{axis}_px"] = tuple(bounds)
+
+    max_count = config.get("block_max_count", 8)
+    if (
+        isinstance(max_count, bool)
+        or not isinstance(max_count, (int, np.integer))
+        or max_count <= 0
+    ):
+        raise ValueError("block_max_count must be a positive integer.")
+    options["block_max_count"] = int(max_count)
+    return options
+
+
 def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
     """Validate the local KITTI camera-depth runner configuration."""
 
@@ -192,6 +232,7 @@ def validate_camera_depth_training_config(config: dict[str, Any]) -> None:
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
     if not 0.0 < holdout_fraction < 1.0:
         raise ValueError("holdout_fraction must be between 0 and 1.")
+    _camera_depth_holdout_options(config)
     validation_fraction = float(config.get("validation_fraction", 0.2))
     if not 0.0 < validation_fraction < 1.0:
         raise ValueError("validation_fraction must be between 0 and 1.")
@@ -375,8 +416,12 @@ def evaluate_camera_depth(
     max_depth_m: float,
     beta: float = 1.0,
     lidar_mode: str = "enriched",
+    holdout_mode: str = "random_points",
+    block_height_px: tuple[int, int] = (16, 48),
+    block_width_px: tuple[int, int] = (32, 128),
+    block_max_count: int = 8,
 ) -> DepthValidationMetrics:
-    """Evaluate model and splatted-depth baseline on fixed held-out pixels."""
+    """Evaluate one holdout mode with fixed masks and its achieved fraction."""
 
     import torch
 
@@ -394,6 +439,7 @@ def evaluate_camera_depth(
     splat_squared_error_m_sum = 0.0
     splat_covered_count = 0
     pixel_count = 0
+    valid_pixel_count = 0
     was_training = model.training
     model.to(device)
     model.eval()
@@ -408,6 +454,10 @@ def evaluate_camera_depth(
                     holdout_fraction=holdout_fraction,
                     holdout_seed=holdout_seed,
                     splatting_config=splatting_config,
+                    holdout_mode=holdout_mode,
+                    block_height_px=block_height_px,
+                    block_width_px=block_width_px,
+                    block_max_count=block_max_count,
                 )
                 rgb = torch.from_numpy(depth_batch["rgb"]).to(device)
                 prepared_lidar_maps = torch.from_numpy(
@@ -449,6 +499,11 @@ def evaluate_camera_depth(
                 splat_squared_error_m_sum += float(splat_error_m.square().sum().cpu())
                 splat_covered_count += int((splat_confidence[selected] > 0.0).sum().item())
                 pixel_count += batch_pixel_count
+                kept = depth_batch["kept_sparse_lidar_maps"]
+                kept_pixel_count = int(
+                    np.count_nonzero((kept[:, 5:6] > 0.0) & (kept[:, 0:1] > 0.0))
+                )
+                valid_pixel_count += batch_pixel_count + kept_pixel_count
     finally:
         model.train(was_training)
 
@@ -460,6 +515,7 @@ def evaluate_camera_depth(
         splat_rmse_m=(splat_squared_error_m_sum / pixel_count) ** 0.5,
         splat_coverage=splat_covered_count / pixel_count,
         pixel_count=pixel_count,
+        holdout_fraction=pixel_count / valid_pixel_count,
     )
 
 
@@ -470,8 +526,12 @@ def prepare_camera_depth_evaluation_batch(
     holdout_fraction: float,
     holdout_seed: int,
     splatting_config: SplattingConfig,
+    holdout_mode: str = "random_points",
+    block_height_px: tuple[int, int] = (16, 48),
+    block_width_px: tuple[int, int] = (32, 128),
+    block_max_count: int = 8,
 ) -> dict[str, np.ndarray]:
-    """Build a leakage-safe batch with a stable holdout mask per dataset index."""
+    """Build fixed random-point or block masks using holdout_seed + dataset index."""
 
     if not indices:
         raise ValueError("evaluation indices must not be empty.")
@@ -488,6 +548,10 @@ def prepare_camera_depth_evaluation_batch(
                 holdout_fraction=holdout_fraction,
                 seed=holdout_seed + int(index),
                 splatting_config=splatting_config,
+                holdout_mode=holdout_mode,
+                block_height_px=block_height_px,
+                block_width_px=block_width_px,
+                block_max_count=block_max_count,
             )
         )
 
@@ -629,6 +693,11 @@ def write_run_metadata(
         metadata["sample_count"] = int(config["sample_count"])
     if "height" in config and "width" in config:
         metadata["image_shape"] = [int(config["height"]), int(config["width"])]
+    if config.get("dataset") == "kitti_camera_depth":
+        metadata["holdout"] = {
+            **_camera_depth_holdout_options(config),
+            "requested_fraction": float(config.get("holdout_fraction", 0.2)),
+        }
     if split_metadata is not None:
         metadata["split"] = split_metadata
     (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -748,6 +817,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     width = int(config.get("width", 1024))
     sample_count = int(config.get("sample_count", 64))
     holdout_fraction = float(config.get("holdout_fraction", 0.2))
+    holdout_options = _camera_depth_holdout_options(config)
     validation_fraction = float(config.get("validation_fraction", 0.2))
     split_seed = int(config.get("split_seed", seed))
     validation_holdout_seed = int(
@@ -793,6 +863,8 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     for epoch in range(start_epoch, epochs):
         epoch_losses: list[float] = []
         epoch_grad_norms: list[float] = []
+        train_target_pixel_count = 0
+        train_valid_pixel_count = 0
         order = np.random.default_rng(seed + epoch).permutation(train_indices)
         for batch_start in range(0, len(order), batch_size):
             indices = order[batch_start : batch_start + batch_size]
@@ -806,6 +878,12 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
                 holdout_fraction=holdout_fraction,
                 seed=seed + epoch * len(dataset) + batch_start,
                 splatting_config=splatting_config,
+                **holdout_options,
+            )
+            train_target_pixel_count += int(depth_batch["loss_mask"].sum())
+            sparse = model_batch["sparse_lidar_maps"]
+            train_valid_pixel_count += int(
+                np.count_nonzero((sparse[:, 5:6] > 0.0) & (sparse[:, 0:1] > 0.0))
             )
             lidar_maps = select_camera_depth_lidar_maps(
                 depth_batch["lidar_maps"],
@@ -837,6 +915,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
             max_depth_m=max_depth_m,
             beta=beta,
             lidar_mode=lidar_mode,
+            **holdout_options,
         )
         metrics.append(
             EpochMetrics(
@@ -851,6 +930,10 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
                 val_splat_rmse_m=validation_metrics.splat_rmse_m,
                 val_splat_coverage=validation_metrics.splat_coverage,
                 val_pixel_count=validation_metrics.pixel_count,
+                train_holdout_fraction=(
+                    train_target_pixel_count / train_valid_pixel_count
+                ),
+                val_holdout_fraction=validation_metrics.holdout_fraction,
             )
         )
         save_checkpoint(

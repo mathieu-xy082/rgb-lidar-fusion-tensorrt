@@ -158,7 +158,7 @@ Development increments:
   seeded random-point selection and test it independently of PyTorch.
 - [x] Add spatial block selection and its region mask with deterministic tests.
 - [x] Connect block masks to input removal and leakage-safe resplatting.
-- [ ] Expose holdout settings in the runner and a dedicated pilot configuration.
+- [x] Expose holdout settings in the runner and a dedicated pilot configuration.
 - [ ] Add separate random-point/block validation and notebook visualizations.
 - [ ] Run the smoke and matched 512-frame experiments.
 
@@ -178,7 +178,7 @@ within its bounded attempt budget; it does not fall back to random points.
 
 The holdout fraction is a target rather than an exact constraint: a complete
 block may exceed it, and the maximum block count may stop selection earlier.
-Future run metrics must record the achieved fraction. For example, on KITTI
+Run metrics now record the achieved fraction. For example, on KITTI
 frame `000000` at `320x1024`, seed 13 and the default 16..48 by 32..128 pixel
 blocks (maximum 8) select 3,128 of 20,195 measurements (15.49%) for a requested
 20%. This is a mask-generation check, not a training result.
@@ -192,8 +192,43 @@ even when the incoming batch already contains full-point splats. The returned
 
 Tests verify that changing removed measurements cannot change model inputs,
 that kept points may still splat into held-out regions, and that a CPU optimizer
-step with spatial holdout produces finite non-zero gradients. Runner settings,
-validation protocol selection, and notebook controls remain to be connected.
+step with spatial holdout produces finite non-zero gradients.
+
+The runner now accepts `holdout_mode` with the existing `random_points` default.
+Its flat scalar YAML format expresses block ranges as:
+
+```yaml
+holdout_mode: spatial_blocks
+block_height_min_px: 16
+block_height_max_px: 48
+block_width_min_px: 32
+block_width_max_px: 128
+block_max_count: 8
+```
+
+Training and validation use the same configured mode and block ranges. Validation
+seeds remain `validation_holdout_seed + dataset_index`, so per-frame masks are
+independent of validation batch size and sample order. The checkpoint stores the
+configuration, and `run_metadata.json` records the effective holdout settings.
+Epoch JSON/CSV metrics and CLI output include `train_holdout_fraction` and
+`val_holdout_fraction`, computed as total removed measurements divided by total
+valid measurements over the respective split, rather than image-area fractions.
+
+The dedicated pilot config is
+[`kitti_camera_depth_block_dropout.yaml`](../../configs/training/kitti_camera_depth_block_dropout.yaml):
+512 frames, enriched inputs, five epochs, `320x1024`, batch size 2, and a
+dedicated output directory. Its entry point is:
+
+```bash
+PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
+  --config configs/training/kitti_camera_depth_block_dropout.yaml
+```
+
+CPU fixture tests cover both holdout modes, sparse/enriched inputs, validation,
+metrics persistence, and checkpoint resume. The 512-frame experiment has not
+been run yet. Cross-evaluation of each model on both holdout modes and spatial
+sample diagnostics in the analysis notebook are the next increment; the current
+notebook sample-analysis path still defaults to random-point holdout.
 
 The enriched input remains the primary representation. The current fixed
 Gaussian splatting is a strong baseline and should not be removed while testing

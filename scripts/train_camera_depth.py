@@ -64,6 +64,10 @@ def main() -> None:
                 f" val_splat_coverage={metric.val_splat_coverage:.6f}"
                 f" val_pixel_count={metric.val_pixel_count}"
             )
+        if metric.train_holdout_fraction is not None:
+            line += f" train_holdout_fraction={metric.train_holdout_fraction:.6f}"
+        if metric.val_holdout_fraction is not None:
+            line += f" val_holdout_fraction={metric.val_holdout_fraction:.6f}"
         print(line)
 
 

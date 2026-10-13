@@ -11,7 +11,11 @@ from rgb_lidar_fusion.model_batch import (
     dataset_items_to_model_batch,
     model_batch_to_camera_depth_training_batch,
 )
-from rgb_lidar_fusion.training import evaluate_camera_depth, train_camera_depth_step
+from rgb_lidar_fusion.training import (
+    evaluate_camera_depth,
+    prepare_camera_depth_evaluation_batch,
+    train_camera_depth_step,
+)
 
 
 def _item(offset: int = 0) -> dict:
@@ -136,7 +140,8 @@ def test_camera_depth_training_step_has_finite_non_zero_gradients(holdout_mode: 
     assert metrics.grad_norm > 0.0
 
 
-def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> None:
+@pytest.mark.parametrize("holdout_mode", ["random_points", "spatial_blocks"])
+def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients(holdout_mode: str) -> None:
     torch.manual_seed(11)
     model = CameraDepthModel()
     dataset = [_item(0), _item(1)]
@@ -153,6 +158,9 @@ def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> No
         device=torch.device("cpu"),
         max_depth_m=80.0,
         beta=0.1,
+        holdout_mode=holdout_mode,
+        block_height_px=(2, 3),
+        block_width_px=(3, 5),
     )
     second = evaluate_camera_depth(
         model=model,
@@ -165,6 +173,9 @@ def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> No
         device=torch.device("cpu"),
         max_depth_m=80.0,
         beta=0.1,
+        holdout_mode=holdout_mode,
+        block_height_px=(2, 3),
+        block_width_px=(3, 5),
     )
 
     assert first.pixel_count == second.pixel_count
@@ -175,6 +186,7 @@ def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> No
     assert first.splat_rmse_m == pytest.approx(second.splat_rmse_m, rel=1e-6)
     assert first.splat_coverage == pytest.approx(second.splat_coverage)
     assert first.pixel_count == 4
+    assert first.holdout_fraction == second.holdout_fraction == pytest.approx(0.4)
     assert first.loss >= 0.0
     assert first.mae_m >= 0.0
     assert first.rmse_m >= first.mae_m
@@ -187,6 +199,22 @@ def test_camera_depth_validation_is_fixed_and_does_not_compute_gradients() -> No
         torch.equal(before, after)
         for before, after in zip(parameters_before, model.parameters())
     )
+
+
+def test_spatial_validation_masks_are_fixed_per_index_despite_batch_order():
+    dataset = [_item(0), _item(1)]
+    settings = dict(
+        dataset=dataset, holdout_fraction=0.4, holdout_seed=101,
+        splatting_config=SplattingConfig(radius_px=1, sigma_px=1.0),
+        holdout_mode="spatial_blocks", block_height_px=(2, 3), block_width_px=(3, 5),
+    )
+
+    batched = prepare_camera_depth_evaluation_batch(indices=[1, 0], **settings)
+    singles = [prepare_camera_depth_evaluation_batch(indices=[index], **settings) for index in (0, 1)]
+
+    for key in batched:
+        np.testing.assert_array_equal(batched[key][0], singles[1][key][0])
+        np.testing.assert_array_equal(batched[key][1], singles[0][key][0])
 
 
 def test_camera_depth_validation_supports_sparse_lidar_ablation() -> None:

@@ -1,0 +1,28 @@
+# 512-frame spatial LiDAR holdout pilot; fixed per-frame validation masks.
+dataset: kitti_camera_depth
+data_root: data/kitti/training
+sample_count: 512
+seed: 13
+split_seed: 13
+validation_holdout_seed: 1013
+device: auto
+lidar_mode: enriched
+epochs: 5
+batch_size: 2
+learning_rate: 0.001
+height: 320
+width: 1024
+max_depth_m: 80.0
+holdout_mode: spatial_blocks
+# Approximate target; whole blocks and block_max_count set the achieved fraction.
+holdout_fraction: 0.2
+block_height_min_px: 16
+block_height_max_px: 48
+block_width_min_px: 32
+block_width_max_px: 128
+block_max_count: 8
+validation_fraction: 0.2
+splat_radius_px: 2
+splat_sigma_px: 1.0
+smooth_l1_beta: 0.1
+output_dir: results/training/kitti_camera_depth_block_dropout_512

@@ -12,6 +12,7 @@ torch = pytest.importorskip("torch")
 
 import numpy as np
 
+import rgb_lidar_fusion.training as training
 from rgb_lidar_fusion.baseline_model import BaselineFusionModel
 from rgb_lidar_fusion.model_batch import (
     dataset_items_to_model_batch,
@@ -168,6 +169,43 @@ def test_validate_camera_depth_config_rejects_unknown_lidar_mode() -> None:
                 "lidar_mode": "dense",
             }
         )
+
+
+def test_block_dropout_pilot_config_loads_with_scalar_ranges() -> None:
+    config = load_training_config(
+        Path(__file__).resolve().parents[1]
+        / "configs/training/kitti_camera_depth_block_dropout.yaml"
+    )
+
+    validate_camera_depth_training_config(config)
+
+    assert config["sample_count"] == 512
+    assert config["holdout_mode"] == "spatial_blocks"
+    assert config["block_width_min_px"] == 32
+    assert config["block_width_max_px"] == 128
+
+
+@pytest.mark.parametrize("settings, message", [
+    ({"holdout_mode": "spatial_block"}, "holdout_mode must be"),
+    ({"block_height_min_px": 0}, "block_height_min_px must be a positive integer"),
+    ({"block_width_max_px": 1.5}, "block_width_max_px must be a positive integer"),
+    ({"block_height_max_px": True}, "block_height_max_px must be a positive integer"),
+    ({"block_width_min_px": "32"}, "block_width_min_px must be a positive integer"),
+    ({"block_height_min_px": 49}, "block_height_min_px must not exceed"),
+    ({"block_width_max_px": 31}, "block_width_min_px must not exceed"),
+    ({"block_max_count": 0}, "block_max_count must be a positive integer"),
+    ({"block_max_count": 2.5}, "block_max_count must be a positive integer"),
+])
+def test_validate_camera_depth_config_rejects_invalid_block_settings(settings, message):
+    config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": "data/kitti/training",
+        "holdout_mode": "spatial_blocks",
+        **settings,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        validate_camera_depth_training_config(config)
 
 
 def test_validate_camera_depth_config_rejects_invalid_validation_split_settings() -> None:
@@ -393,10 +431,12 @@ def _write_training_kitti_frame(root: Path, sample_id: str, depth_offset: float)
 
 
 @pytest.mark.parametrize("lidar_mode", ("sparse", "enriched"))
+@pytest.mark.parametrize("holdout_mode", ("random_points", "spatial_blocks"))
 def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     tmp_path,
     monkeypatch,
     lidar_mode,
+    holdout_mode,
 ) -> None:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     data_root = tmp_path / "kitti" / "training"
@@ -426,6 +466,33 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
         "smooth_l1_beta": 0.1,
         "output_dir": str(output_dir),
     }
+    if holdout_mode == "spatial_blocks":
+        config.update({
+            "holdout_mode": holdout_mode,
+            "block_height_min_px": 2,
+            "block_height_max_px": 3,
+            "block_width_min_px": 3,
+            "block_width_max_px": 5,
+            "block_max_count": 3,
+        })
+
+    prepared_counts = []
+    original_prepare = training.model_batch_to_camera_depth_training_batch
+
+    def record_preparation(batch, **options):
+        assert options["holdout_mode"] == holdout_mode
+        prepared = original_prepare(batch, **options)
+        if holdout_mode == "spatial_blocks":
+            assert options["block_height_px"] == (2, 3)
+            assert options["block_width_px"] == (3, 5)
+            assert options["block_max_count"] == 3
+            assert prepared["holdout_region_mask"].sum() > prepared["loss_mask"].sum()
+        sparse = batch["sparse_lidar_maps"]
+        valid_count = np.count_nonzero((sparse[:, 5:6] > 0) & (sparse[:, 0:1] > 0))
+        prepared_counts.append((int(prepared["loss_mask"].sum()), int(valid_count)))
+        return prepared
+
+    monkeypatch.setattr(training, "model_batch_to_camera_depth_training_batch", record_preparation)
 
     first = run_kitti_camera_depth_training(config)
 
@@ -441,6 +508,13 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     assert first.metrics[0].val_pixel_count is not None
     assert first.metrics[0].val_pixel_count > 0
     assert first.checkpoint_path.exists()
+    assert first.metrics[0].train_holdout_fraction == pytest.approx(
+        prepared_counts[0][0] / prepared_counts[0][1]
+    )
+    assert first.metrics[0].val_holdout_fraction == pytest.approx(
+        sum(count for count, _ in prepared_counts[1:])
+        / sum(count for _, count in prepared_counts[1:])
+    )
 
     resumed = run_kitti_camera_depth_training(
         {
@@ -462,6 +536,14 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     assert metadata["lidar_mode"] == lidar_mode
     assert metadata["sample_count"] == 4
     assert metadata["image_shape"] == [12, 16]
+    assert metadata["holdout"]["holdout_mode"] == holdout_mode
+    assert metadata["holdout"]["requested_fraction"] == 0.4
+    if holdout_mode == "spatial_blocks":
+        assert metadata["holdout"]["block_height_px"] == [2, 3]
+        assert metadata["holdout"]["block_width_px"] == [3, 5]
+        assert metadata["holdout"]["block_max_count"] == 3
+    payload = torch.load(first.checkpoint_path, map_location="cpu", weights_only=False)
+    assert payload["config"].get("holdout_mode", "random_points") == holdout_mode
     assert metadata["split"]["seed"] == 37
     assert metadata["split"]["holdout_seed"] == 1037
     assert metadata["split"]["validation_fraction"] == 0.5
@@ -477,6 +559,8 @@ def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
     assert "val_loss" in (output_dir / "metrics.csv").read_text().splitlines()[0]
     assert metrics[0]["val_pixel_count"] > 0
     assert metrics[0]["val_splat_mae_m"] >= 0.0
+    assert metrics[0]["train_holdout_fraction"] == first.metrics[0].train_holdout_fraction
+    assert metrics[0]["val_holdout_fraction"] == first.metrics[0].val_holdout_fraction
 
 
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:

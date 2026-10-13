@@ -139,8 +139,9 @@ enough to feed the BEV lift.
 - [x] Add a reproducible sparse-versus-enriched input ablation path.
 - [x] Run the sparse-input ablation and record whether splatting improves
   held-out validation MAE/RMSE.
-- [ ] Add deterministic LiDAR block dropout while keeping RGB visible.
-- [ ] Recompute the fixed splatting channels after block dropout and verify
+- [x] Add deterministic LiDAR block dropout to batch preparation while keeping
+  RGB visible.
+- [x] Recompute the fixed splatting channels after block dropout and verify
   that every target measurement is absent from all model inputs.
 - [ ] Report random-point and spatial-block validation metrics separately.
 - [ ] Scale the representation experiment beyond the 64-frame smoke sample.
@@ -156,7 +157,7 @@ Development increments:
 - [x] Extract `build_depth_holdout_mask()` from batch preparation; preserve the
   seeded random-point selection and test it independently of PyTorch.
 - [x] Add spatial block selection and its region mask with deterministic tests.
-- [ ] Connect block masks to input removal and leakage-safe resplatting.
+- [x] Connect block masks to input removal and leakage-safe resplatting.
 - [ ] Expose holdout settings in the runner and a dedicated pilot configuration.
 - [ ] Add separate random-point/block validation and notebook visualizations.
 - [ ] Run the smoke and matched 512-frame experiments.
@@ -168,8 +169,8 @@ as its target and has no kept LiDAR context.
 
 `build_spatial_depth_holdout_masks()` returns `(holdout_mask, region_mask)`:
 the first selects only real measurements to supervise; the second covers entire
-rectangles for visualization. This helper is tested independently and is not
-yet connected to batch preparation or the runner. It samples blocks around
+rectangles for visualization. This helper is tested independently. It samples
+blocks around
 not-yet-held-out measurements, preserves complete rectangles at image borders,
 and rejects candidates that would remove every valid measurement. It requires
 at least two measurements per sample and raises if no safe block is found
@@ -181,6 +182,18 @@ Future run metrics must record the achieved fraction. For example, on KITTI
 frame `000000` at `320x1024`, seed 13 and the default 16..48 by 32..128 pixel
 blocks (maximum 8) select 3,128 of 20,195 measurements (15.49%) for a requested
 20%. This is a mask-generation check, not a training result.
+
+Batch preparation now accepts `holdout_mode="spatial_blocks"` and the three
+block settings. The default remains `holdout_mode="random_points"`. Both paths
+remove targets from all six sparse channels before recomputing enriched inputs,
+even when the incoming batch already contains full-point splats. The returned
+`holdout_region_mask: [B, 1, H, W]` covers rectangles in spatial mode and copies
+`loss_mask` in random-point mode. RGB and `depth_target` remain unchanged.
+
+Tests verify that changing removed measurements cannot change model inputs,
+that kept points may still splat into held-out regions, and that a CPU optimizer
+step with spatial holdout produces finite non-zero gradients. Runner settings,
+validation protocol selection, and notebook controls remain to be connected.
 
 The enriched input remains the primary representation. The current fixed
 Gaussian splatting is a strong baseline and should not be removed while testing

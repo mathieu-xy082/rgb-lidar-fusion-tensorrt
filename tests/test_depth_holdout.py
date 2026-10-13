@@ -7,6 +7,7 @@ from rgb_lidar_fusion.model_batch import (
     dataset_items_to_model_batch,
     model_batch_to_camera_depth_training_batch,
 )
+from rgb_lidar_fusion.lidar_splatting import SplattingConfig, splat_sparse_depth
 
 
 def test_random_holdout_preserves_original_multisample_selection():
@@ -218,3 +219,128 @@ def test_spatial_holdout_rejects_invalid_fraction(fraction):
 def test_spatial_holdout_rejects_invalid_shape(shape):
     with pytest.raises(ValueError, match="valid_mask must have non-empty shape"):
         build_spatial_depth_holdout_masks(np.ones(shape))
+
+
+def _spatial_batch_item():
+    rgb = np.linspace(0, 1, 3 * 20 * 30, dtype=np.float32).reshape(3, 20, 30)
+    sparse = np.zeros((6, 20, 30), dtype=np.float32)
+    for channel in range(6):
+        sparse[channel, ::2, ::2] = 0.1 * (channel + 1)
+    return {"image": rgb, "lidar_maps": sparse}
+
+
+@pytest.mark.parametrize("include_splatted_depth", [False, True])
+def test_spatial_training_batch_removes_all_channels_and_resplats_kept_points(
+    include_splatted_depth,
+):
+    item = _spatial_batch_item()
+    config = SplattingConfig(radius_px=2, sigma_px=1.0)
+    # Start with splats built from all points to check they are discarded.
+    batch = dataset_items_to_model_batch([item, item], splatting_config=config)
+    before_inputs = batch["inputs"].copy()
+    before_sparse = batch["sparse_lidar_maps"].copy()
+
+    prepared = model_batch_to_camera_depth_training_batch(
+        batch, holdout_mode="spatial_blocks", seed=13,
+        block_height_px=(5, 7), block_width_px=(7, 9),
+        include_splatted_depth=include_splatted_depth, splatting_config=config,
+    )
+
+    assert prepared["lidar_maps"].shape == (
+        2, 8 if include_splatted_depth else 6, 20, 30
+    )
+    assert prepared["loss_mask"].shape == (2, 1, 20, 30)
+    assert prepared["holdout_region_mask"].shape == (2, 1, 20, 30)
+    valid = (before_sparse[:, 5:6] > 0) & (before_sparse[:, 0:1] > 0)
+    np.testing.assert_array_equal(
+        prepared["loss_mask"], prepared["holdout_region_mask"] & valid
+    )
+    np.testing.assert_array_equal(prepared["rgb"], before_inputs[:, :3])
+    np.testing.assert_array_equal(prepared["depth_target"], before_sparse[:, 0:1])
+    np.testing.assert_array_equal(batch["inputs"], before_inputs)
+    np.testing.assert_array_equal(batch["sparse_lidar_maps"], before_sparse)
+    for index in range(2):
+        mask = prepared["loss_mask"][index, 0]
+        kept = prepared["kept_sparse_lidar_maps"][index]
+        assert np.all(kept[:, mask] == 0)
+        assert 0 < mask.sum() < valid[index].sum()
+        np.testing.assert_array_equal(kept[:, ~mask], before_sparse[index][:, ~mask])
+        np.testing.assert_array_equal(prepared["lidar_maps"][index, :6], kept)
+        if include_splatted_depth:
+            splat = splat_sparse_depth(kept[0], kept[5] > 0, config=config)
+            np.testing.assert_array_equal(
+                prepared["lidar_maps"][index, 6], splat.depth_expanded
+            )
+            np.testing.assert_array_equal(
+                prepared["lidar_maps"][index, 7], splat.confidence
+            )
+
+
+def test_changing_removed_measurements_cannot_change_spatial_model_inputs():
+    item = _spatial_batch_item()
+    config = SplattingConfig(radius_px=2, sigma_px=1.0)
+    settings = dict(
+        holdout_mode="spatial_blocks", seed=13,
+        block_height_px=(5, 5), block_width_px=(7, 7), splatting_config=config,
+    )
+    original = model_batch_to_camera_depth_training_batch(
+        dataset_items_to_model_batch([item], splatting_config=config), **settings
+    )
+    changed_sparse = item["lidar_maps"].copy()
+    removed = original["loss_mask"][0, 0]
+    changed_sparse[:5, removed] += 0.5
+    changed_item = {"image": item["image"], "lidar_maps": changed_sparse}
+
+    changed = model_batch_to_camera_depth_training_batch(
+        dataset_items_to_model_batch([changed_item], splatting_config=config), **settings
+    )
+
+    for key in (
+        "rgb", "lidar_maps", "kept_sparse_lidar_maps", "loss_mask", "holdout_region_mask"
+    ):
+        np.testing.assert_array_equal(original[key], changed[key])
+    assert np.all(
+        changed["depth_target"][0, 0, removed]
+        > original["depth_target"][0, 0, removed]
+    )
+
+
+def test_kept_point_can_legitimately_splat_into_a_spatial_holdout_region():
+    item = _spatial_batch_item()
+    sparse = np.zeros_like(item["lidar_maps"])
+    sparse[0, 2, 2:4] = (0.2, 0.8)
+    sparse[5, 2, 2:4] = 1
+    batch = dataset_items_to_model_batch(
+        [{"image": item["image"], "lidar_maps": sparse}], include_splatted_depth=False
+    )
+
+    prepared = model_batch_to_camera_depth_training_batch(
+        batch, holdout_mode="spatial_blocks",
+        block_height_px=(1, 1), block_width_px=(1, 1),
+        splatting_config=SplattingConfig(radius_px=1, sigma_px=1.0),
+    )
+
+    removed = prepared["loss_mask"][0, 0]
+    kept_depth = sparse[0][(sparse[5] > 0) & ~removed].item()
+    assert prepared["lidar_maps"][0, 6][removed].item() == pytest.approx(kept_depth)
+    assert prepared["lidar_maps"][0, 7][removed].item() == pytest.approx(np.exp(-0.5))
+
+
+def test_default_training_holdout_matches_explicit_random_points_mode():
+    batch = dataset_items_to_model_batch([_spatial_batch_item()], include_splatted_depth=False)
+
+    default = model_batch_to_camera_depth_training_batch(batch, seed=19)
+    explicit = model_batch_to_camera_depth_training_batch(
+        batch, seed=19, holdout_mode="random_points"
+    )
+
+    for key in default:
+        np.testing.assert_array_equal(default[key], explicit[key])
+    np.testing.assert_array_equal(default["holdout_region_mask"], default["loss_mask"])
+
+
+def test_training_batch_rejects_unknown_holdout_mode():
+    batch = dataset_items_to_model_batch([_spatial_batch_item()], include_splatted_depth=False)
+
+    with pytest.raises(ValueError, match="holdout_mode must be"):
+        model_batch_to_camera_depth_training_batch(batch, holdout_mode="spatial_block")

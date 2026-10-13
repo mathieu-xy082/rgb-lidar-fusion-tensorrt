@@ -370,6 +370,10 @@ def model_batch_to_camera_depth_training_batch(
     seed: int = 0,
     include_splatted_depth: bool = True,
     splatting_config: SplattingConfig | None = None,
+    holdout_mode: str = "random_points",
+    block_height_px: tuple[int, int] = (16, 48),
+    block_width_px: tuple[int, int] = (32, 128),
+    block_max_count: int = 8,
 ) -> dict[str, np.ndarray]:
     """Create leakage-safe camera-depth inputs and held-out sparse targets.
 
@@ -377,8 +381,16 @@ def model_batch_to_camera_depth_training_batch(
     optional splatted depth and confidence channels are recomputed. A splat from
     another, retained point may still cover a holdout location; the held-out
     measurement itself never contributes to any model input.
+
+    ``holdout_mode`` selects ``random_points`` or ``spatial_blocks``. RGB and
+    the full sparse depth target remain unchanged. ``holdout_region_mask``
+    contains the complete rectangles in spatial mode; in random-point mode
+    it is a copy of ``loss_mask``. Both masks have shape ``[B, 1, H, W]``.
+    Block settings are used only in spatial mode.
     """
 
+    if holdout_mode not in ("random_points", "spatial_blocks"):
+        raise ValueError("holdout_mode must be 'random_points' or 'spatial_blocks'.")
     if not 0.0 < holdout_fraction < 1.0:
         raise ValueError("holdout_fraction must be between 0 and 1.")
     if "input_channels" not in batch:
@@ -400,11 +412,22 @@ def model_batch_to_camera_depth_training_batch(
     rgb = inputs[:, rgb_indices, :, :].copy()
 
     valid_mask = (sparse_maps[:, 5:6] > 0.0) & (sparse_maps[:, 0:1] > 0.0)
-    holdout_mask = build_depth_holdout_mask(
-        valid_mask,
-        holdout_fraction=holdout_fraction,
-        seed=seed,
-    )
+    if holdout_mode == "spatial_blocks":
+        holdout_mask, region_mask = build_spatial_depth_holdout_masks(
+            valid_mask,
+            holdout_fraction=holdout_fraction,
+            seed=seed,
+            block_height_px=block_height_px,
+            block_width_px=block_width_px,
+            block_max_count=block_max_count,
+        )
+    else:
+        holdout_mask = build_depth_holdout_mask(
+            valid_mask,
+            holdout_fraction=holdout_fraction,
+            seed=seed,
+        )
+        region_mask = holdout_mask.copy()
     kept_sparse_maps = sparse_maps.copy()
     for batch_index in range(sparse_maps.shape[0]):
         kept_sparse_maps[batch_index, :, holdout_mask[batch_index, 0]] = 0.0
@@ -431,5 +454,6 @@ def model_batch_to_camera_depth_training_batch(
         "lidar_maps": np.concatenate(lidar_channels, axis=1),
         "depth_target": sparse_maps[:, 0:1].copy(),
         "loss_mask": holdout_mask,
+        "holdout_region_mask": region_mask,
         "kept_sparse_lidar_maps": kept_sparse_maps,
     }

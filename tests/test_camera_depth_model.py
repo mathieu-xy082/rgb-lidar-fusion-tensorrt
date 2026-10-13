@@ -102,7 +102,8 @@ def test_camera_depth_holdout_is_deterministic_and_removes_target_contributions(
     np.testing.assert_allclose(first["lidar_maps"][0], expected_batch["inputs"][0, 3:])
 
 
-def test_camera_depth_training_step_has_finite_non_zero_gradients() -> None:
+@pytest.mark.parametrize("holdout_mode", ["random_points", "spatial_blocks"])
+def test_camera_depth_training_step_has_finite_non_zero_gradients(holdout_mode: str) -> None:
     torch.manual_seed(7)
     batch = dataset_items_to_model_batch(
         [_item(0), _item(1)],
@@ -113,6 +114,9 @@ def test_camera_depth_training_step_has_finite_non_zero_gradients() -> None:
         holdout_fraction=0.4,
         seed=23,
         splatting_config=SplattingConfig(radius_px=1, sigma_px=1.0),
+        holdout_mode=holdout_mode,
+        block_height_px=(2, 3),
+        block_width_px=(3, 5),
     )
     model = CameraDepthModel()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

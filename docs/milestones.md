@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-10-04.
+Mise à jour : 2026-10-15.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -19,34 +19,36 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Artefacts de démonstration | Bundle synthétique reproductible et ignoré par Git |
 | Backbone camera-depth v1 | Sortie dense `[B, 1, H, W]`, holdout déterministe et loss masquée |
 | Smoke training KITTI | 64 frames, CPU et GPU, checkpointing et métriques |
+| Pilotes camera-depth 512 frames | Modèles random/blocs entraînés séparément, 5 époques et 2050 steps chacun |
+| Validation croisée camera-depth | Deux checkpoints évalués sur les mêmes masques random puis blocs, MAE/RMSE et couverture splattée |
 
 ## En cours
 
-### Stabiliser la représentation camera-depth
+### Clôturer le backbone camera-depth v1
 
-L'implémentation sépare maintenant les frames d'entraînement et de validation,
-mesure les erreurs holdout en mètres et les compare à la profondeur splattée.
-Elle ne prouve pas encore que la profondeur dense généralise.
+Le backbone est fonctionnel et évalué sous supervision sparse. Les pilotes
+utilisent 410 frames d'entraînement et 102 de validation, avec des masques fixes.
+Le modèle random est meilleur sur les points aléatoires ; le modèle entraîné
+par blocs reconstruit mieux les trous spatiaux. Les résultats et limites sont
+consignés dans le workstream, sans en déduire une profondeur dense fiable partout.
 
-Déjà en place :
+Reste avant clôture :
 
-- split train/validation déterministe ;
-- holdout de validation fixe par frame ;
-- loss, MAE et RMSE de validation ;
-- MAE/RMSE et couverture de la baseline splattée.
-- notebook de courbes train/validation et d'inspection des prédictions.
+- [ ] Inspecter quelques frames identiques avec les deux checkpoints et les
+  deux modes de holdout, notamment contours, objets proches et zones éloignées.
+- [ ] Consigner les observations et clôturer v1 si aucune incohérence majeure
+  n'empêche le prototype géométrique. Aucun nouveau seuil de MAE n'est requis.
 
-Critères restants avant de considérer cette représentation comme suffisamment
-validée :
+La configuration exécutée est `320x1024`, batch size **1**, FP32. Les YAML des
+pilotes gardent un défaut à 2 ; le notebook surcharge cette valeur. Après les
+incidents Xid 62 avec le pilote `575.64.03`, le passage à `615.71.09` a été suivi
+d'un test synthétique de 100 steps, de la fin du run random, du run blocs complet
+et de la comparaison croisée. Cela ne prouve pas la cause des anciens crashs ni
+une stabilité définitive. PyTorch reste `2.13.0+cu129` et AMP reste désactivé.
 
-- vérifier la sensibilité au taux de holdout et au rayon de splatting ;
-- reproduire un run GPU après redémarrage de la machine ;
-- documenter les limites de la supervision sparse.
-
-La configuration active est `320x1024`, batch size 2. Elle tient sur le GPU
-local de 4 GiB avec peu de marge. Un essai mixed precision a provoqué un
-`NVIDIA Xid 62` ; AMP reste donc désactivé tant que la stabilité CUDA n'a pas
-été revalidée.
+L'entraînement mixte, la sensibilité au taux de holdout/rayon/taille de blocs,
+plusieurs seeds, davantage de données et la supervision dense restent des
+améliorations non bloquantes pour le premier prototype BEV.
 
 Suivi détaillé :
 [workstreams/camera-depth-backbone.md](workstreams/camera-depth-backbone.md).
@@ -58,6 +60,12 @@ Suivi détaillé :
 Construire un module testable qui transforme les features image-depth en grille
 BEV à partir de la calibration, de la profondeur et de la confiance.
 
+Le raccord n'est pas encore implémenté. Il faut exposer les features sans casser
+les checkpoints, expliciter profondeur métrique et calibration, définir la
+validité/confiance puis tester la grille et l'agrégation. La checklist technique
+de référence est dans les
+[prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
+
 Premier critère de réussite :
 
 ```text
@@ -66,6 +74,11 @@ RGB + LiDAR enriched + calibration
 -> camera_bev: [B, C, Hbev, Wbev]
 -> loss synthétique et backward finis
 ```
+
+Commencer par une géométrie synthétique connue, puis mesurée/splattée avant
+d'utiliser la profondeur apprise. Le premier backward doit atteindre les
+features ; un scatter à indices discrets ne garantit pas un gradient vers la
+profondeur via le placement des cellules.
 
 Le module doit rendre explicites :
 

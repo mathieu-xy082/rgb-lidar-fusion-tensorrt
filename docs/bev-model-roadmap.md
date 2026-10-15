@@ -2,9 +2,12 @@
 
 Date: 2026-08-05.
 
+Mise à jour : 2026-10-15.
+
 Statut : **design de référence**. Le backbone camera-depth préalable est
-implémenté, mais le lift BEV, la branche LiDAR BEV et les heads 3D ne le sont pas
-encore.
+implémenté et évalué sur les pilotes random/blocs 512 frames. L'inspection
+qualitative reste à faire ; le lift BEV, la branche LiDAR BEV et les heads 3D ne
+sont pas encore implémentés.
 
 Documents liés :
 
@@ -72,13 +75,17 @@ Cette branche apporte :
 
 - la sémantique dense de l'image RGB ;
 - des indices de profondeur par pixel via `depth_expanded` ;
-- une estimation de fiabilité locale via `confidence` ;
+- une estimation heuristique de support/fiabilité du splatting via `confidence` ;
 - une contrainte géométrique image -> 3D grâce à la calibration caméra/LiDAR.
 
 Son rôle est de produire des features BEV camera-depth, pas seulement des boîtes
 2D. Le splatting permet de contraindre beaucoup mieux le lift image -> BEV qu'une
 approche monoculaire pure, car une profondeur est disponible sur une grande partie
 des pixels utiles.
+
+Ces rôles décrivent la cible : la loss de profondeur actuelle n'établit pas une
+sémantique objet apprise, et `confidence` n'est pas une incertitude calibrée de
+la profondeur prédite.
 
 ### Point cloud
 
@@ -183,6 +190,19 @@ Cette phase doit stabiliser le repère, la résolution, la projection
 image/depth -> BEV, les règles d'agrégation et le traitement de la confiance.
 Elle doit être testable sans dépendre encore d'un encodeur de point cloud ou
 d'une head de détection.
+
+Avant le raccord au backbone, suivre les
+[prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) :
+accès aux features compatible avec les checkpoints, profondeur caméra en
+mètres, calibration redimensionnée complète, masque de validité et politique
+de confiance, puis grille/agrégation et tests de géométrie/backward.
+Le modèle retourne actuellement uniquement la profondeur, pas encore les
+features nécessaires au lift.
+
+Le premier prototype peut utiliser une profondeur synthétique puis
+mesurée/splattée sur son support connu pour isoler les erreurs de géométrie.
+La profondeur apprise sera branchée ensuite avec une politique de validité
+explicite. Perfectionner l'entraînement camera-depth n'est pas un prérequis.
 
 ## Phase BEV 2 - Branche LiDAR et fusion
 
@@ -294,6 +314,11 @@ Le positionnement plus juste est :
 > TensorRT.
 
 ## Prochain incrément concret
+
+Après l'inspection qualitative et la clôture du backbone v1, appliquer les
+[prérequis de raccord](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
+Leur implémentation appartient au chantier du lift, pas à un nouveau cycle
+obligatoire d'optimisation du modèle de profondeur.
 
 Créer une branche dédiée, par exemple :
 

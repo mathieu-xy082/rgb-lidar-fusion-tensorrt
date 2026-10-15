@@ -4,15 +4,34 @@ Branch: `ec/camera-depth-backbone`
 
 Parent branch: `main`
 
-Status: v1 implementation, validation metrics, analysis notebook, and clean
-multi-epoch GPU runs are complete; structured LiDAR holdout, dataset scale-up,
-sensitivity, and dense-depth validation remain.
+Updated: 2026-10-15.
+
+Status: v1 implementation and sparse-supervised evaluation are complete,
+including matched five-epoch random/block runs on 512 frames and cross-evaluation.
+Qualitative prediction review remains before workstream closure. Dense-depth
+quality is not established; further training studies are not prerequisites for
+starting an experimental BEV lift.
 
 Related documents:
 
 - [camera-depth design](../bev-cam-depth-backbone.md);
 - [target BEV architecture](../bev-model-roadmap.md);
 - [project milestones](../milestones.md).
+
+## Current handoff
+
+- Completed: dense forward/loss/backward, leakage-safe random and block holdout,
+  checkpoint resume, validation metrics, notebooks, and the 512-frame pilot.
+- Active execution setting: enriched inputs, `320x1024`, batch size 1, FP32,
+  PyTorch `2.13.0+cu129`, NVIDIA driver/GSP `615.71.09`.
+- Next: inspect both checkpoints on the same validation frames and masks, then
+  close v1 as functional and evaluated under sparse supervision.
+- Subsequent development: expose backbone features and implement the geometric
+  contract described in [BEV connection prerequisites](../bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
+- Deferred: mixed holdout, block-size/radius/fraction sensitivity, more data,
+  additional seeds, and dense or semi-dense supervision.
+
+The GPU incident sections below are historical records, not the current setup.
 
 ## Goal
 
@@ -55,8 +74,7 @@ LiDAR maps.
 - [x] Validate RGB/LiDAR batch, channel, and spatial compatibility before the
   forward pass.
 - [x] Test finite dense output while preserving an odd input resolution.
-- [ ] Add a direct forward test for `lidar_mode="sparse"`; the code path exists,
-  but current camera-depth forward coverage exercises enriched mode only.
+- [x] Add a direct forward test for `lidar_mode="sparse"`.
 
 ### 2. Masked depth loss
 
@@ -96,9 +114,11 @@ training.
 
 - [x] Keep CI tests independent of CUDA and external datasets.
 - [x] Add explicit `auto`/`cpu`/`cuda` selection and device diagnostics.
-- [x] Pin the PyTorch CUDA 12.9 build to the local NVIDIA driver capability.
-- [x] Complete and record real GPU smoke runs, including the active
-  `320x1024`, batch-size-2 configuration.
+- [x] Pin the PyTorch CUDA 12.9 build; retain it after the driver update.
+- [x] Complete and record real GPU smoke runs at `320x1024`, including the
+  historical batch-size-2 smoke and the batch-size-1 representation pilot.
+- [x] Complete the fifth random-point epoch and the full five-epoch block run
+  after updating the local driver/GSP to `615.71.09`.
 
 ### 6. Meaningful local KITTI smoke
 
@@ -122,9 +142,9 @@ CenterPoint-like BEV heads in this branch.
 
 ### Follow-up: representation validation
 
-These tasks are not missing pieces of the v1 holdout smoke. They are required
-before claiming that the learned image-space representation generalizes well
-enough to feed the BEV lift.
+This section tracks the sparse-supervised representation pilot. Completion
+allows an experimental BEV handoff, not a claim of reliable dense depth or
+production-ready perception.
 
 - [x] Separate training and validation samples deterministically.
 - [x] Add held-out depth metrics on the validation split, evaluated without
@@ -144,13 +164,35 @@ enough to feed the BEV lift.
 - [x] Recompute the fixed splatting channels after block dropout and verify
   that every target measurement is absent from all model inputs.
 - [x] Report random-point and spatial-block validation metrics separately.
-- [ ] Scale the representation experiment beyond the 64-frame smoke sample.
-- [ ] Measure sensitivity to holdout fraction and splatting radius.
+- [x] Scale the representation experiment to the matched 512-frame pilot.
+- [x] Train both holdout modes for five epochs and cross-evaluate both models
+  on fixed random-point and spatial-block masks.
 - [x] Repeat a clean GPU run after the recorded Xid 62 failure.
-- [ ] Document what sparse holdout supervision can and cannot establish about
+- [x] Document what sparse holdout supervision can and cannot establish about
   dense depth quality.
 
-### Next experiment: LiDAR block dropout
+### Remaining v1 closure
+
+- [ ] Inspect a small set of identical validation frames for both checkpoints,
+  under both holdout modes; review depth discontinuities, nearby objects,
+  distant surfaces, and obvious invalid predictions.
+- [ ] Record the qualitative findings and close v1 if no major inconsistency
+  blocks the geometric prototype. No additional training score is required.
+
+### Deferred representation studies
+
+These are optional improvements, not blockers for the first BEV prototype:
+
+- [ ] Measure sensitivity to holdout fraction and splatting radius.
+- [ ] Evaluate fixed small/medium/large blocks before making claims about
+  receptive field or spatial-context limits.
+- [ ] Test mixed random/block training and, for a controlled geometry study,
+  bring achieved holdout fractions closer together.
+- [ ] Expand scene diversity and seeds, and add dense/semi-dense validation
+  before claiming broadly reliable depth completion.
+- [ ] Add progress reporting to long notebook cross-evaluations.
+
+### LiDAR block dropout implementation
 
 Development increments:
 
@@ -160,9 +202,8 @@ Development increments:
 - [x] Connect block masks to input removal and leakage-safe resplatting.
 - [x] Expose holdout settings in the runner and a dedicated pilot configuration.
 - [x] Add separate random-point/block validation and notebook visualizations.
-- [ ] Evaluate fixed small/medium/large block sizes before drawing conclusions
-  about the model's spatial context.
-- [ ] Run the smoke and matched 512-frame experiments.
+- [x] Run the smoke and matched 512-frame experiments.
+- [x] Complete the four train/evaluation holdout combinations.
 
 The extracted random-point helper accepts a valid-depth mask `[B, 1, H, W]`
 and returns a boolean target mask of the same shape. It retains the previous
@@ -217,8 +258,10 @@ valid measurements over the respective split, rather than image-area fractions.
 
 The dedicated pilot config is
 [`kitti_camera_depth_block_dropout.yaml`](../../configs/training/kitti_camera_depth_block_dropout.yaml):
-512 frames, enriched inputs, five epochs, `320x1024`, batch size 2, and a
-dedicated output directory. Its entry point is:
+512 frames, enriched inputs, five epochs, `320x1024`, a YAML default batch size
+of 2, and a dedicated output directory. The completed local runs override batch
+size to 1 in the notebook; reproduce that override for matched comparisons.
+The CLI entry point below uses the YAML defaults, not the notebook override:
 
 ```bash
 PDM_IGNORE_ACTIVE_VENV=1 pdm run train-camera-depth -- \
@@ -250,8 +293,8 @@ CPU fixture tests cover both holdout modes, sparse/enriched inputs, validation,
 metrics persistence, checkpoint resume, cross-evaluation consistency, and
 execution of the preview/comparison/sample notebook cells. The notebook has
 also been executed on local KITTI data on CPU with all training flags disabled.
-The matched 512-frame training experiments and block-size sensitivity study
-remain pending. Sparse LiDAR supervision still does not establish depth quality
+The matched 512-frame experiments and cross-evaluation are complete; block-size
+sensitivity remains a deferred study. Sparse LiDAR supervision does not establish depth quality
 at pixels without LiDAR measurements. In large holes, splat coverage may be low:
 the current splat baseline errors include zero-valued predictions outside its
 support and must be interpreted together with coverage.
@@ -299,7 +342,7 @@ error clearly increases with block size.
 
 ### Dataset scale-up
 
-The existing 64 KITTI Object frames are a smoke and debugging dataset. They are
+The original 64 KITTI Object frames are a smoke and debugging dataset. They are
 enough to validate projection, holdout, resplatting, optimization, and the first
 sparse-versus-enriched comparison, but they are not enough to establish
 generalization across scenes and object appearances.
@@ -313,6 +356,10 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm run python docs/onboarding/scripts/download_kitti_s
   --source official \
   --count 512
 ```
+
+This first scale-up is complete: the local pilot uses 512 matching
+image/Velodyne/calibration triplets, split into 410 train and 102 validation
+frames. Further expansion is not required to begin the geometric BEV prototype.
 
 Then set `sample_count: 512` in an experiment-specific training configuration.
 Keep the 64-frame configuration as the fast smoke path instead of silently
@@ -375,6 +422,56 @@ The analysis notebook can launch or load a run, plot training/validation curves,
 compare the model against the splatted-depth baseline, and visualize a
 representative validation frame. Reusable loading and plotting logic lives in
 `src/rgb_lidar_fusion/camera_depth_analysis.py` rather than only in the notebook.
+
+### Matched 512-frame results
+
+The completed pilot uses 410 train / 102 validation frames, seed/split seed 13,
+validation holdout seed 1013, enriched inputs, `320x1024`, batch size 1, and five
+epochs (2050 optimizer steps) per model. Both models started from the same
+seeded initialization; the block model did not resume from the random model.
+Validation masks are identical between models within each evaluation mode.
+
+The local report is
+`results/analysis/camera_depth_holdout_comparison.json`; the corresponding runs
+are under `results/training/kitti_camera_depth_random_holdout_512/` and
+`results/training/kitti_camera_depth_block_dropout_512/`. These artifacts remain
+ignored by Git; the rounded results below preserve the conclusions in docs.
+
+| Training holdout | Evaluation holdout | MAE (m) | RMSE (m) |
+|---|---|---:|---:|
+| Random points | Random points | 0.602 | 1.674 |
+| Random points | Spatial blocks | 4.883 | 8.327 |
+| Spatial blocks | Random points | 1.744 | 3.249 |
+| Spatial blocks | Spatial blocks | 2.117 | 4.225 |
+
+| Evaluation holdout | Achieved fraction | Target pixels | Splat coverage | Splat MAE / RMSE (m) |
+|---|---:|---:|---:|---:|
+| Random points | 20.0% | 386015 | 80.5% | 3.349 / 8.529 |
+| Spatial blocks | 10.7% | 206250 | 4.2% | 16.110 / 19.776 |
+
+On the same spatial targets, block training reduced MAE by approximately 57%
+and RMSE by 49% relative to random training. Random training remained more
+accurate on random-point targets. This supports a robustness/accuracy trade-off
+under the tested missing-data patterns, not a universally better checkpoint.
+
+### Interpretation limits
+
+- Scores compare models within the same evaluation mode, not across different
+  target sets. Only hidden, measured LiDAR pixels have reference depths.
+- Training and evaluation holdout fractions differ between modes (about 20%
+  random versus 11% spatial). Equal epoch/step budgets do not equalize the
+  number or distribution of supervised measurements.
+- Splat baseline errors include zero predictions outside splat support. The
+  large spatial baseline error must be read with its 4.2% coverage; it is not
+  the error on only the covered pixels.
+- A dense output is not a dense validation result. Sky, occluded areas, object
+  boundaries, and pixels without LiDAR references remain insufficiently tested.
+- Depth supervision and these scores do not establish learned object semantics,
+  calibrated prediction uncertainty, or dependence on the RGB modality.
+- This is a single-seed pilot on a fixed KITTI subset. It does not establish
+  broad scene generalization, a held-out final test score, or BEV accuracy.
+- Keep both checkpoints for the BEV prototype. Do not require a mixed-holdout
+  run, SOTA scores, or a larger network before testing the geometric connection.
 
 ## Sparse LiDAR channels
 
@@ -571,7 +668,7 @@ CUDA 13 build that requires a newer NVIDIA driver.
 
 ### Resolution decision
 
-The active training resolution is `320x1024` with batch size 2. A complete
+The resolution selected for the original smoke was `320x1024`, batch size 2. A complete
 64-frame FP32 epoch ran on the RTX with 32 optimizer steps, mean loss `0.033595`,
 and mean gradient norm `0.331645`.
 
@@ -579,8 +676,9 @@ The 4 GiB GPU has little remaining headroom at this setting: cuDNN reported one
 failed optional 240 MiB workspace allocation, selected a fallback algorithm,
 and completed the run. A subsequent mixed-precision experiment caused NVIDIA
 Xid 62 and left the GPU in `Reset Required` state, so mixed precision is not
-enabled in the committed configuration. The machine must be restarted before
-further CUDA validation.
+enabled in the committed configuration. At that point, the machine required a
+restart before further CUDA validation. Later recovery and completed runs are
+recorded below.
 
 ### Interrupted 512-frame GPU run
 
@@ -708,8 +806,53 @@ The resumed random-point run subsequently completed epochs 3 and 4 and saved
 the epoch-4/step-1640 checkpoint. Validation MAE/RMSE were `0.637557 m` /
 `1.737027 m` on 386015 held-out pixels. Epochs 2 through 4 have persisted metric
 rows; epoch-1 metrics remain unavailable from the original interrupted run.
-The pilot still needs its fifth epoch and the matched block-holdout run.
+At that point, the pilot still needed its fifth epoch and the block-holdout run;
+both have since completed, as summarized in the current results above.
 These successful runs do not establish the cause of the earlier Xid failures.
+
+### Recurrent failure while attempting epoch 5
+
+On 2026-10-13 at 22:56:44 local time, the epoch-5 resume attempt failed during
+backward with `CUDA error: unspecified launch failure`. Kernel logs again
+recorded Xid 62, Xid 45 cleanup events for the Python process, and Xid 154
+requesting a GPU reset. NVIDIA SMI confirmed recovery action `Reset`.
+Cache cleanup and the earlier successful short probes did not resolve this
+recurring failure; the exact cause remains unknown.
+
+At the time of this failure, the latest checkpoint was reloaded on CPU and
+contained finite weights at epoch 4, step 1640. A separate identical copy was
+retained as `checkpoints/epoch_004_step_01640_before_driver_diagnostics.pt`;
+the checkpoint and its copy then had
+SHA-256 `4a127b740df41f6f64ff26c038ae075a1117b7e25c1866d3299342965fd2c466`.
+No completed fifth epoch had been recorded at that point.
+
+The loaded open kernel driver and GSP firmware are `575.64.03`, with kernel
+`6.14.0-33-generic`, PyTorch `2.13.0+cu129`, CUDA build `12.9`, and cuDNN `92000`.
+Local `ubuntu-drivers devices` recommends `nvidia-driver-615-open`; the current
+APT package index offers `615.71.09-0ubuntu0.24.04.2`. This is a driver-update
+candidate, not an established fix. Before another long GPU run, retain an
+NVIDIA bug report from the failed state and review an Ubuntu-managed driver
+update with the user. No driver, firmware, power setting, or dependency was
+changed during this diagnosis. After recovery, compare controlled backend
+probes and real KITTI training; do not interpret a passing short synthetic run
+as proof of long-run stability or assume that the GPU hardware is defective.
+
+### Driver update and completed runs
+
+The driver and GSP firmware were subsequently updated through Ubuntu packages
+to `615.71.09`, without changing PyTorch or the training architecture. After
+reboot, a 100-step synthetic checkpoint-resume probe completed in approximately
+34 seconds; NVIDIA reported recovery action `None` and no Xid entries were
+observed in that boot's journal at the check. The random-point run then reached
+epoch 5 / step 2050, and the separate block-holdout run completed all five
+epochs. The four cross-evaluation combinations also completed successfully.
+
+These runs provide evidence of successful execution after the update, not proof
+that the driver was the sole cause or that future failures are impossible. AMP
+remains disabled and the active notebook batch size remains 1. The original
+random run's epoch-1 metrics were lost before per-epoch sidecar persistence was
+implemented; its model/optimizer checkpoint survived and epochs 2 through 5
+have saved metrics. The block run has metrics for all five epochs.
 
 ## Acceptance criteria
 

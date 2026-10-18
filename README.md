@@ -17,13 +17,17 @@ Le socle implémenté couvre :
 - un baseline historique RGB/LiDAR utilisé pour valider training, ONNX et les
   outils TensorRT ;
 - un backbone camera-depth dense entraîné par holdout de mesures LiDAR ;
+- un premier lift géométrique des features caméra vers BEV, avec masques,
+  agrégation par cellule, tests de backward et inspection KITTI sur CPU ;
 - des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
 
-La prochaine direction structurante est le lift des features camera-depth vers
-une grille BEV. Le point cloud brut conservera ensuite sa propre branche BEV
-avant la fusion et les têtes de détection 3D.
+Le lift BEV est un prototype PyTorch fonctionnel à relire et inspecter sur
+d'autres scènes, pas encore une détection 3D ni un module validé temps réel.
+Le point cloud brut conservera ensuite sa propre branche BEV avant la fusion
+et les têtes de détection 3D. Voir le
+[workstream du lift](docs/workstreams/camera-depth-bev-lift.md).
 
 L'état détaillé et les critères de sortie sont suivis dans
 [docs/milestones.md](docs/milestones.md).

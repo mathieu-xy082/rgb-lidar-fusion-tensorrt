@@ -200,8 +200,11 @@ Le `forward()` du modèle retourne toujours uniquement la profondeur.
 `forward_features()` expose désormais les features du dernier décodeur en
 `[B, 32, H, W]` sur la même grille image. La conversion en mètres, la calibration
 complète dans les batches, la rétroprojection caméra/LiDAR et la sélection
-explicite de profondeur/support/confiance sont implémentées ; leur intégration
-et l'agrégation BEV restent à faire. Suivi :
+explicite de profondeur/support/confiance sont implémentées. Le premier lift
+fonctionnel les raccorde à une grille métrique avec moyenne des features,
+masques et compteurs ; les gradients vers le backbone sont testés et une frame
+KITTI a été inspectée sur CPU. L'entraînement depth reste inchangé et le lift
+n'est pas encore validé en temps réel ou à l'export. Suivi :
 [workstream BEV lift](workstreams/camera-depth-bev-lift.md).
 
 Le premier prototype peut utiliser une profondeur synthétique puis

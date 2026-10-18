@@ -6,9 +6,10 @@ Parent branch: `main` (camera-depth v1 / release 1.1.0).
 
 Updated: 2026-10-18.
 
-Status: feature access, camera/LiDAR geometry, and depth-source/support policies
-are implemented. BEV projection and its use of the validity mask remain.
-No new training is required for these steps.
+Status: the first functional camera-depth BEV lift is implemented and checked
+on synthetic cases and one real KITTI frame on CPU. Developer review and wider
+scene inspection remain; there is no LiDAR BEV encoder, fusion, or detector yet.
+No new training was required.
 
 References:
 
@@ -125,7 +126,7 @@ P2, with x right, y down, z forward. In KITTI, vehicle coordinates mean
 Velodyne: x forward, y left, z up. This is not a calibrated ROS base_link,
 world frame, or gravity-aligned frame. The first BEV prototype will use this
 LiDAR frame; grid origin, row/column direction, bounds, and height selection
-remain increment 4. No additional camera-to-BEV transform is invented here.
+are defined in increment 4. No additional world/base_link transform is invented.
 
 #### Pixel alignment and compatibility
 
@@ -225,8 +226,9 @@ Splat confidence is not a probability of correct depth, an object score, or a
 learned uncertainty. The original map is returned unchanged, including scores
 rejected by the mask, so only valid entries may be used for future weighting.
 No uncertainty head, trainable parameter, training-loss change, or checkpoint
-change is introduced. These utilities are tested but are not called by the
-current training/inference path; their BEV integration remains increment 4.
+change is introduced. These utilities are now used by the functional BEV lift
+and standalone inspection. The depth-training runner and model `forward()`
+still behave as before.
 
 Tests cover boundaries, invalid depths/scores, empty support, channel contracts,
 per-sample scales, explicit prediction domains, no input mutation, finite
@@ -241,13 +243,142 @@ from the preceding notation/math-comment commit `b04546c`.
 
 ### 4. Implement and verify the BEV grid
 
-- [ ] Define metric bounds, axes, resolution, and aggregation.
-- [ ] Test expected cells, collisions, empty cells, and out-of-grid points.
-- [ ] Verify a synthetic feature-to-BEV backward, then inspect a KITTI frame.
+- [x] Define metric bounds, axes, resolution, and aggregation.
+- [x] Connect existing features, selected depth/support, and full calibration.
+- [x] Test expected cells, collisions, empty cells, and out-of-grid points.
+- [x] Exclude invalid pixels before indexing or multiplying feature weights.
+- [x] Verify synthetic feature/backbone backward and unchanged depth contracts.
+- [x] Add a reproducible CPU inspection command without notebook edits.
+- [x] Inspect a real KITTI frame with camera-FOV raw LiDAR as a reference.
+
+#### Grid and aggregation contract
+
+`camera_bev.BEVGridConfig` requires explicit `x_range_m`, `y_range_m`,
+`z_range_m`, and `resolution_m`. All intervals are **half-open [min, max)**.
+XY extents must be integer multiples of the positive isotropic resolution.
+The reference frame is Velodyne: x forward, y left, z up; heights are relative
+to the LiDAR origin, not to estimated ground. No gravity/world alignment is
+performed.
+
+```text
+row = floor((x - x_min) / resolution_m)
+col = floor((y - y_min) / resolution_m)
+Hbev = (x_max - x_min) / resolution_m
+Wbev = (y_max - y_min) / resolution_m
+```
+
+The row/column origin is the lower XY bound. Cell [row, col] has metric center
+`(x_min + (row+0.5)*resolution, y_min + (col+0.5)*resolution)`.
+Points outside XYZ bounds are excluded, not clamped to edge cells.
+
+`lift_camera_features_to_bev(image_features, depth_support=...,
+camera_projection=..., t_vehicle_to_camera=..., grid=...)` connects the previous
+APIs. It backprojects the full-resolution depth and applies the support mask,
+finite XYZ/features checks, and metric bounds **before** creating cell indices.
+Invalid-depth placeholders cannot become fake BEV observations.
+
+Each cell receives the **mean** of accepted pixel features. Batch items never
+mix. The optional `weight_by_splat_confidence=True` uses a weighted mean and
+requires the splatted source; it cannot assign splat uncertainty to predicted
+depth. Non-finite/non-positive/out-of-range weights are excluded before any
+multiplication. Empty cells remain zero; a positive tiny mass is not replaced
+by epsilon.
+
+The result `CameraBEVFeatures` contains:
+
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `features` | `[B, C, Hbev, Wbev]` | Mean or confidence-weighted mean |
+| `pixel_count` | `[B, 1, Hbev, Wbev]` | Number of accepted pixel contributions |
+| `weight_sum` | `[B, 1, Hbev, Wbev]` | Denominator used by the mean |
+| `pixel_mask` | `[B, 1, H, W]` | Pixels actually included after all filters |
+
+Use `pixel_count > 0` to distinguish empty cells from real zero feature
+vectors. Counts are **not** occupancy probabilities or counts of independent
+LiDAR returns: many splatted pixels can share one source measurement.
+
+Minimal connection, with tensors already on the same dtype/device:
+
+```python
+image_features = model.forward_features(rgb, lidar_maps)
+support = prepare_camera_depth_support(
+    lidar_maps, source="splatted", max_depth_m=checkpoint_config["max_depth_m"],
+    max_valid_depth_m=80.0,
+)
+grid = BEVGridConfig(
+    x_range_m=(0.0, 50.0), y_range_m=(-25.0, 25.0),
+    z_range_m=(-3.0, 3.0), resolution_m=0.5,
+)
+bev = lift_camera_features_to_bev(
+    image_features, depth_support=support, camera_projection=camera_projection,
+    t_vehicle_to_camera=t_vehicle_to_camera, grid=grid,
+)
+camera_bev = bev.features  # [B, 32, 100, 100]
+```
+
+These bounds are a configurable KITTI inspection example, not a vehicle safety
+envelope. The mean is differentiable to accepted features/backbone. Discrete
+floor/scatter indices provide **no depth/calibration gradient through point
+placement**; a BEV-only loss does not train the depth head. No detector, BEV
+training loss, optimizer integration, or state-dict change is introduced.
+
+#### Reproduce the inspection
+
+```bash
+pdm run python scripts/inspect_camera_bev.py \
+  --checkpoint results/training/kitti_camera_depth_block_dropout_512/checkpoints/latest.pt \
+  --source sparse
+```
+
+Use `--source splatted --weight-by-splat-confidence` for the weighted splat
+variant. `--sample-index`, `--data-root`, `--x-range`, `--y-range`, `--z-range`,
+`--resolution`, `--max-valid-depth`, and `--min-splat-confidence` control the
+inspection. Image resolution and normalization come from the checkpoint.
+This command uses CPU, `eval()`/`no_grad()`, one frame, all measured input
+points, and **no holdout**: it is a geometric inference inspection, not another
+validation score. Learned features are loaded from the checkpoint, but depth
+comes from sparse/splatted input, not from the predicted depth head.
+
+The PNG shows RGB, camera-FOV raw LiDAR in the same ROI, contributing-pixel
+counts, and feature RMS. Positive vehicle-left is displayed to the left;
+forward is up. Feature RMS is not a semantic/object score. JSON records the
+configuration and counts; NPZ stores features, evidence maps, pixel mask, and
+calibration. Outputs go under ignored `results/analysis/camera_bev/`.
+
+On 2026-10-18, CPU inspection used the real block-dropout epoch-5/step-2050
+checkpoint and KITTI frame 000000 at 320x1024, with 0.5 m cells, x=[0,50),
+y=[-25,25), z=[-3,3). Both outputs were finite `[1,32,100,100]` tensors:
+
+| Depth source | Accepted pixels | Occupied cells |
+| --- | --- | --- |
+| sparse, unweighted | 20,166 | 745 |
+| splatted, confidence-weighted | 191,636 | 705 |
+
+The camera-FOV raw reference had 20,255 points in the ROI. Visual inspection
+showed consistent axis orientation and main structures. Counts need not match
+the raw cloud because projection is rounded and collisions keep nearest depth.
+More splatted pixels do not guarantee more distinct BEV cells: the nearest-depth
+overlap heuristic can replace a farther sparse point. This is not a comparison
+of detection quality or learned-depth generalization.
+
+Tests cover geometry, masks, non-finite data, grid edges/heights, batch
+separation, unweighted/weighted collisions, exact/numerical feature gradients,
+finite gradients through all encoder/decoder stages, and checkpoint/depth-output
+compatibility. The inspection CLI is also tested using generated KITTI fixtures
+and a checkpoint hash before/after execution. GPU latency/determinism and
+ONNX/TensorRT export of this lift are not validated.
+
+CPU validation on 2026-10-18: 37 lift/inspection tests passed; the suite
+excluding saved notebook-state checks passed with 350 tests and one CUDA-only
+skip. The three notebook syntax checks passed separately; existing notebook
+execution state was left untouched. No GPU training or new checkpoint was
+produced.
 
 ## Limits
 
-Feature extraction does not perform a lift, infer semantic classes, or establish
-depth reliability. The full-resolution representation is a simple alignment
-choice for the first prototype, not a latency or memory optimization. A later
-lower-resolution API will need its own explicit alignment contract.
+The functional lift does not infer semantic classes, establish reliable dense
+depth, or fuse raw point-cloud features. The full-resolution representation
+and dense solves are alignment choices for the first prototype, not latency or
+memory optimizations. A later lower-resolution API needs its own alignment
+contract. Review this implementation and inspect more scenes before choosing
+the next LiDAR-BEV/fusion increment.

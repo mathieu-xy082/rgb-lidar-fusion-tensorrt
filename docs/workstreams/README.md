@@ -8,8 +8,9 @@ devenir une source de vérité générale.
 
 - [Camera-depth BEV lift](camera-depth-bev-lift.md) : accès aux features
   implémenté sans modification du contrat de profondeur ni des checkpoints ;
-  géométrie métrique, rétroprojection caméra/LiDAR et sélection du support
-  testées ; grille et intégration BEV à développer ensuite.
+  géométrie métrique, sélection du support, raccord à la grille BEV et backward
+  testés ; première inspection KITTI CPU
+  terminée. Relecture et inspection d'autres scènes avant LiDAR BEV/fusion.
 - [Camera-depth backbone](camera-depth-backbone.md) : v1 implémentée et évaluée,
   pilotes random/blocs sur 512 frames et comparaison croisée terminés ;
   inspection qualitative restante avant clôture.
@@ -17,7 +18,7 @@ devenir une source de vérité générale.
 Le chantier architectural actif est le lift camera-depth vers BEV. Ses
 [prérequis techniques](../bev-cam-depth-backbone.md#prerequis-du-raccord-bev)
 sont documentés ; accès aux features, géométrie caméra/LiDAR et politique de
-validité/confiance sont implémentés comme utilitaires testés, sans raccord BEV.
+validité/confiance sont raccordés à un premier lift BEV fonctionnel PyTorch.
 Les études supplémentaires
 d'entraînement ne sont pas des prérequis pour ce prototype géométrique.
 

@@ -61,18 +61,19 @@ Suivi détaillé :
 Construire un module testable qui transforme les features image-depth en grille
 BEV à partir de la calibration, de la profondeur et de la confiance.
 
-Le raccord n'est pas encore implémenté. L'accès aux features du dernier décodeur
-est disponible et testé, ainsi que la profondeur métrique, la calibration
-redimensionnée, la rétroprojection caméra/LiDAR et la sélection explicite de
-profondeur/support/confiance. Il reste à intégrer ces utilitaires, puis tester
-la grille et l'agrégation BEV. La checklist technique
+Un premier raccord fonctionnel est implémenté : features, profondeur/support,
+calibration complète, rétroprojection et moyenne par cellule BEV. Les masques,
+bords, collisions et gradients vers le backbone sont testés. Une frame KITTI a
+été inspectée sur CPU avec le checkpoint existant et le LiDAR comme référence,
+sans nouvel entraînement. La relecture et l'inspection d'autres scènes restent
+le prochain travail avant la branche LiDAR BEV/fusion. La checklist technique
 de référence est dans les
 [prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
 
 Implémentation incrémentale :
 [workstream camera-depth BEV lift](workstreams/camera-depth-bev-lift.md).
 
-Premier critère de réussite :
+Premier critère de réussite atteint sur les cas synthétiques :
 
 ```text
 RGB + LiDAR enriched + calibration
@@ -86,13 +87,16 @@ d'utiliser la profondeur apprise. Le premier backward doit atteindre les
 features ; un scatter à indices discrets ne garantit pas un gradient vers la
 profondeur via le placement des cellules.
 
-Le module doit rendre explicites :
+Le module rend explicites :
 
 - l'étendue métrique et la résolution de la grille BEV ;
 - les conventions de repères caméra, véhicule et BEV ;
 - le traitement des pixels sans profondeur fiable ;
 - l'agrégation de plusieurs pixels dans une même cellule ;
-- les shapes statiques nécessaires au futur export.
+- les shapes BEV fixées par la configuration ; l'export du lift reste à valider.
+
+Inspection reproductible : `scripts/inspect_camera_bev.py`. Voir le
+[contrat et la commande](workstreams/camera-depth-bev-lift.md#reproduce-the-inspection).
 
 Architecture de référence :
 [bev-model-roadmap.md](bev-model-roadmap.md).

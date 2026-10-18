@@ -247,9 +247,11 @@ les accumuler dans une grille BEV.
 ## Prerequis du raccord BEV
 
 Cette section est la référence pour le prochain incrément architectural.
-Les éléments ci-dessous sont suivis dans le chantier du lift ; les points 1 à 3
-sont implémentés comme API testées ; leur intégration à la grille BEV reste le
-point 4. Aucun nouvel entraînement préalable n'est requis pour commencer la géométrie.
+Les quatre points ci-dessous sont implémentés dans un premier raccord BEV
+fonctionnel, testé sur des cas synthétiques et inspecté sur une frame KITTI CPU.
+La relecture et l'inspection d'autres scènes restent utiles ; il n'y a pas encore
+d'encodeur LiDAR BEV, de fusion ou de détection 3D. Aucun nouvel entraînement
+n'a été nécessaire pour ce prototype.
 
 ### 1. Exposer les features sans casser le backbone
 
@@ -347,24 +349,43 @@ Les valeurs rejetées sont remplacées par zéro uniquement pour éviter les
 `NaN`/`Inf` dans une rétroprojection dense : leur masque reste faux et leurs
 XYZ devront être exclus avant l'agrégation BEV. Les tests vérifient notamment
 l'absence de fuite des targets sous les deux holdouts et un backward géométrique
-fini. Ces utilitaires ne sont pas encore branchés dans le chemin du modèle ;
-le point 4 réalisera ce raccord, sans changer l'entraînement de profondeur.
+fini. Ces utilitaires sont utilisés par le lift fonctionnel du point 4 et sa
+commande d'inspection ; le `forward()` et l'entraînement de profondeur restent inchangés.
 
 ### 4. Fixer la grille et vérifier le lift
 
-- Définir les limites métriques, l'origine, les axes, la résolution, la sélection
+- [x] Définir les limites métriques, l'origine, les axes, la résolution, la sélection
   en hauteur et l'ordre d'indexation de `camera_bev: [B, C, Hbev, Wbev]`.
-- Choisir une agrégation explicite lorsque plusieurs pixels arrivent dans la
+- [x] Choisir une agrégation explicite lorsque plusieurs pixels arrivent dans la
   même cellule : somme/moyenne, et éventuelle pondération par la confiance.
   Tester aussi les cellules vides et l'exclusion des points hors grille.
-- Commencer par des tests synthétiques de backprojection/reprojection,
+- [x] Commencer par des tests synthétiques de backprojection/reprojection,
   calibration redimensionnée et `P2` à translation non nulle ; vérifier ensuite
   le placement dans des cellules BEV attendues.
-- Vérifier un backward fini et non nul vers les features/backbone. Avec un
+- [x] Vérifier un backward fini et non nul vers les features/backbone. Avec un
   scatter à indices discrets, cela ne garantit pas un gradient vers la
   profondeur ou la calibration via les coordonnées : documenter cette limite.
-- Inspecter ensuite une frame KITTI avec la géométrie LiDAR comme référence,
+- [x] Inspecter ensuite une frame KITTI avec la géométrie LiDAR comme référence,
   sans ajouter encore l'encodeur LiDAR BEV ni les heads de détection.
+
+`camera_bev.lift_camera_features_to_bev()` raccorde les features, la profondeur
+sélectionnée et la calibration complète. `BEVGridConfig` fixe des bornes
+métriques semi-ouvertes `[min, max)`, des lignes selon `x` avant et des colonnes
+selon `y` gauche, dans le repère Velodyne. Le filtre `z` est relatif au LiDAR,
+pas à un sol estimé. La résolution est explicite et les étendues XY doivent
+contenir un nombre entier de cellules.
+
+L'agrégation est une moyenne, éventuellement pondérée par la confiance du
+splatting de manière explicite. Le résultat contient les features BEV, un
+compteur de pixels, la somme des poids et le masque image des pixels retenus.
+Les cellules vides restent nulles ; le compteur permet de les distinguer de
+features réellement nulles. Les pixels invalides sont exclus avant indexation,
+les points hors grille ne sont jamais rabattus sur ses bords.
+
+Le [workstream](workstreams/camera-depth-bev-lift.md#reproduce-the-inspection)
+fournit la commande `scripts/inspect_camera_bev.py`, les conventions détaillées
+et les résultats de la première inspection CPU. Ce raccord PyTorch n'introduit
+aucun poids ni head supplémentaires et ne prétend pas être exporté ou temps réel.
 
 Le critère de passage est un raccord géométriquement cohérent et testable, pas
 un score de profondeur parfait. Les entraînements mêlant random/blocs, les études de
@@ -382,7 +403,7 @@ encore `CameraDepthModel` ou le lift.
 [fait]    4. Évaluer les deux pilotes 512 frames sur les deux holdouts
 [actif]   5. Inspecter les prédictions et consigner les limites de v1
 [fait]    6. Exposer les features sans modifier le contrat depth/checkpoints
-[prochain]7. Définir la géométrie et réaliser le raccord camera-depth -> BEV
+[fait]    7. Raccord géométrique camera-depth -> BEV et première inspection CPU
 [prévu]   8. Ajouter une branche lidar_bev
 [prévu]   9. Ajouter fusion BEV + CenterPoint-like head
 ```
@@ -404,14 +425,12 @@ reste à inspecter quelques prédictions sur les mêmes frames et masques, puis 
 clôturer v1 comme fonctionnelle et évaluée sous supervision sparse, sans
 revendiquer une profondeur dense fiable partout.
 
-Le prochain chantier architectural est le module `camera-depth -> camera_bev`
-décrit dans l'[architecture BEV](bev-model-roadmap.md). Il commence par les
-[prérequis de raccord](#prerequis-du-raccord-bev), dont l'accès aux features est
-maintenant disponible avec la géométrie caméra/LiDAR et une politique explicite
-de validité/confiance. Le prochain incrément porte sur la grille et l'agrégation
-BEV, en conservant l'architecture et les checkpoints
-actuels. Aucun entraînement
-mixte ou changement de backbone n'est requis avant les premiers tests géométriques.
+Le module `camera-depth -> camera_bev` décrit dans l'[architecture BEV](bev-model-roadmap.md)
+dispose maintenant d'un premier raccord géométrique fonctionnel. Relire ce code
+et inspecter d'autres frames est le prochain travail de prise en main avant
+de choisir l'incrément LiDAR BEV/fusion. Les checkpoints actuels, l'architecture
+du backbone et l'entraînement de profondeur sont conservés. Aucun entraînement
+mixte ni score de profondeur parfait n'est requis pour ce prototype.
 
 Les critères à jour sont suivis dans les
 [milestones](milestones.md), et les résultats d'exécution dans le

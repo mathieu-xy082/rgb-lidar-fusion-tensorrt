@@ -199,14 +199,16 @@ de confiance, puis grille/agrégation et tests de géométrie/backward.
 Le `forward()` du modèle retourne toujours uniquement la profondeur.
 `forward_features()` expose désormais les features du dernier décodeur en
 `[B, 32, H, W]` sur la même grille image. La conversion en mètres, la calibration
-complète dans les batches et la rétroprojection caméra/LiDAR sont implémentées ;
-validité et agrégation BEV restent à faire. Suivi :
+complète dans les batches, la rétroprojection caméra/LiDAR et la sélection
+explicite de profondeur/support/confiance sont implémentées ; leur intégration
+et l'agrégation BEV restent à faire. Suivi :
 [workstream BEV lift](workstreams/camera-depth-bev-lift.md).
 
 Le premier prototype peut utiliser une profondeur synthétique puis
 mesurée/splattée sur son support connu pour isoler les erreurs de géométrie.
-La profondeur apprise sera branchée ensuite avec une politique de validité
-explicite. Perfectionner l'entraînement camera-depth n'est pas un prérequis.
+La profondeur apprise pourra être branchée ensuite avec le masque de support
+explicite prévu par cette API. Perfectionner l'entraînement camera-depth n'est
+pas un prérequis.
 
 ## Phase BEV 2 - Branche LiDAR et fusion
 

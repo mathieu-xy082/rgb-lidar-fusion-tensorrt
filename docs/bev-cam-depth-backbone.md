@@ -247,9 +247,9 @@ les accumuler dans une grille BEV.
 ## Prerequis du raccord BEV
 
 Cette section est la référence pour le prochain incrément architectural.
-Les éléments ci-dessous sont suivis dans le chantier du lift ; les points 1 et 2
-sont implémentés, les points 3 et 4 restent à développer/tester. Aucun nouvel
-entraînement préalable n'est requis pour commencer la géométrie.
+Les éléments ci-dessous sont suivis dans le chantier du lift ; les points 1 à 3
+sont implémentés comme API testées ; leur intégration à la grille BEV reste le
+point 4. Aucun nouvel entraînement préalable n'est requis pour commencer la géométrie.
 
 ### 1. Exposer les features sans casser le backbone
 
@@ -317,23 +317,38 @@ dans les cartes sparse empêche aussi une inversion exacte vers les points raw.
 Voir le [contrat détaillé](workstreams/camera-depth-bev-lift.md#geometry-contract).
 Une future grille de features sous-échantillonnée devra définir son propre
 alignement profondeur/calibration et le traitement des discontinuités ; elle
-n'est pas introduite ici. Validité et confiance restent le point suivant.
+n'est pas introduite ici. Validité et confiance sont traitées séparément au point 3.
 
 ### 3. Séparer profondeur utilisable et confiance
 
-- Définir un masque de lift : profondeur finie, strictement positive, dans la
+- [x] Définir un masque de lift : profondeur finie, strictement positive, dans la
   plage métrique retenue et avec une règle de support explicite. La head
   actuelle est une régression linéaire non contrainte ; une sortie finie seule
   ne constitue pas une profondeur exploitable.
-- Exclure explicitement les valeurs invalides ; les remplacer par une valeur
+- [x] Exclure explicitement les valeurs invalides ; les remplacer par une valeur
   positive arbitraire ou un simple clamp ne suffit pas à les rendre valides.
-- Distinguer `confidence` du splatting, masque de validité et incertitude de
+- [x] Distinguer `confidence` du splatting, masque de validité et incertitude de
   `depth_pred`. La confiance existante est heuristique et ne calibre pas les
   prédictions du réseau. Une head d'incertitude apprise n'est pas un prérequis.
-- Pour le premier contrôle géométrique, utiliser une profondeur synthétique
-  connue, puis mesurée/splattée avec son support explicite. Brancher ensuite la
+- [x] Préparer des sources séparées pour le premier contrôle géométrique :
+  profondeur synthétique connue, puis mesurée/splattée avec son support explicite.
+  Brancher ensuite la
   profondeur apprise comme source distincte, sans déclarer fiables tous les
   pixels d'une carte dense ni utiliser les targets holdout comme entrées.
+
+`camera_depth_support.prepare_camera_depth_support()` retourne la source choisie,
+`depth_m`, `valid_mask` et, pour la source splattée uniquement, `splat_confidence`.
+Le support sparse vient des mesures conservées ; le support splatté exige une
+confiance finie dans `]0, 1]`, avec un seuil configurable. La source prédite exige
+un masque booléen explicite et ne reçoit pas la confiance du splatting comme
+incertitude. La plage de sélection métrique est indépendante de la normalisation.
+
+Les valeurs rejetées sont remplacées par zéro uniquement pour éviter les
+`NaN`/`Inf` dans une rétroprojection dense : leur masque reste faux et leurs
+XYZ devront être exclus avant l'agrégation BEV. Les tests vérifient notamment
+l'absence de fuite des targets sous les deux holdouts et un backward géométrique
+fini. Ces utilitaires ne sont pas encore branchés dans le chemin du modèle ;
+le point 4 réalisera ce raccord, sans changer l'entraînement de profondeur.
 
 ### 4. Fixer la grille et vérifier le lift
 
@@ -392,8 +407,9 @@ revendiquer une profondeur dense fiable partout.
 Le prochain chantier architectural est le module `camera-depth -> camera_bev`
 décrit dans l'[architecture BEV](bev-model-roadmap.md). Il commence par les
 [prérequis de raccord](#prerequis-du-raccord-bev), dont l'accès aux features est
-maintenant disponible avec la géométrie caméra/LiDAR. Le prochain incrément porte
-sur la validité et la confiance, en conservant l'architecture et les checkpoints
+maintenant disponible avec la géométrie caméra/LiDAR et une politique explicite
+de validité/confiance. Le prochain incrément porte sur la grille et l'agrégation
+BEV, en conservant l'architecture et les checkpoints
 actuels. Aucun entraînement
 mixte ou changement de backbone n'est requis avant les premiers tests géométriques.
 

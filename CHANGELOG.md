@@ -16,8 +16,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Differentiable metric camera-z conversion and camera-to-LiDAR backprojection,
   preserving full `P2` translation, v1 projection resize, and existing inputs.
   Geometry tests cover frame axes, non-zero translation, resizing, per-sample
-  calibration, round trips, and depth gradients; validity and BEV binning remain
-  separate follow-ups.
+  calibration, round trips, and depth gradients; BEV binning remains a follow-up.
+- Explicit sparse/splatted/predicted depth selection with metric validity masks,
+  separate heuristic splat confidence, and mandatory support for learned depth.
+  Invalid depths are excluded with a retained mask and safe zero placeholders;
+  tests cover leakage under both holdouts and finite geometry gradients. No
+  change to training, checkpoints, or model architecture; BEV integration remains
+  a separate increment.
 
 ### Changed
 

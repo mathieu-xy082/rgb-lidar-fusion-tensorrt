@@ -6,8 +6,9 @@ Parent branch: `main` (camera-depth v1 / release 1.1.0).
 
 Updated: 2026-10-18.
 
-Status: feature access and camera/LiDAR geometry are implemented; validity
-policy and BEV projection remain. No new training is required for these steps.
+Status: feature access, camera/LiDAR geometry, and depth-source/support policies
+are implemented. BEV projection and its use of the validity mask remain.
+No new training is required for these steps.
 
 References:
 
@@ -144,8 +145,8 @@ this rasterization; they do not claim to undo its quantization.
 
 These functions perform geometry only. Negative, zero, out-of-range, or
 non-finite depth is not made reliable by conversion; support filtering and
-confidence remain increment 3. No holdout target is used as an input to a
-learned lift. The checkpoint schema, model inputs, and training loss stay
+confidence are handled separately by increment 3. No holdout target is used as
+an input to a learned lift. The checkpoint schema, model inputs, and training loss stay
 unchanged.
 
 Validation on 2026-10-18: geometry tests cover scalar/per-sample scales, known
@@ -165,8 +166,78 @@ behavior. No training, checkpoint, or notebook output was modified.
 
 ### 3. Define valid support and confidence
 
-- [ ] Separate valid lift pixels, splat confidence, and learned depth.
-- [ ] Reject invalid depths explicitly; do not treat every dense pixel as reliable.
+- [x] Separate valid lift pixels, splat confidence, and learned depth.
+- [x] Require finite camera-z, explicit support, and an explicit metric range.
+- [x] Select sparse, splatted, or predicted depth without accessing targets.
+- [x] Require an explicit support mask for predicted depth; no dense default.
+- [x] Exclude invalid values without promoting them to valid via a clamp.
+- [x] Test both holdout modes for target leakage and finite geometry backward.
+
+The new `camera_depth_support` module contains `build_depth_valid_mask` and
+`prepare_camera_depth_support`. It returns a `CameraDepthSupport` object:
+
+| Field | Meaning |
+| --- | --- |
+| `source` | Explicit choice: `sparse`, `splatted`, or `predicted` |
+| `depth_m` | `[B, 1, H, W]` camera-z in meters; zero placeholders at invalid pixels |
+| `valid_mask` | Boolean `[B, 1, H, W]`, governing future geometry inclusion |
+| `splat_confidence` | Original heuristic map for the splatted source only; otherwise `None` |
+
+The mask is `support & isfinite(z) & (min < z) & (z <= max)`, with
+`0 <= min < max`. `max_valid_depth_m` is required separately from the
+checkpoint normalization `max_depth_m`: an 80 m normalization scale does not
+force an 80 m lift range. The default lower bound is zero, strictly excluded.
+
+Policies are deliberately distinct:
+
+- `sparse`: channel 0 depth, supported only by finite positive channel 5
+  measurement presence. For training/evaluation, use retained input maps after
+  holdout, never the full target maps.
+- `splatted`: channels 6/7 depth and score from post-holdout resplatting. Support
+  requires finite `0 < confidence <= 1` and `confidence >= min_splat_confidence`.
+  The default threshold is zero: any positive valid score is eligible, not
+  guaranteed geometrically accurate. A stricter threshold is configurable.
+- `predicted`: normalized `depth_prediction` plus a required caller-supplied
+  boolean `prediction_support_mask`. There is no implicit all-pixel domain or
+  inherited splat uncertainty. Retained/splatted support can define a cautious
+  first domain; selecting a wider domain is an explicit experimental policy,
+  not evidence that the learned depth is reliable there.
+
+Example using the actual prepared model input (not `depth_target`):
+
+```python
+selected = prepare_camera_depth_support(
+    torch.from_numpy(depth_batch["lidar_maps"]),
+    source="splatted",
+    max_depth_m=checkpoint_config["max_depth_m"],
+    max_valid_depth_m=50.0,
+)
+```
+
+Invalid values are zeroed only in the returned metric tensor to prevent
+NaN/Inf contamination of a subsequent dense solve. No input is mutated or
+detached. **The corresponding mask stays false**: placeholders can still
+produce finite XYZ after backprojection, especially with translated cameras,
+and must never contribute to BEV cells. The BEV implementation in increment 4
+must apply this mask before indexing/aggregation. An empty mask is valid.
+
+Splat confidence is not a probability of correct depth, an object score, or a
+learned uncertainty. The original map is returned unchanged, including scores
+rejected by the mask, so only valid entries may be used for future weighting.
+No uncertainty head, trainable parameter, training-loss change, or checkpoint
+change is introduced. These utilities are tested but are not called by the
+current training/inference path; their BEV integration remains increment 4.
+
+Tests cover boundaries, invalid depths/scores, empty support, channel contracts,
+per-sample scales, explicit prediction domains, no input mutation, finite
+backward through geometry with an invalid prediction, and unchanged selection
+after modifying only hidden targets under random-point and block holdout.
+
+CPU validation on 2026-10-18: 35 support-policy tests passed; the suite excluding
+saved notebook-state checks passed with 313 tests and one CUDA-only skip.
+Notebook syntax was checked separately, without changing their saved state.
+No GPU training or new checkpoint was produced. This step remains separate
+from the preceding notation/math-comment commit `b04546c`.
 
 ### 4. Implement and verify the BEV grid
 

@@ -77,12 +77,20 @@ batched forms survive `dataset_items_to_model_batch`, camera-depth holdout, and
 | Key | Batched shape | Meaning |
 | --- | --- | --- |
 | `camera_projection` | `[B, 3, 4]` | Full resized KITTI P2, including translation |
-| `t_camera_from_vehicle` | `[B, 4, 4]` | R0_rect @ Tr_velo_to_cam, meters |
+| `t_vehicle_to_camera` | `[B, 4, 4]` | R0_rect @ Tr_velo_to_cam, meters |
 | `max_depth_m` | `[B]` | Per-sample normalization scale |
 
 Legacy manifest/synthetic items without these fields still work. They do not
 silently receive an identity calibration. Partial geometry or mixed batches
 with/without geometry are rejected.
+
+The canonical notation is `t_vehicle_to_camera` in Python and
+`T_vehicle_to_camera` in equations: `X_camera_h = T_vehicle_to_camera *
+X_vehicle_h`. Its inverse maps camera coordinates back to LiDAR coordinates;
+the rename does not invert the stored matrix. Existing JSON calibration
+manifests may still use the old `t_camera_from_vehicle` key (not both names
+at once). Python calibration fields, keyword arguments, and batch keys now use
+the new name; model parameters and checkpoint weights are unaffected.
 
 The geometry functions live in `rgb_lidar_fusion.camera_geometry`:
 
@@ -91,7 +99,7 @@ The geometry functions live in `rgb_lidar_fusion.camera_geometry`:
   checkpoint configuration and the same scale in the dataset; there is no
   hidden 80 m default, clamping, or conversion from Euclidean range.
 - `backproject_depth_to_vehicle(depth_m, camera_projection=...,
-  t_camera_from_vehicle=...)` returns `[B, 3, H, W]` metric XYZ on the same
+  t_vehicle_to_camera=...)` returns `[B, 3, H, W]` metric XYZ on the same
   image grid. Matrices and depth must share float32/float64 dtype and device. It retains
   autograd and does not rasterize or round coordinates.
 
@@ -101,12 +109,15 @@ necessarily z. The implementation solves:
 
 ```text
 A * X_camera = (z + t_z) * [u, v, 1] - t
-X_vehicle_h = inverse(T_camera_from_vehicle) * [X_camera, 1]
+X_vehicle_h = inverse(T_vehicle_to_camera) * [X_camera, 1]
 ```
 
 It uses linear solves, not a second application of P2 translation or an
 assumption that K alone is sufficient. Non-rectified projection matrices are
 rejected; this is not an arbitrary-camera/distortion model.
+The implementation comments detail homogeneous division, the z + t_z scale,
+a numerical example with non-zero t_z, and the inverse extrinsic solve. A
+regression test reproduces the numerical example.
 
 Camera coordinates are in the rectified reference camera frame, **before**
 P2, with x right, y down, z forward. In KITTI, vehicle coordinates mean

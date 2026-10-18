@@ -20,8 +20,10 @@ class CameraCalibration:
 
     Attributes:
         k: 3x3 camera intrinsic matrix.
-        t_camera_from_vehicle: 4x4 homogeneous transform from vehicle/LiDAR
+        t_vehicle_to_camera: 4x4 homogeneous transform from vehicle/LiDAR
             coordinates to camera coordinates, with translations in meters.
+            X_camera_h = T_vehicle_to_camera @ X_vehicle_h; the inverse
+            maps camera coordinates back into the vehicle/LiDAR frame.
             For KITTI: vehicle means Velodyne (x forward, y left, z up),
             camera means rectified reference camera (x right, y down, z
             forward). It is not a ROS base_link or a camera-2-centered frame.
@@ -31,12 +33,12 @@ class CameraCalibration:
     """
 
     k: np.ndarray
-    t_camera_from_vehicle: np.ndarray
+    t_vehicle_to_camera: np.ndarray
     projection_matrix: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         k = np.asarray(self.k, dtype=np.float32)
-        transform = np.asarray(self.t_camera_from_vehicle, dtype=np.float32)
+        transform = np.asarray(self.t_vehicle_to_camera, dtype=np.float32)
         projection = (
             None
             if self.projection_matrix is None
@@ -53,7 +55,7 @@ class CameraCalibration:
                 f"Camera projection matrix must have shape (3, 4), got {projection.shape}."
             )
         object.__setattr__(self, "k", k)
-        object.__setattr__(self, "t_camera_from_vehicle", transform)
+        object.__setattr__(self, "t_vehicle_to_camera", transform)
         object.__setattr__(self, "projection_matrix", projection)
 
 
@@ -74,7 +76,7 @@ def make_identity_calibration(
             ],
             dtype=np.float32,
         ),
-        t_camera_from_vehicle=np.eye(4, dtype=np.float32),
+        t_vehicle_to_camera=np.eye(4, dtype=np.float32),
     )
 
 
@@ -122,6 +124,6 @@ def parse_kitti_calibration_file(path: str | Path) -> CameraCalibration:
 
     return CameraCalibration(
         k=p2[:3, :3],
-        t_camera_from_vehicle=rect_4x4 @ velo_to_cam_4x4,
+        t_vehicle_to_camera=rect_4x4 @ velo_to_cam_4x4,
         projection_matrix=p2,
     )

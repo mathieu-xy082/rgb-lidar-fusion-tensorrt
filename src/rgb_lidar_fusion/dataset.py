@@ -107,7 +107,7 @@ class KittiObjectDepthDataset:
             "lidar_maps": sparse_lidar_maps,
             "target": {},
             "camera_projection": resized_calibration.projection_matrix.copy(),
-            "t_camera_from_vehicle": resized_calibration.t_camera_from_vehicle.copy(),
+            "t_vehicle_to_camera": resized_calibration.t_vehicle_to_camera.copy(),
             "max_depth_m": np.float32(self.max_depth_m),
             "meta": {
                 "sample_id": sample_id,
@@ -173,7 +173,7 @@ class KittiObjectDepthDataset:
             projection[1] *= scale_y
         return CameraCalibration(
             k=intrinsic,
-            t_camera_from_vehicle=calibration.t_camera_from_vehicle,
+            t_vehicle_to_camera=calibration.t_vehicle_to_camera,
             projection_matrix=projection,
         )
 
@@ -273,7 +273,17 @@ class KittiSparseLidarDataset:
 
     @staticmethod
     def _load_calibration(payload: dict[str, Any]) -> CameraCalibration:
+        """Read the canonical transform name or a legacy manifest's key."""
+
+        legacy_key = "t_camera_from_vehicle"
+        if "t_vehicle_to_camera" in payload and legacy_key in payload:
+            raise ValueError("provide only t_vehicle_to_camera, not both transform names.")
+        transform = (
+            payload["t_vehicle_to_camera"]
+            if "t_vehicle_to_camera" in payload
+            else payload[legacy_key]
+        )
         return CameraCalibration(
             k=np.asarray(payload["k"], dtype=np.float32),
-            t_camera_from_vehicle=np.asarray(payload["t_camera_from_vehicle"], dtype=np.float32),
+            t_vehicle_to_camera=np.asarray(transform, dtype=np.float32),
         )

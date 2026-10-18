@@ -18,7 +18,7 @@ RGB_CHANNELS = ("rgb_red", "rgb_green", "rgb_blue")
 SPLATTED_CHANNELS = ("depth_expanded", "confidence")
 CAMERA_GEOMETRY_SHAPES = {
     "camera_projection": (3, 4),
-    "t_camera_from_vehicle": (4, 4),
+    "t_vehicle_to_camera": (4, 4),
     "max_depth_m": (),
 }
 BASELINE_LIDAR_CHANNELS_BY_MODE = {
@@ -39,7 +39,7 @@ def dataset_items_to_model_batch(
     LiDAR channels plus ``depth_expanded``/``confidence``. Pass
     ``include_splatted_depth=False`` only for explicit sparse-only ablations.
     Calibrated items also supply camera_projection [B, 3, 4],
-    t_camera_from_vehicle [B, 4, 4], and max_depth_m [B], as separate arrays,
+    t_vehicle_to_camera [B, 4, 4], and max_depth_m [B], as separate arrays,
     never CNN input channels. Legacy uncalibrated items remain supported;
     mixing calibrated and uncalibrated items is rejected.
     """

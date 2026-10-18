@@ -27,7 +27,7 @@ def _geometry(batch=1):
     ], dtype=torch.float64)
     return {
         "camera_projection": projection.repeat(batch, 1, 1),
-        "t_camera_from_vehicle": transform.repeat(batch, 1, 1),
+        "t_vehicle_to_camera": transform.repeat(batch, 1, 1),
     }
 
 
@@ -61,7 +61,7 @@ def test_backprojection_roundtrip_preserves_camera_z_and_full_projection(shape):
     height, width = shape
     geometry = _geometry(batch=2)
     geometry["camera_projection"][1, 0, 0] = 11
-    geometry["t_camera_from_vehicle"][1, 0, 3] = -1
+    geometry["t_vehicle_to_camera"][1, 0, 3] = -1
     depth = torch.linspace(5, 20, 2 * height * width, dtype=torch.float64).reshape(
         2, 1, height, width
     )
@@ -71,7 +71,7 @@ def test_backprojection_roundtrip_preserves_camera_z_and_full_projection(shape):
         calibration = CameraCalibration(
             k=geometry["camera_projection"][b, :, :3].numpy(),
             projection_matrix=geometry["camera_projection"][b].numpy(),
-            t_camera_from_vehicle=geometry["t_camera_from_vehicle"][b].numpy(),
+            t_vehicle_to_camera=geometry["t_vehicle_to_camera"][b].numpy(),
         )
         # Reproject independently through the existing NumPy production path.
         # The larger bounds retain tiny round-off excursions at right/bottom.
@@ -81,7 +81,7 @@ def test_backprojection_roundtrip_preserves_camera_z_and_full_projection(shape):
         # Float32 may place a boundary pixel infinitesimally below zero;
         # compare the exact homogeneous projection before its bounds filter.
         vehicle_h = torch.cat((xyz[b].reshape(3, -1), torch.ones(1, height * width)))
-        camera_h = geometry["t_camera_from_vehicle"][b] @ vehicle_h
+        camera_h = geometry["t_vehicle_to_camera"][b] @ vehicle_h
         q = geometry["camera_projection"][b] @ camera_h
         v, u = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
         torch.testing.assert_close(q[:2] / q[2:], torch.stack((u, v)).reshape(2, -1).double())
@@ -97,10 +97,24 @@ def test_backprojection_matches_known_point_not_euclidean_ray_length():
     transform = torch.eye(4)[None]
     xyz = backproject_depth_to_vehicle(
         torch.full((1, 1, 2, 3), 10.), camera_projection=projection,
-        t_camera_from_vehicle=transform,
+        t_vehicle_to_camera=transform,
     )
     torch.testing.assert_close(xyz[0, :, 1, 2], torch.tensor([3., 1., 10.]))
     assert xyz[0, :, 1, 2].norm() > 10
+
+
+def test_backprojection_matches_commented_example_with_nonzero_projection_tz():
+    projection = torch.tensor([[
+        [2., 0, 1, 4], [0, 2, 1, -2], [0, 0, 1, 0.5],
+    ]])
+    xyz = backproject_depth_to_vehicle(
+        torch.full((1, 1, 2, 3), 10.), camera_projection=projection,
+        t_vehicle_to_camera=torch.eye(4)[None],
+    )
+    expected_camera_point = torch.tensor([3.5, 1.25, 10.])
+    torch.testing.assert_close(xyz[0, :, 1, 2], expected_camera_point)
+    q = projection[0] @ torch.cat((expected_camera_point, torch.ones(1)))
+    torch.testing.assert_close(q[:2] / q[2], torch.tensor([2., 1.]))
 
 
 def test_resize_then_backproject_uses_scaled_translation_column():
@@ -108,7 +122,7 @@ def test_resize_then_backproject_uses_scaled_translation_column():
     original = CameraCalibration(
         k=geometry["camera_projection"][0, :, :3].numpy(),
         projection_matrix=geometry["camera_projection"][0].numpy(),
-        t_camera_from_vehicle=geometry["t_camera_from_vehicle"][0].numpy(),
+        t_vehicle_to_camera=geometry["t_vehicle_to_camera"][0].numpy(),
     )
     resized = KittiObjectDepthDataset._resize_calibration(
         original, source_shape=(6, 20), target_shape=(3, 5)
@@ -117,7 +131,7 @@ def test_resize_then_backproject_uses_scaled_translation_column():
     after = backproject_depth_to_vehicle(
         torch.full((1, 1, 3, 5), 10.),
         camera_projection=torch.from_numpy(resized.projection_matrix)[None],
-        t_camera_from_vehicle=torch.from_numpy(resized.t_camera_from_vehicle)[None],
+        t_vehicle_to_camera=torch.from_numpy(resized.t_vehicle_to_camera)[None],
     )
     torch.testing.assert_close(after.double(), before[:, :, ::2, ::4], atol=2e-6, rtol=1e-6)
 
@@ -137,7 +151,7 @@ def test_backprojection_depth_backward_matches_numerical_derivative():
     ("camera_projection", torch.eye(3)[None], "shape"),
     ("camera_projection", torch.zeros(1, 3, 4), "rectified"),
     ("camera_projection", torch.full((1, 3, 4), float("nan")), "finite"),
-    ("t_camera_from_vehicle", torch.zeros(1, 4, 4), "homogeneous"),
+    ("t_vehicle_to_camera", torch.zeros(1, 4, 4), "homogeneous"),
 ])
 def test_backprojection_rejects_invalid_matrices(bad_key, bad_value, match):
     geometry = {key: value.float() for key, value in _geometry().items()}

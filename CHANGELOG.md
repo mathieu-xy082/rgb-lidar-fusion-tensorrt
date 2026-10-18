@@ -19,6 +19,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calibration, round trips, and depth gradients; validity and BEV binning remain
   separate follow-ups.
 
+### Changed
+
+- Standardized calibration fields, geometry arguments, and batch keys on
+  `t_vehicle_to_camera` (`T_vehicle_to_camera` in equations), with an explicit
+  projection/backprojection derivation and a tested numerical example in code.
+  Legacy JSON manifests using `t_camera_from_vehicle` remain readable; Python
+  callers should use the new name. Transform values and model weights are unchanged.
+
 ## [1.1.0] - 2026-10-18 - Merge branch 'ec/camera-depth-backbone' into main 
 ### Added
 

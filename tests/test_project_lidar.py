@@ -45,9 +45,9 @@ def test_projection_rejects_invalid_lidar_shape():
 
 def test_calibration_validates_matrix_shapes():
     with pytest.raises(ValueError, match="shape"):
-        CameraCalibration(k=np.eye(4), t_camera_from_vehicle=np.eye(4))
+        CameraCalibration(k=np.eye(4), t_vehicle_to_camera=np.eye(4))
     with pytest.raises(ValueError, match="shape"):
-        CameraCalibration(k=np.eye(3), t_camera_from_vehicle=np.eye(3))
+        CameraCalibration(k=np.eye(3), t_vehicle_to_camera=np.eye(3))
 
 
 def test_sparse_maps_keep_nearest_point_when_pixels_collide():
@@ -120,7 +120,7 @@ def test_parse_kitti_calibration_file_builds_rectified_velodyne_to_camera_transf
         ],
         dtype=np.float32,
     )
-    np.testing.assert_allclose(calibration.t_camera_from_vehicle, expected_transform)
+    np.testing.assert_allclose(calibration.t_vehicle_to_camera, expected_transform)
 
 
 def test_load_velodyne_bin_reads_kitti_float32_xyzi_points(tmp_path):

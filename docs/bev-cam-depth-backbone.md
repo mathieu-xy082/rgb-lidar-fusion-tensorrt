@@ -290,7 +290,7 @@ gradients, utiliser `model.eval()` avec `torch.no_grad()`, comme pour la profond
   pas la distance euclidienne au capteur.
 - [x] Fournir au module de lift les matrices de calibration effectivement adaptées
   à la résolution de l'image, pas seulement un chemin vers le fichier KITTI.
-  Les tableaux `camera_projection: [B, 3, 4]`, `t_camera_from_vehicle: [B, 4, 4]`
+  Les tableaux `camera_projection: [B, 3, 4]`, `t_vehicle_to_camera: [B, 4, 4]`
   et `max_depth_m: [B]` sont transmis jusqu'aux batches de profondeur, sans
   devenir des canaux d'entrée du CNN ni dépendre du holdout.
 - [x] Préserver la matrice KITTI `P2` complète et sa quatrième colonne de
@@ -306,7 +306,7 @@ gradients, utiliser `model.eval()` avec `torch.no_grad()`, comme pour la profond
 checkpoint ; `backproject_depth_to_vehicle()` produit des XYZ métriques
 `[B, 3, H, W]` sans couper le graphe autograd. Pour `P2 = [A | t]`, le calcul est
 `A X_cam = (z + t_z) [u, v, 1] - t`, puis application de l'inverse de
-`T_camera_from_vehicle`. Le z désigne le repère caméra rectifié de référence,
+`T_vehicle_to_camera`. Le z désigne le repère caméra rectifié de référence,
 avant `P2`, et non un repère recentré sur la caméra 2.
 
 La convention de resize v1 est conservée : `u' = sx*u`, `v' = sy*v`, lignes

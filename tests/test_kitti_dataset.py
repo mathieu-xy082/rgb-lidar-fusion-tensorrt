@@ -7,6 +7,25 @@ from rgb_lidar_fusion.dataset import KittiObjectDepthDataset, KittiSparseLidarDa
 FIXTURE_ROOT = "tests/fixtures/synthetic_kitti"
 
 
+@pytest.mark.parametrize("key", ["t_vehicle_to_camera", "t_camera_from_vehicle"])
+def test_manifest_calibration_accepts_canonical_and_legacy_transform_keys(key):
+    transform = np.eye(4, dtype=np.float32)
+    transform[:3, 3] = [1.0, -2.0, 0.5]
+    calibration = KittiSparseLidarDataset._load_calibration(
+        {"k": np.eye(3).tolist(), key: transform.tolist()}
+    )
+    np.testing.assert_array_equal(calibration.t_vehicle_to_camera, transform)
+
+
+def test_manifest_calibration_rejects_ambiguous_transform_names():
+    with pytest.raises(ValueError, match="not both transform names"):
+        KittiSparseLidarDataset._load_calibration({
+            "k": np.eye(3).tolist(),
+            "t_vehicle_to_camera": np.eye(4).tolist(),
+            "t_camera_from_vehicle": np.eye(4).tolist(),
+        })
+
+
 def test_dataset_returns_rgb_lidar_maps_target_and_meta():
     dataset = KittiSparseLidarDataset(FIXTURE_ROOT)
 
@@ -188,7 +207,7 @@ def test_kitti_depth_geometry_is_resized_without_changing_projection_inputs(tmp_
     expected_projection[1] *= 0.5
 
     np.testing.assert_array_equal(sample["camera_projection"], expected_projection)
-    np.testing.assert_array_equal(sample["t_camera_from_vehicle"], np.eye(4))
+    np.testing.assert_array_equal(sample["t_vehicle_to_camera"], np.eye(4))
     assert sample["max_depth_m"] == np.float32(60)
     points = np.fromfile(tmp_path / "velodyne" / "000000.bin", dtype=np.float32).reshape(-1, 4)
     resized = dataset._resize_calibration(
@@ -217,8 +236,8 @@ def test_kitti_geometry_survives_batching_holdout_and_fixed_evaluation(tmp_path)
     second = {**item, "max_depth_m": np.float32(100)}
     second["camera_projection"] = item["camera_projection"].copy()
     second["camera_projection"][0, 3] = 5
-    second["t_camera_from_vehicle"] = item["t_camera_from_vehicle"].copy()
-    second["t_camera_from_vehicle"][0, 3] = 2
+    second["t_vehicle_to_camera"] = item["t_vehicle_to_camera"].copy()
+    second["t_vehicle_to_camera"][0, 3] = 2
     batch = dataset_items_to_model_batch([item, second], include_splatted_depth=False)
     prepared = model_batch_to_camera_depth_training_batch(batch, seed=13)
     for key, shape in CAMERA_GEOMETRY_SHAPES.items():

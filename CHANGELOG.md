@@ -4,8 +4,7 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-
+## [1.1.0] - 2026-10-18 - Merge branch 'ec/camera-depth-backbone' into main 
 ### Added
 
 - Dense `CameraDepthModel` with deterministic sparse LiDAR holdout,

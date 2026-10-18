@@ -247,9 +247,9 @@ les accumuler dans une grille BEV.
 ## Prerequis du raccord BEV
 
 Cette section est la référence pour le prochain incrément architectural.
-Les éléments ci-dessous sont suivis dans le chantier du lift ; le point 1 est
-implémenté, les points 2 à 4 restent à développer/tester. Aucun nouvel entraînement
-préalable n'est requis pour commencer la géométrie.
+Les éléments ci-dessous sont suivis dans le chantier du lift ; les points 1 et 2
+sont implémentés, les points 3 et 4 restent à développer/tester. Aucun nouvel
+entraînement préalable n'est requis pour commencer la géométrie.
 
 ### 1. Exposer les features sans casser le backbone
 
@@ -285,23 +285,39 @@ gradients, utiliser `model.eval()` avec `torch.no_grad()`, comme pour la profond
 
 ### 2. Rendre la géométrie explicite
 
-- Convertir la profondeur normalisée en mètres avec le `max_depth_m` du
+- [x] Convertir la profondeur normalisée en mètres avec le `max_depth_m` du
   checkpoint, actuellement 80 m. Elle représente le **z caméra rectifiée**,
   pas la distance euclidienne au capteur.
-- Fournir au module de lift les matrices de calibration effectivement adaptées
+- [x] Fournir au module de lift les matrices de calibration effectivement adaptées
   à la résolution de l'image, pas seulement un chemin vers le fichier KITTI.
-  Le dataset effectue déjà ce redimensionnement pour la projection, mais ne
-  transmet pas encore ces matrices dans le batch.
-- Préserver la matrice KITTI `P2` complète et sa quatrième colonne de
+  Les tableaux `camera_projection: [B, 3, 4]`, `t_camera_from_vehicle: [B, 4, 4]`
+  et `max_depth_m: [B]` sont transmis jusqu'aux batches de profondeur, sans
+  devenir des canaux d'entrée du CNN ni dépendre du holdout.
+- [x] Préserver la matrice KITTI `P2` complète et sa quatrième colonne de
   translation ; ne pas supposer que les seuls intrinsics `K` suffisent pour
   inverser exactement la projection existante.
-- Documenter et tester caméra rectifiée -> repère LiDAR/véhicule -> BEV, avec
+- [x] Documenter et tester caméra rectifiée -> repère LiDAR/véhicule, avec
   les directions des transformations, les axes et les unités. Le repère dit
   véhicule dans le chemin KITTI actuel est celui du Velodyne, pas un `base_link`
-  ROS déjà calibré.
-- Si la grille de features est sous-échantillonnée, définir l'alignement de la
-  profondeur et de la calibration avec cette grille, y compris le traitement
-  des discontinuités et des pixels sans support.
+  ROS déjà calibré. La grille BEV utilisera d'abord ce repère ; son indexation
+  et ses bornes restent à fixer au point 4.
+
+`camera_geometry.normalized_depth_to_meters()` applique l'échelle explicite du
+checkpoint ; `backproject_depth_to_vehicle()` produit des XYZ métriques
+`[B, 3, H, W]` sans couper le graphe autograd. Pour `P2 = [A | t]`, le calcul est
+`A X_cam = (z + t_z) [u, v, 1] - t`, puis application de l'inverse de
+`T_camera_from_vehicle`. Le z désigne le repère caméra rectifié de référence,
+avant `P2`, et non un repère recentré sur la caméra 2.
+
+La convention de resize v1 est conservée : `u' = sx*u`, `v' = sy*v`, lignes
+complètes de `P2` redimensionnées. Elle diffère du mapping des centres de pixels
+du rééchantillonnage RGB PIL par un décalage sous-pixel ; elle ne sera pas
+corrigée silencieusement pour les checkpoints existants. L'arrondi des points
+dans les cartes sparse empêche aussi une inversion exacte vers les points raw.
+Voir le [contrat détaillé](workstreams/camera-depth-bev-lift.md#geometry-contract).
+Une future grille de features sous-échantillonnée devra définir son propre
+alignement profondeur/calibration et le traitement des discontinuités ; elle
+n'est pas introduite ici. Validité et confiance restent le point suivant.
 
 ### 3. Séparer profondeur utilisable et confiance
 
@@ -376,8 +392,9 @@ revendiquer une profondeur dense fiable partout.
 Le prochain chantier architectural est le module `camera-depth -> camera_bev`
 décrit dans l'[architecture BEV](bev-model-roadmap.md). Il commence par les
 [prérequis de raccord](#prerequis-du-raccord-bev), dont l'accès aux features est
-maintenant disponible. Le prochain incrément porte sur le contrat géométrique,
-en conservant l'architecture et les checkpoints actuels. Aucun entraînement
+maintenant disponible avec la géométrie caméra/LiDAR. Le prochain incrément porte
+sur la validité et la confiance, en conservant l'architecture et les checkpoints
+actuels. Aucun entraînement
 mixte ou changement de backbone n'est requis avant les premiers tests géométriques.
 
 Les critères à jour sont suivis dans les

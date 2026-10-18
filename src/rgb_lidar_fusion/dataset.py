@@ -32,8 +32,8 @@ class KittiObjectDepthDataset:
         height, width = image_shape
         if height <= 0 or width <= 0:
             raise ValueError("image_shape dimensions must be positive.")
-        if max_depth_m <= 0.0:
-            raise ValueError("max_depth_m must be positive.")
+        if not np.isfinite(max_depth_m) or max_depth_m <= 0.0:
+            raise ValueError("max_depth_m must be finite and positive.")
         if sample_limit is not None and sample_limit <= 0:
             raise ValueError("sample_limit must be positive when provided.")
 
@@ -106,6 +106,9 @@ class KittiObjectDepthDataset:
             "image": image,
             "lidar_maps": sparse_lidar_maps,
             "target": {},
+            "camera_projection": resized_calibration.projection_matrix.copy(),
+            "t_camera_from_vehicle": resized_calibration.t_camera_from_vehicle.copy(),
+            "max_depth_m": np.float32(self.max_depth_m),
             "meta": {
                 "sample_id": sample_id,
                 "image_shape": list(self.image_shape),
@@ -148,6 +151,13 @@ class KittiObjectDepthDataset:
         source_shape: tuple[int, int],
         target_shape: tuple[int, int],
     ) -> CameraCalibration:
+        """Preserve the v1 projection convention: u' = sx*u, v' = sy*v.
+
+        Scale entire rows, including P2's translation column. This is not
+        the half-pixel center mapping used by PIL's RGB resampling; changing
+        that historical approximation would change checkpoint inputs.
+        """
+
         source_height, source_width = source_shape
         target_height, target_width = target_shape
         scale_x = target_width / source_width

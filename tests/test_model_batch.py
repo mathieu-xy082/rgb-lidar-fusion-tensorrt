@@ -173,6 +173,41 @@ def test_dataset_items_batch_stacks_synthetic_items_without_losing_per_item_cont
     np.testing.assert_allclose(batch["sparse_lidar_maps"][1], second["lidar_maps"])
 
 
+def _with_camera_geometry(item):
+    return {
+        **item,
+        "camera_projection": np.eye(3, 4, dtype=np.float32),
+        "t_camera_from_vehicle": np.eye(4, dtype=np.float32),
+        "max_depth_m": np.float32(80),
+    }
+
+
+def test_batch_rejects_mixing_calibrated_and_uncalibrated_items():
+    item = synthetic_dataset_item()
+    with pytest.raises(ValueError, match="all dataset items must supply camera geometry"):
+        dataset_items_to_model_batch([item, _with_camera_geometry(item)])
+
+
+@pytest.mark.parametrize("key,value", [
+    ("camera_projection", np.eye(3)),
+    ("t_camera_from_vehicle", np.full((4, 4), np.nan)),
+    ("max_depth_m", 0),
+    ("max_depth_m", np.inf),
+])
+def test_batch_rejects_invalid_geometry(key, value):
+    item = _with_camera_geometry(synthetic_dataset_item())
+    item[key] = value
+    with pytest.raises(ValueError, match=key):
+        dataset_item_to_model_batch(item)
+
+
+def test_batch_rejects_partial_geometry():
+    item = _with_camera_geometry(synthetic_dataset_item())
+    del item["t_camera_from_vehicle"]
+    with pytest.raises(ValueError, match="t_camera_from_vehicle"):
+        dataset_item_to_model_batch(item)
+
+
 def test_dataset_items_batch_rejects_mixed_spatial_shapes_before_stacking():
     first = synthetic_dataset_item()
     second = synthetic_dataset_item()

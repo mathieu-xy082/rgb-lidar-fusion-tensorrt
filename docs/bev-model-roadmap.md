@@ -198,8 +198,10 @@ mètres, calibration redimensionnée complète, masque de validité et politique
 de confiance, puis grille/agrégation et tests de géométrie/backward.
 Le `forward()` du modèle retourne toujours uniquement la profondeur.
 `forward_features()` expose désormais les features du dernier décodeur en
-`[B, 32, H, W]` sur la même grille image ; l'implémentation du raccord géométrique
-reste à faire. Suivi : [workstream BEV lift](workstreams/camera-depth-bev-lift.md).
+`[B, 32, H, W]` sur la même grille image. La conversion en mètres, la calibration
+complète dans les batches et la rétroprojection caméra/LiDAR sont implémentées ;
+validité et agrégation BEV restent à faire. Suivi :
+[workstream BEV lift](workstreams/camera-depth-bev-lift.md).
 
 Le premier prototype peut utiliser une profondeur synthétique puis
 mesurée/splattée sur son support connu pour isoler les erreurs de géométrie.

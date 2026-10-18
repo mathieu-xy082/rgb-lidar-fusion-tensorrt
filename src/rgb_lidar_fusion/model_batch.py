@@ -16,6 +16,11 @@ from .project_lidar import ENRICHED_LIDAR_MAP_CHANNELS, LIDAR_MAP_CHANNELS
 
 RGB_CHANNELS = ("rgb_red", "rgb_green", "rgb_blue")
 SPLATTED_CHANNELS = ("depth_expanded", "confidence")
+CAMERA_GEOMETRY_SHAPES = {
+    "camera_projection": (3, 4),
+    "t_camera_from_vehicle": (4, 4),
+    "max_depth_m": (),
+}
 BASELINE_LIDAR_CHANNELS_BY_MODE = {
     "sparse": LIDAR_MAP_CHANNELS,
     "enriched": ENRICHED_LIDAR_MAP_CHANNELS,
@@ -33,6 +38,10 @@ def dataset_items_to_model_batch(
     The nominal project contract is enriched LiDAR: RGB plus the six sparse
     LiDAR channels plus ``depth_expanded``/``confidence``. Pass
     ``include_splatted_depth=False`` only for explicit sparse-only ablations.
+    Calibrated items also supply camera_projection [B, 3, 4],
+    t_camera_from_vehicle [B, 4, 4], and max_depth_m [B], as separate arrays,
+    never CNN input channels. Legacy uncalibrated items remain supported;
+    mixing calibrated and uncalibrated items is rejected.
     """
 
     batches = [
@@ -51,6 +60,15 @@ def dataset_items_to_model_batch(
     input_shape = batches[0]["inputs"].shape[1:]
     if any(batch["inputs"].shape[1:] != input_shape for batch in batches):
         raise ValueError("all dataset items must share batch input shape.")
+    geometry_keys = set(CAMERA_GEOMETRY_SHAPES)
+    has_geometry = [geometry_keys.issubset(batch) for batch in batches]
+    if any(has_geometry) and not all(has_geometry):
+        raise ValueError("all dataset items must supply camera geometry, or none must.")
+    geometry = {
+        key: np.concatenate([batch[key] for batch in batches], axis=0)
+        for key in CAMERA_GEOMETRY_SHAPES
+        if all(has_geometry)
+    }
     return {
         "inputs": np.concatenate([batch["inputs"] for batch in batches], axis=0),
         "input_channels": input_channels,
@@ -60,6 +78,7 @@ def dataset_items_to_model_batch(
         ),
         "targets": [batch["target"] for batch in batches],
         "metas": [batch["meta"] for batch in batches],
+        **geometry,
     }
 
 
@@ -121,12 +140,22 @@ def dataset_item_to_model_batch(
         input_channels.extend(SPLATTED_CHANNELS)
 
     inputs = np.concatenate(channels, axis=0)[np.newaxis, ...]
+    geometry = {}
+    if any(key in item for key in CAMERA_GEOMETRY_SHAPES):
+        for key, shape in CAMERA_GEOMETRY_SHAPES.items():
+            value = np.asarray(item.get(key), dtype=np.float32)
+            if value.shape != shape or not np.isfinite(value).all():
+                raise ValueError(f"{key} must be finite with shape {shape}.")
+            if key == "max_depth_m" and value <= 0.0:
+                raise ValueError("max_depth_m must be positive.")
+            geometry[key] = value[np.newaxis, ...].copy()
     return {
         "inputs": inputs.astype(np.float32, copy=False),
         "input_channels": input_channels,
         "sparse_lidar_maps": sparse_lidar_maps[np.newaxis, ...].copy(),
         "target": item.get("target"),
         "meta": item.get("meta", {}),
+        **geometry,
     }
 
 
@@ -387,6 +416,7 @@ def model_batch_to_camera_depth_training_batch(
     contains the complete rectangles in spatial mode; in random-point mode
     it is a copy of ``loss_mask``. Both masks have shape ``[B, 1, H, W]``.
     Block settings are used only in spatial mode.
+    Optional camera geometry is copied unchanged, independently of holdout.
     """
 
     if holdout_mode not in ("random_points", "spatial_blocks"):
@@ -456,4 +486,5 @@ def model_batch_to_camera_depth_training_batch(
         "loss_mask": holdout_mask,
         "holdout_region_mask": region_mask,
         "kept_sparse_lidar_maps": kept_sparse_maps,
+        **{key: batch[key].copy() for key in CAMERA_GEOMETRY_SHAPES if key in batch},
     }

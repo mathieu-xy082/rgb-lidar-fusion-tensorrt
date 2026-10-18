@@ -11,6 +11,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `CameraDepthModel.forward_features()` exposes full-resolution `[B, 32, H, W]`
   final-decoder features for the future BEV lift, preserving the depth output,
   existing checkpoint schema, and feature-to-backbone gradients.
+- Full resized KITTI `P2`, camera-from-LiDAR transform, and depth scale carried
+  separately through dataset, model batches, holdout, and fixed evaluation.
+- Differentiable metric camera-z conversion and camera-to-LiDAR backprojection,
+  preserving full `P2` translation, v1 projection resize, and existing inputs.
+  Geometry tests cover frame axes, non-zero translation, resizing, per-sample
+  calibration, round trips, and depth gradients; validity and BEV binning remain
+  separate follow-ups.
 
 ## [1.1.0] - 2026-10-18 - Merge branch 'ec/camera-depth-backbone' into main 
 ### Added

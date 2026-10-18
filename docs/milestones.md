@@ -62,8 +62,9 @@ Construire un module testable qui transforme les features image-depth en grille
 BEV à partir de la calibration, de la profondeur et de la confiance.
 
 Le raccord n'est pas encore implémenté. L'accès aux features du dernier décodeur
-est disponible et testé ; il reste à expliciter profondeur métrique et
-calibration, définir la validité/confiance puis tester la grille et l'agrégation. La checklist technique
+est disponible et testé, ainsi que la profondeur métrique, la calibration
+redimensionnée et la rétroprojection caméra/LiDAR. Il reste à définir la
+validité/confiance puis tester la grille et l'agrégation. La checklist technique
 de référence est dans les
 [prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
 

@@ -21,7 +21,10 @@ class CameraCalibration:
     Attributes:
         k: 3x3 camera intrinsic matrix.
         t_camera_from_vehicle: 4x4 homogeneous transform from vehicle/LiDAR
-            coordinates to camera coordinates.
+            coordinates to camera coordinates, with translations in meters.
+            For KITTI: vehicle means Velodyne (x forward, y left, z up),
+            camera means rectified reference camera (x right, y down, z
+            forward). It is not a ROS base_link or a camera-2-centered frame.
         projection_matrix: optional 3x4 camera projection matrix. KITTI ``P2``
             includes a fourth translation column that must be preserved for
             exact rectified-camera projection.
@@ -102,7 +105,8 @@ def parse_kitti_calibration_file(path: str | Path) -> CameraCalibration:
     The returned calibration uses camera matrix ``P2[:3, :3]`` as intrinsics and
     composes ``R0_rect @ Tr_velo_to_cam`` into the homogeneous
     vehicle/LiDAR-to-rectified-camera transform expected by
-    :func:`project_lidar_to_image`.
+    :func:`project_lidar_to_image`. Depth targets are z in this reference
+    frame, before applying P2 (including its fourth-column translation).
     """
 
     rows = _parse_kitti_calibration_rows(Path(path))

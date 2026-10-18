@@ -8,14 +8,15 @@ devenir une source de vérité générale.
 
 - [Camera-depth BEV lift](camera-depth-bev-lift.md) : accès aux features
   implémenté sans modification du contrat de profondeur ni des checkpoints ;
-  contrat géométrique, validité et grille BEV à développer ensuite.
+  géométrie métrique et rétroprojection caméra/LiDAR testées ; validité et
+  grille BEV à développer ensuite.
 - [Camera-depth backbone](camera-depth-backbone.md) : v1 implémentée et évaluée,
   pilotes random/blocs sur 512 frames et comparaison croisée terminés ;
   inspection qualitative restante avant clôture.
 
 Le chantier architectural actif est le lift camera-depth vers BEV. Ses
 [prérequis techniques](../bev-cam-depth-backbone.md#prerequis-du-raccord-bev)
-sont documentés ; seul le premier point, l'accès aux features, est implémenté.
+sont documentés ; accès aux features et géométrie caméra/LiDAR sont implémentés.
 Les études supplémentaires
 d'entraînement ne sont pas des prérequis pour ce prototype géométrique.
 

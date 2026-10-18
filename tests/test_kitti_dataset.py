@@ -161,3 +161,84 @@ def test_kitti_object_depth_dataset_requires_requested_sample_count(tmp_path):
 
     with pytest.raises(ValueError, match="provides 1 frames.*sample_limit=2"):
         KittiObjectDepthDataset(tmp_path, image_shape=(3, 4), sample_limit=2)
+
+
+@pytest.mark.parametrize("scale", [0, -80, np.nan, np.inf])
+def test_kitti_depth_dataset_rejects_invalid_geometry_scale(tmp_path, scale):
+    with pytest.raises(ValueError, match="max_depth_m must be finite and positive"):
+        KittiObjectDepthDataset(tmp_path, image_shape=(3, 4), max_depth_m=scale)
+
+
+def test_kitti_depth_geometry_is_resized_without_changing_projection_inputs(tmp_path):
+    from rgb_lidar_fusion.calibration import parse_kitti_calibration_file
+    from rgb_lidar_fusion.project_lidar import build_sparse_lidar_maps, project_lidar_to_image
+
+    _write_kitti_object_frame(tmp_path)
+    path = tmp_path / "calib" / "000000.txt"
+    path.write_text(
+        "P2: 4 0 4 2 0 4 3 -1 0 0 1 0.25\n"
+        "R0_rect: 1 0 0 0 1 0 0 0 1\n"
+        "Tr_velo_to_cam: 1 0 0 0 0 1 0 0 0 0 1 0\n"
+    )
+    dataset = KittiObjectDepthDataset(tmp_path, image_shape=(3, 6), max_depth_m=60)
+    sample = dataset[0]
+    original = parse_kitti_calibration_file(path)
+    expected_projection = original.projection_matrix.copy()
+    expected_projection[0] *= 0.75
+    expected_projection[1] *= 0.5
+
+    np.testing.assert_array_equal(sample["camera_projection"], expected_projection)
+    np.testing.assert_array_equal(sample["t_camera_from_vehicle"], np.eye(4))
+    assert sample["max_depth_m"] == np.float32(60)
+    points = np.fromfile(tmp_path / "velodyne" / "000000.bin", dtype=np.float32).reshape(-1, 4)
+    resized = dataset._resize_calibration(
+        original, source_shape=(6, 8), target_shape=(3, 6)
+    )
+    before = project_lidar_to_image(points, original, image_shape=(6, 8))
+    after = project_lidar_to_image(points, resized, image_shape=(3, 6))
+    np.testing.assert_allclose(after.pixels, before.pixels * [0.75, 0.5], atol=1e-6)
+    np.testing.assert_array_equal(original.projection_matrix[0], [4, 0, 4, 2])
+    np.testing.assert_array_equal(
+        sample["lidar_maps"], build_sparse_lidar_maps(after, (3, 6), max_depth_m=60)
+    )
+
+
+def test_kitti_geometry_survives_batching_holdout_and_fixed_evaluation(tmp_path):
+    from rgb_lidar_fusion.lidar_splatting import SplattingConfig
+    from rgb_lidar_fusion.model_batch import (
+        CAMERA_GEOMETRY_SHAPES,
+        dataset_items_to_model_batch,
+        model_batch_to_camera_depth_training_batch,
+    )
+
+    _write_kitti_object_frame(tmp_path)
+    dataset = KittiObjectDepthDataset(tmp_path, image_shape=(6, 8))
+    item = dataset[0]
+    second = {**item, "max_depth_m": np.float32(100)}
+    second["camera_projection"] = item["camera_projection"].copy()
+    second["camera_projection"][0, 3] = 5
+    second["t_camera_from_vehicle"] = item["t_camera_from_vehicle"].copy()
+    second["t_camera_from_vehicle"][0, 3] = 2
+    batch = dataset_items_to_model_batch([item, second], include_splatted_depth=False)
+    prepared = model_batch_to_camera_depth_training_batch(batch, seed=13)
+    for key, shape in CAMERA_GEOMETRY_SHAPES.items():
+        assert batch[key].shape == (2, *shape)
+        assert batch[key].dtype == np.float32
+        np.testing.assert_array_equal(batch[key], np.stack([item[key], second[key]]))
+        np.testing.assert_array_equal(prepared[key], batch[key])
+        assert not np.shares_memory(prepared[key], batch[key])
+    assert batch["inputs"].shape[1] == 9  # Geometry is not a CNN input channel.
+
+    pytest.importorskip("torch")
+    from rgb_lidar_fusion.training import prepare_camera_depth_evaluation_batch
+
+    options = dict(
+        dataset=[item, second], holdout_fraction=0.2, holdout_seed=1013,
+        splatting_config=SplattingConfig(),
+    )
+    combined = prepare_camera_depth_evaluation_batch(indices=[1, 0], **options)
+    single = prepare_camera_depth_evaluation_batch(indices=[1], **options)
+    for key in combined:
+        np.testing.assert_array_equal(combined[key][:1], single[key])
+    for key in CAMERA_GEOMETRY_SHAPES:
+        np.testing.assert_array_equal(combined[key], batch[key][::-1])

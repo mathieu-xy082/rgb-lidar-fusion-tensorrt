@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-10-15.
+Mise à jour : 2026-10-18.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -21,6 +21,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Smoke training KITTI | 64 frames, CPU et GPU, checkpointing et métriques |
 | Pilotes camera-depth 512 frames | Modèles random/blocs entraînés séparément, 5 époques et 2050 steps chacun |
 | Validation croisée camera-depth | Deux checkpoints évalués sur les mêmes masques random puis blocs, MAE/RMSE et couverture splattée |
+| Accès aux features camera-depth | `forward_features()` expose `[B, 32, H, W]`, sans changer la sortie profondeur ni les checkpoints v1 |
 
 ## En cours
 
@@ -60,11 +61,14 @@ Suivi détaillé :
 Construire un module testable qui transforme les features image-depth en grille
 BEV à partir de la calibration, de la profondeur et de la confiance.
 
-Le raccord n'est pas encore implémenté. Il faut exposer les features sans casser
-les checkpoints, expliciter profondeur métrique et calibration, définir la
-validité/confiance puis tester la grille et l'agrégation. La checklist technique
+Le raccord n'est pas encore implémenté. L'accès aux features du dernier décodeur
+est disponible et testé ; il reste à expliciter profondeur métrique et
+calibration, définir la validité/confiance puis tester la grille et l'agrégation. La checklist technique
 de référence est dans les
 [prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
+
+Implémentation incrémentale :
+[workstream camera-depth BEV lift](workstreams/camera-depth-bev-lift.md).
 
 Premier critère de réussite :
 

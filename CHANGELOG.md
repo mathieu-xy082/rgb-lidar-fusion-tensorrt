@@ -4,6 +4,14 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `CameraDepthModel.forward_features()` exposes full-resolution `[B, 32, H, W]`
+  final-decoder features for the future BEV lift, preserving the depth output,
+  existing checkpoint schema, and feature-to-backbone gradients.
+
 ## [1.1.0] - 2026-10-18 - Merge branch 'ec/camera-depth-backbone' into main 
 ### Added
 

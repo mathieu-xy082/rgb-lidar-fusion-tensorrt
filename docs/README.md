@@ -34,6 +34,7 @@ Pour comprendre le projet dans son état actuel :
 | [BEV model roadmap](bev-model-roadmap.md) | Design | Architecture cible camera BEV + LiDAR BEV + fusion + heads 3D |
 | [BEV camera-depth backbone](bev-cam-depth-backbone.md) | V1 implémentée, raccord BEV en design | Justification du holdout et [prérequis techniques du lift](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) |
 | [Camera-depth workstream](workstreams/camera-depth-backbone.md) | Clôture en cours | Résultats des pilotes 512 frames et de la validation croisée, limites, historique GPU et inspection restante |
+| [Camera-depth BEV lift](workstreams/camera-depth-bev-lift.md) | Workstream actif | Accès aux features implémenté ; géométrie, validité et grille BEV à développer |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 
 ## Guides techniques

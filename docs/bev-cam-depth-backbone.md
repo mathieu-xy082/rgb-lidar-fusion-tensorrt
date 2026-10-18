@@ -2,7 +2,7 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-10-15.
+Mise à jour : 2026-10-18.
 
 Statut : **backbone v1 implémenté et évalué sous supervision sparse**. Les deux
 pilotes random/blocs sur 512 frames et leur comparaison croisée sont terminés.
@@ -13,7 +13,8 @@ Documents liés :
 
 - [architecture BEV cible](bev-model-roadmap.md) ;
 - [milestones du projet](milestones.md) ;
-- [résultats du workstream](workstreams/camera-depth-backbone.md).
+- [résultats du workstream](workstreams/camera-depth-backbone.md) ;
+- [implémentation du raccord BEV](workstreams/camera-depth-bev-lift.md).
 
 ## Question
 
@@ -216,10 +217,12 @@ Le modèle peut retourner à la fois :
 - `depth_pred`, pour la loss intermédiaire ;
 - `feature_map`, pour préparer la réutilisation dans le futur lift BEV.
 
-Cette double sortie est un objectif de raccord, pas le contrat actuel :
-`CameraDepthModel.forward()` retourne uniquement `depth_pred`. Les modes sparse
-et enriched sont implémentés et testés ; le mode enriched constitue la référence
-des deux pilotes 512 frames. Il fournit 8 canaux LiDAR en plus des 3 canaux RGB.
+`CameraDepthModel.forward()` retourne toujours uniquement `depth_pred` pour
+préserver le contrat v1. La méthode `forward_features()` expose maintenant la
+sortie du dernier décodeur ; la tête existante permet d'obtenir la profondeur
+depuis ces features sans recalculer le backbone. Les modes sparse et enriched
+sont implémentés et testés ; le mode enriched constitue la référence des deux
+pilotes 512 frames. Il fournit 8 canaux LiDAR en plus des 3 canaux RGB.
 
 ## Lien avec le futur lift BEV
 
@@ -244,20 +247,41 @@ les accumuler dans une grille BEV.
 ## Prerequis du raccord BEV
 
 Cette section est la référence pour le prochain incrément architectural.
-Les éléments ci-dessous sont à développer/tester dans le chantier du lift ;
-ils ne sont pas déjà implémentés et ne demandent pas un nouvel entraînement préalable.
+Les éléments ci-dessous sont suivis dans le chantier du lift ; le point 1 est
+implémenté, les points 2 à 4 restent à développer/tester. Aucun nouvel entraînement
+préalable n'est requis pour commencer la géométrie.
 
 ### 1. Exposer les features sans casser le backbone
 
-- Ajouter un accès explicite aux features existantes, par exemple une méthode
-  dédiée, sans changer le retour actuel de `forward()` ni les clés des
-  checkpoints déjà entraînés.
-- Définir le contrat `image_features: [B, C, Hf, Wf]`, le niveau du réseau retenu
-  et la correspondance entre centres de features et pixels image. Une simple
-  division par le stride ne doit pas remplacer une convention documentée.
-- Tester shapes, valeurs finies, compatibilité des checkpoints et équivalence
-  de la prédiction de profondeur avec le chemin actuel. Garder les features
-  connectées au graphe pour le futur entraînement BEV.
+- [x] Exposer les features par `CameraDepthModel.forward_features(rgb, lidar_maps)`.
+- [x] Conserver le retour de `forward()` et les noms/shapes des paramètres v1.
+- [x] Fixer le contrat à `image_features: [B, 32, H, W]` : sortie de `decoder_0`,
+  juste avant `depth_head`, sans couche ni paramètre supplémentaire.
+- [x] Tester les modes sparse/enriched, les tailles paires/impaires, le
+  chargement strict des checkpoints et l'équivalence avec le calcul v1.
+- [x] Vérifier qu'une loss sur les features seules atteint les entrées,
+  l'encodeur et le décodeur, avec des gradients finis et non nuls. La tête de
+  profondeur n'est pas utilisée dans ce chemin et ne reçoit donc pas de gradient.
+
+La grille exposée est à pleine résolution : `features[b, :, v, u]` est aligné
+sur `rgb[b, :, v, u]` et `depth_pred[b, 0, v, u]`. Dans cette convention de grille,
+le centre de l'échantillon en haut à gauche est `(u=0, v=0)`, avec un pas de 1.
+Il n'y a ni conversion de stride ni décalage supplémentaire entre ces grilles,
+même pour les tailles impaires. Cet alignement n'affirme pas qu'une feature est
+une mesure 3D ponctuelle : son champ réceptif dépend du réseau. Le passage de
+ces indices aux coordonnées caméra sera traité au point 2.
+
+Pour calculer les deux sorties en une seule passe :
+
+```python
+image_features = model.forward_features(rgb, lidar_maps)  # [B, 32, H, W]
+depth_pred = model.depth_head(image_features)              # [B, 1, H, W]
+```
+
+Ne pas appeler en plus `model(rgb, lidar_maps)` dans ce cas, ce qui recalculerait
+le backbone. Les features ne sont ni détachées du graphe ni stockées sur le
+modèle ; le code appelant décide de leur durée de vie. Pour une inspection sans
+gradients, utiliser `model.eval()` avec `torch.no_grad()`, comme pour la profondeur.
 
 ### 2. Rendre la géométrie explicite
 
@@ -326,9 +350,10 @@ encore `CameraDepthModel` ou le lift.
 [fait]    3. Tester sparse holdout depth prediction
 [fait]    4. Évaluer les deux pilotes 512 frames sur les deux holdouts
 [actif]   5. Inspecter les prédictions et consigner les limites de v1
-[prochain]6. Exposer les features et réaliser le raccord camera-depth -> BEV
-[prévu]   7. Ajouter une branche lidar_bev
-[prévu]   8. Ajouter fusion BEV + CenterPoint-like head
+[fait]    6. Exposer les features sans modifier le contrat depth/checkpoints
+[prochain]7. Définir la géométrie et réaliser le raccord camera-depth -> BEV
+[prévu]   8. Ajouter une branche lidar_bev
+[prévu]   9. Ajouter fusion BEV + CenterPoint-like head
 ```
 
 ## Risques
@@ -350,9 +375,10 @@ revendiquer une profondeur dense fiable partout.
 
 Le prochain chantier architectural est le module `camera-depth -> camera_bev`
 décrit dans l'[architecture BEV](bev-model-roadmap.md). Il commence par les
-[prérequis de raccord](#prerequis-du-raccord-bev), en conservant l'architecture et
-les checkpoints actuels. Aucun entraînement mixte ou changement de backbone
-n'est requis avant les premiers tests géométriques.
+[prérequis de raccord](#prerequis-du-raccord-bev), dont l'accès aux features est
+maintenant disponible. Le prochain incrément porte sur le contrat géométrique,
+en conservant l'architecture et les checkpoints actuels. Aucun entraînement
+mixte ou changement de backbone n'est requis avant les premiers tests géométriques.
 
 Les critères à jour sont suivis dans les
 [milestones](milestones.md), et les résultats d'exécution dans le

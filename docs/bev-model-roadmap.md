@@ -2,7 +2,7 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-10-15.
+Mise à jour : 2026-10-18.
 
 Statut : **design de référence**. Le backbone camera-depth préalable est
 implémenté et évalué sur les pilotes random/blocs 512 frames. L'inspection
@@ -196,8 +196,10 @@ Avant le raccord au backbone, suivre les
 accès aux features compatible avec les checkpoints, profondeur caméra en
 mètres, calibration redimensionnée complète, masque de validité et politique
 de confiance, puis grille/agrégation et tests de géométrie/backward.
-Le modèle retourne actuellement uniquement la profondeur, pas encore les
-features nécessaires au lift.
+Le `forward()` du modèle retourne toujours uniquement la profondeur.
+`forward_features()` expose désormais les features du dernier décodeur en
+`[B, 32, H, W]` sur la même grille image ; l'implémentation du raccord géométrique
+reste à faire. Suivi : [workstream BEV lift](workstreams/camera-depth-bev-lift.md).
 
 Le premier prototype peut utiliser une profondeur synthétique puis
 mesurée/splattée sur son support connu pour isoler les erreurs de géométrie.

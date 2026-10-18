@@ -50,6 +50,27 @@ class CameraDepthModel(nn.Module):
     def forward(self, rgb: torch.Tensor, lidar_maps: torch.Tensor) -> torch.Tensor:
         """Return normalized depth with shape ``[B, 1, H, W]``."""
 
+        return self.depth_head(self.forward_features(rgb, lidar_maps))
+
+    def forward_features(
+        self,
+        rgb: torch.Tensor,
+        lidar_maps: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return the final decoder features with shape ``[B, 32, H, W]``.
+
+        The feature grid shares the input image's spatial indexing: feature
+        [v, u] corresponds to image pixel [v, u], including odd resolutions.
+        No additional resize, stride conversion, or coordinate offset is
+        needed between these grids. This defines grid alignment, not a point
+        measurement or the receptive field of each feature.
+
+        Features retain their autograd graph and are not cached on the model.
+        To obtain both outputs in one backbone pass, apply depth_head to the
+        returned features. Existing forward calls and state_dict keys remain
+        unchanged.
+        """
+
         self._validate_inputs(rgb, lidar_maps)
         stem = self.stem(torch.cat([rgb, lidar_maps], dim=1))
         encoded_1 = self.encoder_1(stem)
@@ -69,7 +90,7 @@ class CameraDepthModel(nn.Module):
             align_corners=False,
         )
         decoded_0 = self.decoder_0(torch.cat([decoded_0, stem], dim=1))
-        return self.depth_head(decoded_0)
+        return decoded_0
 
     def _validate_inputs(
         self,

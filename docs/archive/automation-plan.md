@@ -1,5 +1,8 @@
 # Automation plan
 
+> Archive historique déplacée le 2026-08-17. Les chemins, jobs et statuts de ce
+> document peuvent être obsolètes. Voir [l'index actif](../README.md).
+
 Ce fichier documente les tâches Hermes planifiées pour le projet RGB-LiDAR Fusion TensorRT.
 
 Repository local :

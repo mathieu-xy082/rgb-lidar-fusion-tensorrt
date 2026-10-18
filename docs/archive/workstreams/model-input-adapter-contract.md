@@ -1,5 +1,8 @@
 # Workstream — Model input adapter contract
 
+> Workstream terminé et archivé le 2026-08-17. Voir
+> [l'index documentaire actif](../../README.md).
+
 Branch: `feature/model-input-adapter-contract`
 
 Parent branch: `main`

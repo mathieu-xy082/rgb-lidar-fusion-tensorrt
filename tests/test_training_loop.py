@@ -12,6 +12,7 @@ torch = pytest.importorskip("torch")
 
 import numpy as np
 
+import rgb_lidar_fusion.training as training
 from rgb_lidar_fusion.baseline_model import BaselineFusionModel
 from rgb_lidar_fusion.model_batch import (
     dataset_items_to_model_batch,
@@ -22,8 +23,13 @@ from rgb_lidar_fusion.training import (
     build_loss,
     describe_device_selection,
     load_training_config,
+    load_checkpoint,
+    run_kitti_camera_depth_training,
     run_synthetic_smoke_training,
+    split_dataset_indices,
+    save_checkpoint,
     train_one_step,
+    validate_camera_depth_training_config,
     validate_training_config,
 )
 
@@ -129,6 +135,152 @@ def test_validate_training_config_rejects_kitti_config_for_synthetic_runner() ->
 
     with pytest.raises(ValueError, match="synthetic smoke runner only supports dataset='synthetic'"):
         validate_training_config(config)
+
+
+def test_validate_camera_depth_config_rejects_invalid_holdout_fraction() -> None:
+    config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": "data/kitti/training",
+        "holdout_fraction": 1.0,
+    }
+
+    with pytest.raises(ValueError, match="holdout_fraction must be between 0 and 1"):
+        validate_camera_depth_training_config(config)
+
+
+def test_validate_camera_depth_config_accepts_validation_split_settings() -> None:
+    validate_camera_depth_training_config(
+        {
+            "dataset": "kitti_camera_depth",
+            "data_root": "data/kitti/training",
+            "sample_count": 64,
+            "validation_fraction": 0.2,
+            "split_seed": 13,
+            "validation_holdout_seed": 1013,
+            "lidar_mode": "sparse",
+        }
+    )
+
+
+def test_validate_camera_depth_config_rejects_unknown_lidar_mode() -> None:
+    with pytest.raises(ValueError, match="lidar_mode must be one of"):
+        validate_camera_depth_training_config(
+            {
+                "dataset": "kitti_camera_depth",
+                "data_root": "data/kitti/training",
+                "lidar_mode": "dense",
+            }
+        )
+
+
+def test_block_dropout_pilot_config_loads_with_scalar_ranges() -> None:
+    config = load_training_config(
+        Path(__file__).resolve().parents[1]
+        / "configs/training/kitti_camera_depth_block_dropout.yaml"
+    )
+
+    validate_camera_depth_training_config(config)
+
+    assert config["sample_count"] == 512
+    assert config["holdout_mode"] == "spatial_blocks"
+    assert config["block_width_min_px"] == 32
+    assert config["block_width_max_px"] == 128
+
+
+@pytest.mark.parametrize("settings, message", [
+    ({"holdout_mode": "spatial_block"}, "holdout_mode must be"),
+    ({"block_height_min_px": 0}, "block_height_min_px must be a positive integer"),
+    ({"block_width_max_px": 1.5}, "block_width_max_px must be a positive integer"),
+    ({"block_height_max_px": True}, "block_height_max_px must be a positive integer"),
+    ({"block_width_min_px": "32"}, "block_width_min_px must be a positive integer"),
+    ({"block_height_min_px": 49}, "block_height_min_px must not exceed"),
+    ({"block_width_max_px": 31}, "block_width_min_px must not exceed"),
+    ({"block_max_count": 0}, "block_max_count must be a positive integer"),
+    ({"block_max_count": 2.5}, "block_max_count must be a positive integer"),
+])
+def test_validate_camera_depth_config_rejects_invalid_block_settings(settings, message):
+    config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": "data/kitti/training",
+        "holdout_mode": "spatial_blocks",
+        **settings,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        validate_camera_depth_training_config(config)
+
+
+def test_validate_camera_depth_config_rejects_invalid_validation_split_settings() -> None:
+    base_config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": "data/kitti/training",
+        "sample_count": 64,
+        "validation_fraction": 0.2,
+        "split_seed": 13,
+    }
+
+    with pytest.raises(ValueError, match="sample_count must be at least 2"):
+        validate_camera_depth_training_config({**base_config, "sample_count": 1})
+    for validation_fraction in (0.0, 1.0, -0.1, 1.1):
+        with pytest.raises(
+            ValueError,
+            match="validation_fraction must be between 0 and 1",
+        ):
+            validate_camera_depth_training_config(
+                {
+                    **base_config,
+                    "validation_fraction": validation_fraction,
+                }
+            )
+    with pytest.raises(ValueError, match="split_seed must be an integer"):
+        validate_camera_depth_training_config(
+            {
+                **base_config,
+                "split_seed": "invalid",
+            }
+        )
+    with pytest.raises(ValueError, match="validation_holdout_seed must be an integer"):
+        validate_camera_depth_training_config(
+            {
+                **base_config,
+                "validation_holdout_seed": "invalid",
+            }
+        )
+
+
+def test_split_dataset_indices_is_deterministic_disjoint_and_complete() -> None:
+    first_train, first_validation = split_dataset_indices(
+        10,
+        validation_fraction=0.2,
+        seed=41,
+    )
+    second_train, second_validation = split_dataset_indices(
+        10,
+        validation_fraction=0.2,
+        seed=41,
+    )
+
+    assert first_train == second_train
+    assert first_validation == second_validation
+    assert len(first_train) == 8
+    assert len(first_validation) == 2
+    assert set(first_train).isdisjoint(first_validation)
+    assert sorted(first_train + first_validation) == list(range(10))
+
+
+def test_split_dataset_indices_rejects_invalid_inputs() -> None:
+    with pytest.raises(ValueError, match="sample_count must be at least 2"):
+        split_dataset_indices(1, validation_fraction=0.2, seed=41)
+    for validation_fraction in (0.0, 1.0, -0.1, 1.1):
+        with pytest.raises(
+            ValueError,
+            match="validation_fraction must be between 0 and 1",
+        ):
+            split_dataset_indices(
+                10,
+                validation_fraction=validation_fraction,
+                seed=41,
+            )
 
 
 def test_train_one_step_consumes_model_batch_adapter_and_updates_parameters() -> None:
@@ -242,6 +394,302 @@ def test_resumed_synthetic_training_preserves_metrics_history(tmp_path, monkeypa
     assert [row["epoch"] for row in metrics] == [1, 2]
     assert metrics_csv.read_text().splitlines()[1:][0].startswith("1,")
     assert metrics_csv.read_text().splitlines()[1:][1].startswith("2,")
+
+
+def _write_training_kitti_frame(root: Path, sample_id: str, depth_offset: float) -> None:
+    Image = pytest.importorskip("PIL.Image")
+    image_dir = root / "image_2"
+    velodyne_dir = root / "velodyne"
+    calibration_dir = root / "calib"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    velodyne_dir.mkdir(parents=True, exist_ok=True)
+    calibration_dir.mkdir(parents=True, exist_ok=True)
+
+    pixels = np.zeros((12, 16, 3), dtype=np.uint8)
+    pixels[..., 0] = 64
+    pixels[3:9, 4:12, 1] = 160
+    Image.fromarray(pixels, mode="RGB").save(image_dir / f"{sample_id}.png")
+    points = np.array(
+        [
+            [-3.0, -1.0, 6.0 + depth_offset, 0.5],
+            [-1.5, 0.0, 6.5 + depth_offset, 0.6],
+            [0.0, 0.0, 7.0 + depth_offset, 0.7],
+            [1.5, 0.0, 7.5 + depth_offset, 0.8],
+            [3.0, 1.0, 8.0 + depth_offset, 0.9],
+        ],
+        dtype=np.float32,
+    )
+    points.tofile(velodyne_dir / f"{sample_id}.bin")
+    (calibration_dir / f"{sample_id}.txt").write_text(
+        "\n".join(
+            (
+                "P2: 8 0 8 0 0 8 6 0 0 0 1 0",
+                "R0_rect: 1 0 0 0 1 0 0 0 1",
+                "Tr_velo_to_cam: 1 0 0 0 0 1 0 0 0 0 1 0",
+            )
+        )
+        + "\n"
+    )
+
+
+@pytest.mark.parametrize("lidar_mode", ("sparse", "enriched"))
+@pytest.mark.parametrize("holdout_mode", ("random_points", "spatial_blocks"))
+def test_kitti_camera_depth_training_writes_metrics_checkpoint_and_resumes(
+    tmp_path,
+    monkeypatch,
+    lidar_mode,
+    holdout_mode,
+) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    data_root = tmp_path / "kitti" / "training"
+    _write_training_kitti_frame(data_root, "000000", 0.0)
+    _write_training_kitti_frame(data_root, "000001", 0.5)
+    _write_training_kitti_frame(data_root, "000002", 1.0)
+    _write_training_kitti_frame(data_root, "000003", 1.5)
+    output_dir = tmp_path / f"camera-depth-training-{lidar_mode}"
+    config = {
+        "dataset": "kitti_camera_depth",
+        "data_root": str(data_root),
+        "sample_count": 4,
+        "seed": 29,
+        "split_seed": 37,
+        "validation_holdout_seed": 1037,
+        "device": "cpu",
+        "lidar_mode": lidar_mode,
+        "epochs": 1,
+        "batch_size": 2,
+        "learning_rate": 0.001,
+        "height": 12,
+        "width": 16,
+        "holdout_fraction": 0.4,
+        "validation_fraction": 0.5,
+        "splat_radius_px": 1,
+        "splat_sigma_px": 1.0,
+        "smooth_l1_beta": 0.1,
+        "output_dir": str(output_dir),
+    }
+    if holdout_mode == "spatial_blocks":
+        config.update({
+            "holdout_mode": holdout_mode,
+            "block_height_min_px": 2,
+            "block_height_max_px": 3,
+            "block_width_min_px": 3,
+            "block_width_max_px": 5,
+            "block_max_count": 3,
+        })
+
+    prepared_counts = []
+    original_prepare = training.model_batch_to_camera_depth_training_batch
+
+    def record_preparation(batch, **options):
+        assert options["holdout_mode"] == holdout_mode
+        prepared = original_prepare(batch, **options)
+        if holdout_mode == "spatial_blocks":
+            assert options["block_height_px"] == (2, 3)
+            assert options["block_width_px"] == (3, 5)
+            assert options["block_max_count"] == 3
+            assert prepared["holdout_region_mask"].sum() > prepared["loss_mask"].sum()
+        sparse = batch["sparse_lidar_maps"]
+        valid_count = np.count_nonzero((sparse[:, 5:6] > 0) & (sparse[:, 0:1] > 0))
+        prepared_counts.append((int(prepared["loss_mask"].sum()), int(valid_count)))
+        return prepared
+
+    monkeypatch.setattr(training, "model_batch_to_camera_depth_training_batch", record_preparation)
+
+    first = run_kitti_camera_depth_training(config)
+
+    assert first.device == "cpu"
+    assert first.epochs_completed == 1
+    assert first.metrics[0].step == 1
+    assert first.metrics[0].loss > 0.0
+    assert first.metrics[0].val_loss is not None
+    assert first.metrics[0].val_mae_m is not None
+    assert first.metrics[0].val_rmse_m is not None
+    assert first.metrics[0].val_splat_mae_m is not None
+    assert first.metrics[0].val_splat_rmse_m is not None
+    assert first.metrics[0].val_pixel_count is not None
+    assert first.metrics[0].val_pixel_count > 0
+    assert first.checkpoint_path.exists()
+    assert first.metrics[0].train_holdout_fraction == pytest.approx(
+        prepared_counts[0][0] / prepared_counts[0][1]
+    )
+    assert first.metrics[0].val_holdout_fraction == pytest.approx(
+        sum(count for count, _ in prepared_counts[1:])
+        / sum(count for _, count in prepared_counts[1:])
+    )
+
+    resumed = run_kitti_camera_depth_training(
+        {
+            **config,
+            "epochs": 2,
+            "resume_from": str(first.checkpoint_path),
+        }
+    )
+
+    assert resumed.start_epoch == 1
+    assert resumed.metrics[0].epoch == 2
+    assert resumed.metrics[0].step == 2
+    import json
+
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert [row["epoch"] for row in metrics] == [1, 2]
+    assert metadata["dataset"] == "kitti_camera_depth"
+    assert metadata["lidar_mode"] == lidar_mode
+    assert metadata["sample_count"] == 4
+    assert metadata["image_shape"] == [12, 16]
+    assert metadata["holdout"]["holdout_mode"] == holdout_mode
+    assert metadata["holdout"]["requested_fraction"] == 0.4
+    if holdout_mode == "spatial_blocks":
+        assert metadata["holdout"]["block_height_px"] == [2, 3]
+        assert metadata["holdout"]["block_width_px"] == [3, 5]
+        assert metadata["holdout"]["block_max_count"] == 3
+    payload = torch.load(first.checkpoint_path, map_location="cpu", weights_only=False)
+    assert payload["config"].get("holdout_mode", "random_points") == holdout_mode
+    assert metadata["split"]["seed"] == 37
+    assert metadata["split"]["holdout_seed"] == 1037
+    assert metadata["split"]["validation_fraction"] == 0.5
+    assert metadata["split"]["train_sample_count"] == 2
+    assert metadata["split"]["validation_sample_count"] == 2
+    assert set(metadata["split"]["train_indices"]).isdisjoint(
+        metadata["split"]["validation_indices"]
+    )
+    assert sorted(
+        metadata["split"]["train_indices"]
+        + metadata["split"]["validation_indices"]
+    ) == [0, 1, 2, 3]
+    assert "val_loss" in (output_dir / "metrics.csv").read_text().splitlines()[0]
+    assert metrics[0]["val_pixel_count"] > 0
+    assert metrics[0]["val_splat_mae_m"] >= 0.0
+    assert metrics[0]["train_holdout_fraction"] == first.metrics[0].train_holdout_fraction
+    assert metrics[0]["val_holdout_fraction"] == first.metrics[0].val_holdout_fraction
+
+
+@pytest.mark.parametrize("holdout_mode", ("random_points", "spatial_blocks"))
+def test_camera_depth_interruption_preserves_epoch_history_and_can_resume(
+    tmp_path, monkeypatch, holdout_mode,
+) -> None:
+    import json
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    data_root = tmp_path / "kitti/training"
+    for index in range(4):
+        _write_training_kitti_frame(data_root, f"{index:06d}", index * 0.5)
+    output_dir = tmp_path / "interrupted-run"
+    config = {
+        "dataset": "kitti_camera_depth", "data_root": str(data_root),
+        "sample_count": 4, "height": 12, "width": 16,
+        "device": "cpu", "seed": 29, "epochs": 3, "batch_size": 2,
+        "holdout_fraction": 0.4, "validation_fraction": 0.5,
+        "holdout_mode": holdout_mode,
+        "block_height_min_px": 2, "block_height_max_px": 3,
+        "block_width_min_px": 3, "block_width_max_px": 5,
+        "splat_radius_px": 1, "output_dir": str(output_dir),
+    }
+    original_step = training.train_camera_depth_step
+    calls = 0
+
+    def fail_in_third_epoch(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise RuntimeError("simulated accelerator failure")
+        return original_step(**kwargs)
+
+    monkeypatch.setattr(training, "train_camera_depth_step", fail_in_third_epoch)
+    with pytest.raises(RuntimeError, match="simulated accelerator failure"):
+        run_kitti_camera_depth_training(config)
+
+    checkpoint_path = output_dir / "checkpoints/latest.pt"
+    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert payload["epoch"] == payload["step"] == 2
+    metrics = json.loads((output_dir / "metrics.json").read_text())
+    assert [row["epoch"] for row in metrics] == [1, 2]
+    assert len((output_dir / "metrics.csv").read_text().splitlines()) == 3
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert metadata["epochs_completed"] == 2
+
+    monkeypatch.setattr(training, "train_camera_depth_step", original_step)
+    resumed = run_kitti_camera_depth_training({**config, "resume_from": str(checkpoint_path)})
+
+    assert resumed.start_epoch == 2
+    assert resumed.metrics[0].epoch == resumed.metrics[0].step == 3
+    history = json.loads((output_dir / "metrics.json").read_text())
+    assert [row["epoch"] for row in history] == [1, 2, 3]
+    assert history[:2] == metrics
+    assert len((output_dir / "metrics.csv").read_text().splitlines()) == 4
+    metadata = json.loads((output_dir / "run_metadata.json").read_text())
+    assert metadata["epochs_completed"] == 3
+
+
+@pytest.mark.parametrize("runner_kind", ("synthetic", "camera_depth"))
+def test_runner_moves_model_before_constructing_adam(tmp_path, monkeypatch, runner_kind):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    model_class = BaselineFusionModel if runner_kind == "synthetic" else training.CameraDepthModel
+    original_to = model_class.to
+    original_adam = torch.optim.Adam
+    events = []
+
+    def record_model_move(model, *args, **kwargs):
+        result = original_to(model, *args, **kwargs)
+        events.append("model moved")
+        return result
+
+    def record_adam_creation(*args, **kwargs):
+        assert events == ["model moved"]
+        events.append("optimizer created")
+        return original_adam(*args, **kwargs)
+
+    monkeypatch.setattr(model_class, "to", record_model_move)
+    monkeypatch.setattr(torch.optim, "Adam", record_adam_creation)
+    config = {
+        "device": "cpu", "epochs": 1, "batch_size": 2,
+        "height": 12, "width": 16, "output_dir": str(tmp_path / "run"),
+    }
+    if runner_kind == "synthetic":
+        run_synthetic_smoke_training(config)
+    else:
+        data_root = tmp_path / "kitti/training"
+        for index in range(4):
+            _write_training_kitti_frame(data_root, f"{index:06d}", index * 0.5)
+        run_kitti_camera_depth_training({
+            **config, "dataset": "kitti_camera_depth",
+            "data_root": str(data_root), "sample_count": 4,
+        })
+    assert events[:2] == ["model moved", "optimizer created"]
+
+
+def test_adam_checkpoint_resume_on_cuda_keeps_moments_with_parameters(tmp_path):
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for the cross-device resume regression test.")
+
+    source = torch.nn.Linear(3, 1)
+    source_optimizer = torch.optim.Adam(source.parameters(), lr=0.001, foreach=True)
+    source(torch.ones((2, 3))).square().mean().backward()
+    source_optimizer.step()
+    path = tmp_path / "cpu_checkpoint.pt"
+    save_checkpoint(
+        path=path, model=source, optimizer=source_optimizer,
+        epoch=1, step=1, config={},
+    )
+
+    model = torch.nn.Linear(3, 1).to("cuda")
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, foreach=True)
+    epoch, step = load_checkpoint(path=path, model=model, optimizer=optimizer, device="cuda")
+
+    assert (epoch, step) == (1, 1)
+    for parameter in model.parameters():
+        state = optimizer.state[parameter]
+        assert state["exp_avg"].device == parameter.device
+        assert state["exp_avg_sq"].device == parameter.device
+        assert state["step"].device.type == "cpu"
+    optimizer.zero_grad(set_to_none=True)
+    loss = model(torch.ones((2, 3), device="cuda")).square().mean()
+    loss.backward()
+    optimizer.step()
+    torch.cuda.synchronize()
+    assert torch.isfinite(loss)
+    assert all(optimizer.state[parameter]["step"].item() == 2 for parameter in model.parameters())
 
 
 def test_train_baseline_cli_reports_config_errors_without_traceback(tmp_path) -> None:

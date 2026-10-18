@@ -18,7 +18,15 @@ dev = [
   "pytest>=8",
 ]
 ml = [
-  "torch>=2.3",
+  "torch==2.13.0+cu129",
+  "pillow>=10",
+]
+visualization = [
+  "matplotlib>=3.8",
+]
+notebook = [
+  "jupyterlab>=4.2",
+  "ipykernel>=6.29",
 ]
 onnx = [
   "onnx>=1.16",
@@ -29,11 +37,18 @@ onnx = [
 [tool.pdm]
 distribution = true
 
+[[tool.pdm.source]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+include_packages = ["torch"]
+
 [tool.pdm.scripts]
 test = "pytest"
 smoke = "python scripts/smoke_project_lidar.py"
 demo-artifacts = "python -m rgb_lidar_fusion.demo_artifacts"
 train-baseline = "python scripts/train_baseline.py"
+train-camera-depth = "python scripts/train_camera_depth.py"
+notebooks = "jupyter lab notebooks"
 validate = { composite = ["test", "smoke", "demo-artifacts"] }
 export_onnx = "python scripts/export_onnx.py"
 validate_onnx = "python scripts/validate_onnx.py"

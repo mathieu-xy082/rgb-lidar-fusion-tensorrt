@@ -6,7 +6,83 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-No changes yet.
+### Added
+
+- Dense `CameraDepthModel` with deterministic sparse LiDAR holdout,
+  leakage-safe resplatting, masked Smooth L1 training, and checkpoint support.
+- KITTI camera-depth runner with deterministic train/validation splits, fixed
+  per-frame validation masks, and held-out MAE/RMSE in meters.
+- Random-point and spatial-block LiDAR holdout, with achieved holdout fractions
+  and leakage-safe splatted-depth baseline errors and coverage.
+- Matched 512-frame experiment configurations and cross-evaluation of both
+  checkpoints under both holdout modes.
+- Three notebooks for LiDAR projection, hybrid-input exploration, training,
+  metric analysis, splatting ablation, and prediction inspection.
+- Notebook GPU preflight with driver recovery checks, competing-process and
+  free-memory guards, synchronized CUDA probes, and allocator diagnostics.
+- Standalone bounded FP32 GPU diagnostic with read-only checkpoint loading,
+  synchronized phase markers, incremental JSONL logs, and memory measurements.
+- Optional dependency groups for notebook execution and visualization.
+- Documentation index, current milestones, explicit BEV design links, and
+  separated active/archive workstreams.
+- Recorded camera-depth experiment results, sparse-supervision limitations,
+  and feature/geometry/validity prerequisites for the future BEV lift.
+
+### Changed
+
+- Pinned PyTorch to `2.13.0+cu129` through the official CUDA 12.9 package index.
+- Set camera-depth training to `320x1024`; YAML defaults use batch size 2,
+  while the local 4 GiB GPU notebook and matched experiments use batch size 1.
+- Reworked the README to distinguish the implemented pipeline, legacy baseline,
+  camera-depth representation, and target BEV architecture.
+
+### Fixed
+
+- Restore Adam state against parameters already placed on the training device,
+  avoiding mixed CPU/CUDA optimizer tensors when resuming a checkpoint.
+- Persist camera-depth metrics and run metadata after each completed epoch,
+  preserving completed history if a later epoch fails.
+- Release unused CUDA allocator cache before the notebook's free-memory check,
+  without lowering the safety threshold or deleting referenced tensors.
+- Stop issuing explicit cache-cleanup calls after a failed CUDA smoke probe.
+
+### Validated
+
+- Camera-depth smoke training completed on 64 KITTI Object frames on CPU and
+  the local NVIDIA GPU.
+- Separate random-point and spatial-block GPU runs completed on 512 KITTI
+  Object frames (410 train / 102 validation), five epochs and 2050 steps each.
+  All four cross-evaluation combinations completed. See the
+  [camera-depth workstream](docs/workstreams/camera-depth-backbone.md) for the
+  scores, achieved holdout fractions, and interpretation limits.
+- Sparse-versus-enriched input ablation on 64 frames improved held-out errors
+  with splatted depth/confidence inputs; this is a single-seed result.
+- After the local NVIDIA driver/GSP update from `575.64.03` to `615.71.09`,
+  a 100-step GPU diagnostic, the remaining random-point epoch, the full block
+  run, and cross-evaluation completed successfully. This does not establish
+  the cause of the earlier Xid failures.
+- Clean pre-merge validation on 2026-10-18: `232 passed, 1 skipped` (CUDA-only
+  regression), lockfile check, deterministic projection/demo artifact checks,
+  and a two-epoch CPU baseline training smoke. Remote CI was not rerun as part
+  of these local checks.
+
+### Known limitations
+
+- Depth metrics supervise only hidden measured LiDAR pixels, not every dense
+  prediction. Broad scene generalization, learned RGB semantics, and prediction uncertainty
+  are not established by this single-seed pilot.
+- Random and block holdout produce different target sets and achieved removal
+  fractions; comparisons must use the same evaluation masks. Splat baseline
+  errors include zero predictions outside splat support and require coverage
+  to be interpreted correctly.
+- Qualitative review remains before camera-depth v1 workstream closure.
+  Mixed holdout and larger-dataset/sensitivity studies are optional follow-ups,
+  not prerequisites for the first geometric BEV prototype.
+- The feature-output interface, BEV lift, LiDAR BEV branch, and 3D detection
+  heads are not implemented. Existing ONNX export covers the legacy baseline,
+  not `CameraDepthModel`; real TensorRT engine validation remains deferred.
+- The local 4 GiB GPU has limited headroom. AMP remains disabled, and the
+  successful post-update runs do not guarantee future GPU stability.
 
 ## 1.0.0 - 2026-08-02
 

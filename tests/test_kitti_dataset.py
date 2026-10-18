@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from rgb_lidar_fusion.dataset import KittiSparseLidarDataset
+from rgb_lidar_fusion.dataset import KittiObjectDepthDataset, KittiSparseLidarDataset
 
 
 FIXTURE_ROOT = "tests/fixtures/synthetic_kitti"
@@ -95,3 +95,69 @@ def test_dataset_reports_out_of_range_index_with_dataset_size():
 
     with pytest.raises(IndexError, match="Dataset index 1 out of range for 1 sample"):
         _ = dataset[1]
+
+
+def _write_kitti_object_frame(root, sample_id="000000"):
+    Image = pytest.importorskip("PIL.Image")
+    image_dir = root / "image_2"
+    velodyne_dir = root / "velodyne"
+    calibration_dir = root / "calib"
+    image_dir.mkdir(parents=True)
+    velodyne_dir.mkdir()
+    calibration_dir.mkdir()
+
+    pixels = np.zeros((6, 8, 3), dtype=np.uint8)
+    pixels[..., 0] = 255
+    Image.fromarray(pixels, mode="RGB").save(image_dir / f"{sample_id}.png")
+    points = np.array(
+        [
+            [0.0, 0.0, 5.0, 0.8],
+            [2.0, 0.0, 5.0, 0.6],
+            [-2.0, 0.0, 5.0, 0.4],
+        ],
+        dtype=np.float32,
+    )
+    points.tofile(velodyne_dir / f"{sample_id}.bin")
+    (calibration_dir / f"{sample_id}.txt").write_text(
+        "\n".join(
+            (
+                "P2: 4 0 4 0 0 4 3 0 0 0 1 0",
+                "R0_rect: 1 0 0 0 1 0 0 0 1",
+                "Tr_velo_to_cam: 1 0 0 0 0 1 0 0 0 0 1 0",
+            )
+        )
+        + "\n"
+    )
+
+
+def test_kitti_object_depth_dataset_loads_resizes_and_projects_downloaded_frame(tmp_path):
+    _write_kitti_object_frame(tmp_path)
+    dataset = KittiObjectDepthDataset(tmp_path, image_shape=(3, 4))
+
+    sample = dataset[0]
+
+    assert len(dataset) == 1
+    assert sample["image"].shape == (3, 3, 4)
+    np.testing.assert_allclose(sample["image"][0], 1.0)
+    np.testing.assert_allclose(sample["image"][1:], 0.0)
+    assert sample["lidar_maps"].shape == (6, 3, 4)
+    assert sample["lidar_maps"][5].sum() == pytest.approx(3.0)
+    assert sample["lidar_maps"][0, 2, 2] == pytest.approx(5.0 / 80.0)
+    assert sample["meta"]["sample_id"] == "000000"
+    assert sample["meta"]["image_shape"] == [3, 4]
+    assert sample["meta"]["source_image_shape"] == [6, 8]
+
+
+def test_kitti_object_depth_dataset_rejects_incomplete_download(tmp_path):
+    _write_kitti_object_frame(tmp_path)
+    (tmp_path / "velodyne" / "000000.bin").unlink()
+
+    with pytest.raises(FileNotFoundError, match="frame 000000 is incomplete"):
+        KittiObjectDepthDataset(tmp_path, image_shape=(3, 4))
+
+
+def test_kitti_object_depth_dataset_requires_requested_sample_count(tmp_path):
+    _write_kitti_object_frame(tmp_path)
+
+    with pytest.raises(ValueError, match="provides 1 frames.*sample_limit=2"):
+        KittiObjectDepthDataset(tmp_path, image_shape=(3, 4), sample_limit=2)

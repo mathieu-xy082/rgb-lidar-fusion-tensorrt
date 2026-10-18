@@ -12,8 +12,9 @@ batch
 → préparation TensorRT
 ```
 
-Cette séance sera probablement ajustée selon l'état des branches de travail et
-la disponibilité des dépendances `ml` / `onnx` / TensorRT.
+L'export ONNX décrit ici concerne le `BaselineFusionModel` historique. Le
+`CameraDepthModel` et la future architecture BEV auront leur propre contrat
+d'export lorsqu'ils seront stabilisés.
 
 ## Bloc A — Vérifier les dépendances ML
 
@@ -62,11 +63,10 @@ configs/training/synthetic_smoke.yaml
 tests/test_training_loop.py
 ```
 
-Commande probable :
+Commande :
 
 ```bash
-pdm run python scripts/train_baseline.py \
-  --config configs/training/synthetic_smoke.yaml
+pdm run train-baseline -- --config configs/training/synthetic_smoke.yaml
 ```
 
 Sorties attendues :
@@ -80,6 +80,13 @@ metrics=...
 ```
 
 Les checkpoints et métriques restent hors Git.
+
+Le smoke camera-depth peut être lancé séparément après préparation des données
+KITTI :
+
+```bash
+pdm run train-camera-depth -- --config configs/training/kitti_camera_depth.yaml
+```
 
 ## Bloc D — Export ONNX
 
@@ -97,11 +104,11 @@ scripts/validate_onnx.py
 docs/onnx-export-validation.md
 ```
 
-Commandes indicatives :
+Commandes :
 
 ```bash
-pdm run python scripts/export_onnx.py --help
-pdm run python scripts/validate_onnx.py --help
+pdm run export_onnx
+pdm run validate_onnx
 ```
 
 Le but pédagogique est de comprendre :

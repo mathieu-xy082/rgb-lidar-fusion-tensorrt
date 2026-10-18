@@ -1,21 +1,16 @@
 # TensorRT FP16 runtime and benchmark plan
 
-Milestone 5 must stay reproducible without assuming that every development host
+Status: **runtime and benchmark guide**. The current scripts validate environment
+detection and metric contracts; no benchmark of the future BEV detector exists.
+
+The deployment milestone must stay reproducible without assuming that every development host
 has CUDA or TensorRT installed. The repository therefore provides guarded scripts
 that document the expected command line and fail clearly when the runtime is
 missing.
 
-## Current host diagnosis
-
-The scheduled job that prepared this plan observed:
-
-- `nvidia-smi`: not found
-- `nvcc`: not found
-- `trtexec`: not found
-- Python package `tensorrt`: not importable
-
-This host is therefore suitable for planning and validation of stubs only. It is
-not a proven TensorRT execution target.
+Runtime availability must be detected when the command is executed. A historical
+host snapshot is deliberately not kept here because GPU, driver, container and
+TensorRT versions can change independently.
 
 ## Runtime options
 
@@ -73,7 +68,7 @@ Expected behavior before a runtime exists:
 
 ## ONNX to FP16 engine path
 
-Once Milestone 4 produces an ONNX model and parity validation:
+Once the target model has an ONNX export and parity validation:
 
 ```bash
 python scripts/tensorrt_build_engine.py \

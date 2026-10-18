@@ -1,5 +1,8 @@
 # Structured splatted LiDAR maps plan
 
+> Archive historique déplacée le 2026-08-17. Ce chantier est terminé ; le
+> contrat actif est décrit dans le [README principal](../../README.md).
+
 Branche dédiée : `ec/splatted-structured-maps`
 
 Base de référence : `origin/ec/onboarding`

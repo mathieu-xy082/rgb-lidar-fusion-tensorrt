@@ -1,5 +1,8 @@
 # Workstream — Baseline with splatted LiDAR channels
 
+> Workstream terminé et archivé le 2026-08-17. Voir
+> [l'index documentaire actif](../../README.md).
+
 Branch: `feature/baseline-use-splatted-lidar-channels`
 
 Parent branch: `feature/baseline-fusion-model`

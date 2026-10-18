@@ -224,3 +224,236 @@ def model_batch_to_torch_tensors(
             dtype=torch.float32,
         ),
     }
+
+
+def build_depth_holdout_mask(
+    valid_mask: np.ndarray,
+    *,
+    holdout_fraction: float = 0.2,
+    seed: int = 0,
+) -> np.ndarray:
+    """Select random target pixels from a valid-depth mask ``[B, 1, H, W]``.
+
+    Selection uses one seeded generator across the batch, preserving the
+    original camera-depth holdout sequence. Each sample contributes at least
+    one target and keeps at least one measurement when it has two or more.
+    A singleton sample contributes its only point as a target, leaving no
+    LiDAR context. The input mask is never modified.
+    """
+
+    if not 0.0 < holdout_fraction < 1.0:
+        raise ValueError("holdout_fraction must be between 0 and 1.")
+    valid = np.asarray(valid_mask, dtype=bool)
+    if valid.ndim != 4 or valid.shape[1] != 1 or any(size == 0 for size in valid.shape):
+        raise ValueError("valid_mask must have non-empty shape [B, 1, H, W].")
+
+    rng = np.random.default_rng(seed)
+    holdout_mask = np.zeros_like(valid)
+    for batch_index in range(valid.shape[0]):
+        valid_indices = np.flatnonzero(valid[batch_index, 0])
+        if valid_indices.size == 0:
+            raise ValueError(
+                f"batch sample {batch_index} has no valid sparse depth pixels."
+            )
+        holdout_count = max(1, int(round(valid_indices.size * holdout_fraction)))
+        if valid_indices.size > 1:
+            holdout_count = min(holdout_count, valid_indices.size - 1)
+        held_out = rng.choice(valid_indices, size=holdout_count, replace=False)
+        sample_mask = holdout_mask[batch_index, 0].reshape(-1)
+        sample_mask[held_out] = True
+    return holdout_mask
+
+
+def build_spatial_depth_holdout_masks(
+    valid_mask: np.ndarray,
+    *,
+    holdout_fraction: float = 0.2,
+    seed: int = 0,
+    block_height_px: tuple[int, int] = (16, 48),
+    block_width_px: tuple[int, int] = (32, 128),
+    block_max_count: int = 8,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return target and rectangular-region masks, both ``[B, 1, H, W]``.
+
+    Blocks are centered on randomly chosen, not-yet-held-out measurements.
+    Sizes are sampled inclusively from the configured ranges and clipped to
+    image dimensions. Blocks keep their size at image borders by shifting
+    inside the image. The target mask is the region mask intersected with
+    valid measurements; no input data is removed by this function.
+
+    The requested fraction is approximate: complete blocks may overshoot it,
+    or ``block_max_count`` may be reached first. At most 16 candidates per
+    allowed block are attempted. Candidates that remove every measurement
+    are rejected; failure to select any safe block raises explicitly rather
+    than falling back to random-point holdout. Each sample needs two points.
+    """
+
+    if not 0.0 < holdout_fraction < 1.0:
+        raise ValueError("holdout_fraction must be between 0 and 1.")
+    valid = np.asarray(valid_mask, dtype=bool)
+    if valid.ndim != 4 or valid.shape[1] != 1 or any(size == 0 for size in valid.shape):
+        raise ValueError("valid_mask must have non-empty shape [B, 1, H, W].")
+    for name, bounds in (
+        ("block_height_px", block_height_px),
+        ("block_width_px", block_width_px),
+    ):
+        if (
+            len(bounds) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, (int, np.integer))
+                for value in bounds
+            )
+            or not 1 <= bounds[0] <= bounds[1]
+        ):
+            raise ValueError(f"{name} must be an ordered pair of positive integers.")
+    if (
+        isinstance(block_max_count, bool)
+        or not isinstance(block_max_count, (int, np.integer))
+        or block_max_count <= 0
+    ):
+        raise ValueError("block_max_count must be a positive integer.")
+
+    rng = np.random.default_rng(seed)
+    holdout_mask = np.zeros_like(valid)
+    region_mask = np.zeros_like(valid)
+    height, width = valid.shape[-2:]
+    for batch_index in range(valid.shape[0]):
+        sample_valid = valid[batch_index, 0]
+        valid_pixels = np.argwhere(sample_valid)
+        valid_count = len(valid_pixels)
+        if valid_count < 2:
+            raise ValueError(
+                f"batch sample {batch_index} needs at least two valid sparse depth pixels "
+                "for spatial block holdout."
+            )
+        target_count = min(
+            max(1, int(round(valid_count * holdout_fraction))), valid_count - 1
+        )
+        sample_holdout = holdout_mask[batch_index, 0]
+        sample_region = region_mask[batch_index, 0]
+        selected_count = 0
+        accepted_blocks = 0
+        for _ in range(16 * block_max_count):
+            if selected_count >= target_count or accepted_blocks >= block_max_count:
+                break
+            remaining_pixels = valid_pixels[~sample_holdout[tuple(valid_pixels.T)]]
+            center_v, center_u = remaining_pixels[rng.integers(len(remaining_pixels))]
+            block_height = min(
+                height, int(rng.integers(block_height_px[0], block_height_px[1] + 1))
+            )
+            block_width = min(
+                width, int(rng.integers(block_width_px[0], block_width_px[1] + 1))
+            )
+            top = int(np.clip(center_v - block_height // 2, 0, height - block_height))
+            left = int(np.clip(center_u - block_width // 2, 0, width - block_width))
+            block = np.s_[top : top + block_height, left : left + block_width]
+            new_targets = sample_valid[block] & ~sample_holdout[block]
+            candidate_count = selected_count + int(new_targets.sum())
+            if candidate_count == valid_count:
+                continue
+            sample_region[block] = True
+            sample_holdout[block] |= sample_valid[block]
+            selected_count = candidate_count
+            accepted_blocks += 1
+        if selected_count == 0:
+            raise ValueError(
+                f"batch sample {batch_index}: no spatial block could preserve a kept "
+                "measurement; reduce block sizes."
+            )
+    return holdout_mask, region_mask
+
+
+def model_batch_to_camera_depth_training_batch(
+    batch: dict[str, Any],
+    *,
+    holdout_fraction: float = 0.2,
+    seed: int = 0,
+    include_splatted_depth: bool = True,
+    splatting_config: SplattingConfig | None = None,
+    holdout_mode: str = "random_points",
+    block_height_px: tuple[int, int] = (16, 48),
+    block_width_px: tuple[int, int] = (32, 128),
+    block_max_count: int = 8,
+) -> dict[str, np.ndarray]:
+    """Create leakage-safe camera-depth inputs and held-out sparse targets.
+
+    Holdout pixels are removed from all six sparse LiDAR channels before the
+    optional splatted depth and confidence channels are recomputed. A splat from
+    another, retained point may still cover a holdout location; the held-out
+    measurement itself never contributes to any model input.
+
+    ``holdout_mode`` selects ``random_points`` or ``spatial_blocks``. RGB and
+    the full sparse depth target remain unchanged. ``holdout_region_mask``
+    contains the complete rectangles in spatial mode; in random-point mode
+    it is a copy of ``loss_mask``. Both masks have shape ``[B, 1, H, W]``.
+    Block settings are used only in spatial mode.
+    """
+
+    if holdout_mode not in ("random_points", "spatial_blocks"):
+        raise ValueError("holdout_mode must be 'random_points' or 'spatial_blocks'.")
+    if not 0.0 < holdout_fraction < 1.0:
+        raise ValueError("holdout_fraction must be between 0 and 1.")
+    if "input_channels" not in batch:
+        raise ValueError("input_channels metadata is required for camera-depth slicing.")
+
+    inputs = np.asarray(batch.get("inputs"), dtype=np.float32)
+    sparse_maps = np.asarray(batch.get("sparse_lidar_maps"), dtype=np.float32)
+    if inputs.ndim != 4:
+        raise ValueError("inputs must have shape [B, C, H, W].")
+    if sparse_maps.ndim != 4 or sparse_maps.shape[1] != len(LIDAR_MAP_CHANNELS):
+        raise ValueError("sparse_lidar_maps must have shape [B, 6, H, W].")
+    if inputs.shape[0] != sparse_maps.shape[0] or inputs.shape[2:] != sparse_maps.shape[2:]:
+        raise ValueError("inputs and sparse_lidar_maps must share B, H, and W.")
+
+    input_channels = list(batch["input_channels"])
+    if len(input_channels) != inputs.shape[1]:
+        raise ValueError("input_channels length must match inputs channel dimension.")
+    rgb_indices = _baseline_channel_indices(input_channels, RGB_CHANNELS)
+    rgb = inputs[:, rgb_indices, :, :].copy()
+
+    valid_mask = (sparse_maps[:, 5:6] > 0.0) & (sparse_maps[:, 0:1] > 0.0)
+    if holdout_mode == "spatial_blocks":
+        holdout_mask, region_mask = build_spatial_depth_holdout_masks(
+            valid_mask,
+            holdout_fraction=holdout_fraction,
+            seed=seed,
+            block_height_px=block_height_px,
+            block_width_px=block_width_px,
+            block_max_count=block_max_count,
+        )
+    else:
+        holdout_mask = build_depth_holdout_mask(
+            valid_mask,
+            holdout_fraction=holdout_fraction,
+            seed=seed,
+        )
+        region_mask = holdout_mask.copy()
+    kept_sparse_maps = sparse_maps.copy()
+    for batch_index in range(sparse_maps.shape[0]):
+        kept_sparse_maps[batch_index, :, holdout_mask[batch_index, 0]] = 0.0
+
+    lidar_channels = [kept_sparse_maps]
+    if include_splatted_depth:
+        config = splatting_config or SplattingConfig()
+        splatted = np.zeros(
+            (sparse_maps.shape[0], 2, sparse_maps.shape[2], sparse_maps.shape[3]),
+            dtype=np.float32,
+        )
+        for batch_index in range(sparse_maps.shape[0]):
+            result = splat_sparse_depth(
+                sparse_depth=kept_sparse_maps[batch_index, 0],
+                sparse_mask=kept_sparse_maps[batch_index, 5] > 0.0,
+                config=config,
+            )
+            splatted[batch_index, 0] = result.depth_expanded
+            splatted[batch_index, 1] = result.confidence
+        lidar_channels.append(splatted)
+
+    return {
+        "rgb": rgb.astype(np.float32, copy=False),
+        "lidar_maps": np.concatenate(lidar_channels, axis=1),
+        "depth_target": sparse_maps[:, 0:1].copy(),
+        "loss_mask": holdout_mask,
+        "holdout_region_mask": region_mask,
+        "kept_sparse_lidar_maps": kept_sparse_maps,
+    }

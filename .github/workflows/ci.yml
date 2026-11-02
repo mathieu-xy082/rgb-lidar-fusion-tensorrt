@@ -41,7 +41,7 @@ jobs:
 
       - name: Install PDM
         run: |
-          python -m pip install --upgrade pip pdm==2.28.0
+          python -m pip install --upgrade pip pdm==2.29.4
           pdm --version
 
       - name: Check lockfile
@@ -71,7 +71,7 @@ jobs:
 
       - name: Install PDM
         run: |
-          python -m pip install --upgrade pip pdm==2.28.0
+          python -m pip install --upgrade pip pdm==2.29.4
           pdm --version
 
       - name: Install project dependencies

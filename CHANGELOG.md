@@ -4,8 +4,7 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-
+## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added
 
 - `CameraDepthModel.forward_features()` exposes full-resolution `[B, 32, H, W]`

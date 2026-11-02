@@ -4,13 +4,13 @@ Branch: `ec/camera-depth-backbone`
 
 Parent branch: `main`
 
-Updated: 2026-10-15.
+Updated: 2026-11-02.
 
-Status: v1 implementation and sparse-supervised evaluation are complete,
-including matched five-epoch random/block runs on 512 frames and cross-evaluation.
-Qualitative prediction review remains before workstream closure. Dense-depth
-quality is not established; further training studies are not prerequisites for
-starting an experimental BEV lift.
+Status: v1 is closed as a functional sparse-supervised prototype. Matched
+five-epoch random/block runs, cross-evaluation, and a qualitative held-out
+prediction review are complete. This does not establish reliable dense depth
+or production readiness. The first geometric BEV lift is also complete in its
+[dedicated workstream](camera-depth-bev-lift.md).
 
 Related documents:
 
@@ -24,10 +24,12 @@ Related documents:
   checkpoint resume, validation metrics, notebooks, and the 512-frame pilot.
 - Active execution setting: enriched inputs, `320x1024`, batch size 1, FP32,
   PyTorch `2.13.0+cu129`, NVIDIA driver/GSP `615.71.09`.
-- Next: inspect both checkpoints on the same validation frames and masks, then
-  close v1 as functional and evaluated under sparse supervision.
-- Subsequent development: expose backbone features and implement the geometric
-  contract described in [BEV connection prerequisites](../bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
+- Closure: qualitative inspection of frame 000366 under spatial-block holdout
+  accepted for the prototype scope on 2026-11-02; see the findings below.
+- Subsequent development completed: feature exposure and the first geometric
+  [camera BEV lift](camera-depth-bev-lift.md), preserving existing checkpoints.
+- Next: integrate the BEV-lift branch into main, then plan the raw-LiDAR BEV
+  encoder with a compatible frame and grid.
 - Deferred: mixed holdout, block-size/radius/fraction sensitivity, more data,
   additional seeds, and dense or semi-dense supervision.
 
@@ -171,18 +173,29 @@ production-ready perception.
 - [x] Document what sparse holdout supervision can and cannot establish about
   dense depth quality.
 
-### Remaining v1 closure
+### V1 closure - 2026-11-02
 
-- [ ] Inspect a small set of identical validation frames for both checkpoints,
-  under both holdout modes; review depth discontinuities, nearby objects,
-  distant surfaces, and obvious invalid predictions.
-- [ ] Record the qualitative findings and close v1 if no major inconsistency
-  blocks the geometric prototype. No additional training score is required.
+- [x] Review a held-out prediction from notebook 03: frame 000366, checkpoint
+  epoch 5 / step 2050, spatial-block holdout.
+- [x] Record the qualitative findings and accept v1 for the geometric prototype.
+
+The predicted depth structure was considered coherent with the scene, with
+visually low errors over much of the held-out measurements and a more difficult
+region in the left-hand block. This is a qualitative observation, not a new
+per-frame metric or a claim of uniformly low error. Depth outside the measured
+held-out pixels remains unverified.
+
+This inspection complements the recorded quantitative cross-evaluation; it does
+not replace it. An exhaustive qualitative comparison of both checkpoints on
+identical frames under both holdout modes was not performed and is deferred,
+not a prerequisite for this prototype's closure. No new training was required.
 
 ### Deferred representation studies
 
 These are optional improvements, not blockers for the first BEV prototype:
 
+- [ ] Expand qualitative inspection to matched frames for both checkpoints and
+  both holdout modes, including nearby objects and distant discontinuities.
 - [ ] Measure sensitivity to holdout fraction and splatting radius.
 - [ ] Evaluate fixed small/medium/large blocks before making claims about
   receptive field or spatial-context limits.

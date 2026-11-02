@@ -2,12 +2,13 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-10-18.
+Mise à jour : 2026-11-02.
 
 Statut : **design de référence**. Le backbone camera-depth préalable est
-implémenté et évalué sur les pilotes random/blocs 512 frames. L'inspection
-qualitative reste à faire ; le lift BEV, la branche LiDAR BEV et les heads 3D ne
-sont pas encore implémentés.
+implémenté, évalué sur les pilotes random/blocs 512 frames et clôturé après
+inspection qualitative. Le premier lift BEV géométrique est implémenté, relu
+et inspecté ; sa branche attend l'intégration dans main. La branche LiDAR BEV,
+la fusion et les heads 3D restent à développer.
 
 Documents liés :
 
@@ -324,29 +325,13 @@ Le positionnement plus juste est :
 
 ## Prochain incrément concret
 
-Après l'inspection qualitative et la clôture du backbone v1, appliquer les
-[prérequis de raccord](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
-Leur implémentation appartient au chantier du lift, pas à un nouveau cycle
-obligatoire d'optimisation du modèle de profondeur.
+Intégrer `ec/camera-depth-bev-lift` dans main après la clôture documentée du
+backbone v1 et du premier raccord géométrique. Les
+[prérequis de raccord](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) sont
+implémentés ; le critère synthétique RGB + enriched LiDAR + calibration vers
+`camera_bev`, avec grille explicite et backward fonctionnel, est atteint.
 
-Créer une branche dédiée, par exemple :
-
-```text
-ec/camera-depth-bev-lift
-```
-
-Livrables minimaux :
-
-```text
-src/rgb_lidar_fusion/bev_projection.py
-tests/test_bev_projection.py
-configs/training/camera_bev_smoke.yaml
-```
-
-Critère de réussite du premier incrément :
-
-```text
-Un batch synthétique RGB + enriched LiDAR + calibration produit
-camera_bev avec une grille métrique documentée, des shapes validées
-et un backward PyTorch fonctionnel.
-```
+Préparer ensuite la [phase BEV 2](#phase-bev-2---branche-lidar-et-fusion) :
+définir le contrat du point cloud et de son encodeur LiDAR BEV, en conservant
+un repère et une grille compatibles avec camera BEV, avant la fusion et les
+heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.

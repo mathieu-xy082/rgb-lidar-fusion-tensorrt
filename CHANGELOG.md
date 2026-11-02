@@ -38,6 +38,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Legacy JSON manifests using `t_camera_from_vehicle` remain readable; Python
   callers should use the new name. Transform values and model weights are unchanged.
 
+### Validated
+
+- Prototype closure on 2026-11-02: qualitative held-out depth inspection on
+  frame 000366 and coherent sparse/unweighted-splat/weighted-splat BEV views on
+  frame 000000. Broader scene and dense-depth validation remain deferred.
+- Pre-integration review: 357 tests passed, one CUDA-only test skipped, and
+  100 randomized BEV aggregations matched an independent NumPy reference.
+  Real KITTI weighted-splat inspection completed on CPU with unchanged checkpoint
+  SHA-256. This does not establish GPU performance or lift export readiness.
+
 ## [1.1.0] - 2026-10-18 - Merge branch 'ec/camera-depth-backbone' into main 
 ### Added
 

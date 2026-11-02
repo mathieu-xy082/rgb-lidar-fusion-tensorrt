@@ -2,12 +2,14 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-10-18.
+Mise à jour : 2026-11-02.
 
 Statut : **backbone v1 implémenté et évalué sous supervision sparse**. Les deux
 pilotes random/blocs sur 512 frames et leur comparaison croisée sont terminés.
-L'inspection qualitative reste à faire avant clôture du workstream. La qualité
-dense, la sémantique apprise et le lift BEV ne sont pas encore validés.
+L'inspection held out de `000366` permet de clôturer v1 pour son périmètre de
+prototype. Le premier lift géométrique BEV a aussi été testé et inspecté sur
+`000000` ; sa branche est prête pour intégration dans main. La qualité dense,
+la sémantique apprise et la détection 3D ne sont pas établies.
 
 Documents liés :
 
@@ -249,7 +251,8 @@ les accumuler dans une grille BEV.
 Cette section est la référence pour le prochain incrément architectural.
 Les quatre points ci-dessous sont implémentés dans un premier raccord BEV
 fonctionnel, testé sur des cas synthétiques et inspecté sur une frame KITTI CPU.
-La relecture et l'inspection d'autres scènes restent utiles ; il n'y a pas encore
+La relecture et la comparaison des trois variantes sur `000000` sont terminées ;
+l'inspection d'autres scènes reste un suivi facultatif. Il n'y a pas encore
 d'encodeur LiDAR BEV, de fusion ou de détection 3D. Aucun nouvel entraînement
 n'a été nécessaire pour ce prototype.
 
@@ -401,7 +404,7 @@ encore `CameraDepthModel` ou le lift.
 [fait]    2. Ajouter une masked depth loss
 [fait]    3. Tester sparse holdout depth prediction
 [fait]    4. Évaluer les deux pilotes 512 frames sur les deux holdouts
-[actif]   5. Inspecter les prédictions et consigner les limites de v1
+[fait]    5. Inspection held out de 000366 et limites de v1 consignées
 [fait]    6. Exposer les features sans modifier le contrat depth/checkpoints
 [fait]    7. Raccord géométrique camera-depth -> BEV et première inspection CPU
 [prévu]   8. Ajouter une branche lidar_bev
@@ -420,15 +423,14 @@ encore `CameraDepthModel` ou le lift.
 
 ## Prochain incrément concret
 
-Les entraînements random/blocs et la comparaison croisée sont terminés. Il
-reste à inspecter quelques prédictions sur les mêmes frames et masques, puis à
-clôturer v1 comme fonctionnelle et évaluée sous supervision sparse, sans
-revendiquer une profondeur dense fiable partout.
+Les entraînements random/blocs, la comparaison croisée et l'inspection held out
+de `000366` permettent de clôturer v1 comme prototype fonctionnel évalué sous
+supervision sparse, sans revendiquer une profondeur dense fiable partout.
 
 Le module `camera-depth -> camera_bev` décrit dans l'[architecture BEV](bev-model-roadmap.md)
-dispose maintenant d'un premier raccord géométrique fonctionnel. Relire ce code
-et inspecter d'autres frames est le prochain travail de prise en main avant
-de choisir l'incrément LiDAR BEV/fusion. Les checkpoints actuels, l'architecture
+dispose maintenant d'un premier raccord géométrique relu et inspecté en trois
+variantes sur `000000`. La prochaine étape est l'intégration de sa branche
+dans main, puis la préparation de l'encodeur LiDAR BEV. Les checkpoints actuels, l'architecture
 du backbone et l'entraînement de profondeur sont conservés. Aucun entraînement
 mixte ni score de profondeur parfait n'est requis pour ce prototype.
 

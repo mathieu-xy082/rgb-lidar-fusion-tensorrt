@@ -23,8 +23,8 @@ Le socle implémenté couvre :
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
 
-Le lift BEV est un prototype PyTorch fonctionnel à relire et inspecter sur
-d'autres scènes, pas encore une détection 3D ni un module validé temps réel.
+Le lift BEV est un prototype PyTorch fonctionnel, relu et inspecté, clôturé pour
+ce premier périmètre ; ce n'est pas une détection 3D ni un module validé temps réel.
 Le point cloud brut conservera ensuite sa propre branche BEV avant la fusion
 et les têtes de détection 3D. Voir le
 [workstream du lift](docs/workstreams/camera-depth-bev-lift.md).

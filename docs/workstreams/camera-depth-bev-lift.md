@@ -4,12 +4,12 @@ Branch: `ec/camera-depth-bev-lift`
 
 Parent branch: `main` (camera-depth v1 / release 1.1.0).
 
-Updated: 2026-10-18.
+Updated: 2026-11-02.
 
-Status: the first functional camera-depth BEV lift is implemented and checked
-on synthetic cases and one real KITTI frame on CPU. Developer review and wider
-scene inspection remain; there is no LiDAR BEV encoder, fusion, or detector yet.
-No new training was required.
+Status: the first functional camera-depth BEV lift is closed for its prototype
+scope after developer review and qualitative inspection. The branch is ready
+for integration into main; no merge is recorded here. There is no LiDAR BEV
+encoder, fusion, or detector yet. No new training was required.
 
 References:
 
@@ -347,11 +347,14 @@ calibration. Outputs go under ignored `results/analysis/camera_bev/`.
 
 On 2026-10-18, CPU inspection used the real block-dropout epoch-5/step-2050
 checkpoint and KITTI frame 000000 at 320x1024, with 0.5 m cells, x=[0,50),
-y=[-25,25), z=[-3,3). Both outputs were finite `[1,32,100,100]` tensors:
+y=[-25,25), z=[-3,3). The original two outputs were finite `[1,32,100,100]`
+tensors; the table also records the unweighted-splat variant inspected on
+2026-11-02 with the same setup:
 
 | Depth source | Accepted pixels | Occupied cells |
 | --- | --- | --- |
 | sparse, unweighted | 20,166 | 745 |
+| splatted, unweighted (inspection on 2026-11-02) | 191,636 | 705 |
 | splatted, confidence-weighted | 191,636 | 705 |
 
 The camera-FOV raw reference had 20,255 points in the ROI. Visual inspection
@@ -374,11 +377,41 @@ skip. The three notebook syntax checks passed separately; existing notebook
 execution state was left untouched. No GPU training or new checkpoint was
 produced.
 
+### Prototype closure - 2026-11-02
+
+- [x] Compare frame 000000 in sparse, splatted-unweighted, and
+  splatted-confidence-weighted modes with the same checkpoint and grid.
+- [x] Accept the three views as visually coherent for this geometric prototype.
+- [x] Complete the branch review against main without a blocking defect.
+
+The three variants retain the main geometric structures without an obvious
+axis inversion or gross displacement. This is expected: the backbone consumes
+the same enriched inputs and supplies the same features; depth placement and
+aggregation differ. Automatically scaled colors must not be read as a
+controlled numerical comparison. Similar figures do not establish a detection
+gain, dense-depth reliability, or equivalence of all feature values.
+
+The notebook review of held-out frame 000366 is documented in the
+[backbone workstream](camera-depth-backbone.md#v1-closure---2026-11-02). It checks
+learned depth, whereas these BEV inspections use measured/splatted depth for
+placement, not the depth-head prediction. The checks are complementary.
+
+Final review on 2026-11-02 ran the complete suite from a clean HEAD snapshot:
+357 tests passed, with one CUDA-only skip. An independent NumPy reference also
+matched 100 randomized batched mean/weighted-mean cases. The weighted-splat
+KITTI inspection was rerun on CPU; the checkpoint SHA-256 remained unchanged.
+No new GPU, latency, or export validation is claimed.
+
+Wider scene inspection and learned-depth BEV assessment remain optional
+follow-ups, not blockers for integrating this first prototype. The next
+development milestone is a raw-point-cloud LiDAR BEV encoder sharing explicit
+frame/grid conventions with camera BEV, before fusion and detection heads.
+
 ## Limits
 
 The functional lift does not infer semantic classes, establish reliable dense
 depth, or fuse raw point-cloud features. The full-resolution representation
 and dense solves are alignment choices for the first prototype, not latency or
 memory optimizations. A later lower-resolution API needs its own alignment
-contract. Review this implementation and inspect more scenes before choosing
-the next LiDAR-BEV/fusion increment.
+contract. Broader scene coverage, GPU performance, learned-depth placement,
+and export remain future validation work.

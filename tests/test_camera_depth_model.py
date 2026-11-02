@@ -61,6 +61,137 @@ def test_camera_depth_model_accepts_sparse_lidar_input() -> None:
     assert torch.isfinite(prediction).all()
 
 
+def _v1_forward(model, rgb, lidar_maps):
+    """Freeze the pre-feature-API computation as an independent reference."""
+
+    stem = model.stem(torch.cat([rgb, lidar_maps], dim=1))
+    encoded_1 = model.encoder_1(stem)
+    encoded_2 = model.encoder_2(encoded_1)
+    decoded_1 = torch.nn.functional.interpolate(
+        encoded_2, size=encoded_1.shape[-2:], mode="bilinear", align_corners=False,
+    )
+    decoded_1 = model.decoder_1(torch.cat([decoded_1, encoded_1], dim=1))
+    decoded_0 = torch.nn.functional.interpolate(
+        decoded_1, size=stem.shape[-2:], mode="bilinear", align_corners=False,
+    )
+    decoded_0 = model.decoder_0(torch.cat([decoded_0, stem], dim=1))
+    return model.depth_head(decoded_0)
+
+
+@pytest.mark.parametrize("lidar_mode,channels", [("sparse", 6), ("enriched", 8)])
+@pytest.mark.parametrize("shape", [(16, 24), (15, 21), (1, 1)])
+def test_camera_depth_features_preserve_full_resolution(lidar_mode, channels, shape):
+    torch.manual_seed(13)
+    model = CameraDepthModel(lidar_mode=lidar_mode).eval()
+    rgb = torch.rand((2, 3, *shape))
+    lidar = torch.rand((2, channels, *shape))
+    decoder_outputs = []
+    handle = model.decoder_0.register_forward_hook(
+        lambda module, inputs, output: decoder_outputs.append(output),
+    )
+    try:
+        with torch.no_grad():
+            features = model.forward_features(rgb, lidar)
+    finally:
+        handle.remove()
+
+    assert features.shape == (2, 32, *shape)
+    assert torch.isfinite(features).all()
+    assert len(decoder_outputs) == 1
+    assert features is decoder_outputs[0]
+
+
+@pytest.mark.parametrize("lidar_mode,channels", [("sparse", 6), ("enriched", 8)])
+def test_camera_depth_feature_path_matches_v1_depth_prediction(lidar_mode, channels):
+    torch.manual_seed(17)
+    model = CameraDepthModel(lidar_mode=lidar_mode).eval()
+    rgb = torch.rand((2, 3, 15, 21))
+    lidar = torch.rand((2, channels, 15, 21))
+    with torch.no_grad():
+        expected = _v1_forward(model, rgb, lidar)
+        features = model.forward_features(rgb, lidar)
+        from_features = model.depth_head(features)
+        actual = model(rgb, lidar)
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    torch.testing.assert_close(from_features, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("lidar_mode,channels", [("sparse", 6), ("enriched", 8)])
+def test_camera_depth_features_backpropagate_without_depth_head(lidar_mode, channels):
+    torch.manual_seed(13)
+    model = CameraDepthModel(lidar_mode=lidar_mode)
+    rgb = torch.rand((1, 3, 15, 21), requires_grad=True)
+    lidar = torch.rand((1, channels, 15, 21), requires_grad=True)
+
+    features = model.forward_features(rgb, lidar)
+    assert features.requires_grad
+    features.square().mean().backward()
+
+    for value in (rgb, lidar):
+        assert value.grad is not None
+        assert torch.isfinite(value.grad).all()
+        assert torch.count_nonzero(value.grad) > 0
+    for name, parameter in model.named_parameters():
+        if name.startswith("depth_head."):
+            assert parameter.grad is None
+        else:
+            assert parameter.grad is not None
+            assert torch.isfinite(parameter.grad).all()
+    for block in (model.stem, model.encoder_1, model.encoder_2, model.decoder_1, model.decoder_0):
+        assert sum(float(p.grad.abs().sum()) for p in block.parameters()) > 0.0
+
+
+@pytest.mark.parametrize("lidar_mode,channels", [("sparse", 6), ("enriched", 8)])
+def test_camera_depth_feature_api_preserves_v1_checkpoint_schema(
+    tmp_path, lidar_mode, channels,
+):
+    # The v1 checkpoint contract has these 13 convolutions, each with a bias.
+    convolutions = {
+        "stem.0": (32, 3 + channels, 3, 3),
+        "stem.2": (32, 32, 3, 3),
+        "encoder_1.0": (64, 32, 3, 3),
+        "encoder_1.2.0": (64, 64, 3, 3),
+        "encoder_1.2.2": (64, 64, 3, 3),
+        "encoder_2.0": (96, 64, 3, 3),
+        "encoder_2.2.0": (96, 96, 3, 3),
+        "encoder_2.2.2": (96, 96, 3, 3),
+        "decoder_1.0": (64, 160, 3, 3),
+        "decoder_1.2": (64, 64, 3, 3),
+        "decoder_0.0": (32, 96, 3, 3),
+        "decoder_0.2": (32, 32, 3, 3),
+        "depth_head": (1, 32, 1, 1),
+    }
+    expected_shapes = {}
+    for name, shape in convolutions.items():
+        expected_shapes[f"{name}.weight"] = shape
+        expected_shapes[f"{name}.bias"] = (shape[0],)
+    torch.manual_seed(19)
+    state = CameraDepthModel(lidar_mode=lidar_mode).state_dict()
+    assert {key: tuple(value.shape) for key, value in state.items()} == expected_shapes
+    path = tmp_path / "v1_checkpoint.pt"
+    torch.save({"model_state_dict": state}, path)
+
+    model = CameraDepthModel(lidar_mode=lidar_mode).eval()
+    model.load_state_dict(
+        torch.load(path, map_location="cpu", weights_only=True)["model_state_dict"],
+        strict=True,
+    )
+    rgb = torch.rand((1, 3, 15, 21))
+    lidar = torch.rand((1, channels, 15, 21))
+    with torch.no_grad():
+        expected = _v1_forward(model, rgb, lidar)
+        actual = model.depth_head(model.forward_features(rgb, lidar))
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("lidar_mode,channels", [("sparse", 6), ("enriched", 8)])
+def test_camera_depth_features_reject_invalid_input_channels(lidar_mode, channels):
+    model = CameraDepthModel(lidar_mode=lidar_mode)
+    with pytest.raises(ValueError, match=f"must have {channels} channels"):
+        model.forward_features(torch.zeros((1, 3, 15, 21)), torch.zeros((1, channels + 1, 15, 21)))
+
+
 def test_masked_depth_loss_uses_only_selected_pixels_and_rejects_empty_mask() -> None:
     prediction = torch.tensor([[[[0.0, 100.0], [0.0, 0.0]]]])
     target = torch.tensor([[[[1.0, -100.0], [0.0, 0.0]]]])

@@ -2,12 +2,13 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-10-15.
+Mise à jour : 2026-11-02.
 
 Statut : **design de référence**. Le backbone camera-depth préalable est
-implémenté et évalué sur les pilotes random/blocs 512 frames. L'inspection
-qualitative reste à faire ; le lift BEV, la branche LiDAR BEV et les heads 3D ne
-sont pas encore implémentés.
+implémenté, évalué sur les pilotes random/blocs 512 frames et clôturé après
+inspection qualitative. Le premier lift BEV géométrique est implémenté, relu
+et inspecté ; sa branche attend l'intégration dans main. La branche LiDAR BEV,
+la fusion et les heads 3D restent à développer.
 
 Documents liés :
 
@@ -196,13 +197,22 @@ Avant le raccord au backbone, suivre les
 accès aux features compatible avec les checkpoints, profondeur caméra en
 mètres, calibration redimensionnée complète, masque de validité et politique
 de confiance, puis grille/agrégation et tests de géométrie/backward.
-Le modèle retourne actuellement uniquement la profondeur, pas encore les
-features nécessaires au lift.
+Le `forward()` du modèle retourne toujours uniquement la profondeur.
+`forward_features()` expose désormais les features du dernier décodeur en
+`[B, 32, H, W]` sur la même grille image. La conversion en mètres, la calibration
+complète dans les batches, la rétroprojection caméra/LiDAR et la sélection
+explicite de profondeur/support/confiance sont implémentées. Le premier lift
+fonctionnel les raccorde à une grille métrique avec moyenne des features,
+masques et compteurs ; les gradients vers le backbone sont testés et une frame
+KITTI a été inspectée sur CPU. L'entraînement depth reste inchangé et le lift
+n'est pas encore validé en temps réel ou à l'export. Suivi :
+[workstream BEV lift](workstreams/camera-depth-bev-lift.md).
 
 Le premier prototype peut utiliser une profondeur synthétique puis
 mesurée/splattée sur son support connu pour isoler les erreurs de géométrie.
-La profondeur apprise sera branchée ensuite avec une politique de validité
-explicite. Perfectionner l'entraînement camera-depth n'est pas un prérequis.
+La profondeur apprise pourra être branchée ensuite avec le masque de support
+explicite prévu par cette API. Perfectionner l'entraînement camera-depth n'est
+pas un prérequis.
 
 ## Phase BEV 2 - Branche LiDAR et fusion
 
@@ -315,29 +325,13 @@ Le positionnement plus juste est :
 
 ## Prochain incrément concret
 
-Après l'inspection qualitative et la clôture du backbone v1, appliquer les
-[prérequis de raccord](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
-Leur implémentation appartient au chantier du lift, pas à un nouveau cycle
-obligatoire d'optimisation du modèle de profondeur.
+Intégrer `ec/camera-depth-bev-lift` dans main après la clôture documentée du
+backbone v1 et du premier raccord géométrique. Les
+[prérequis de raccord](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) sont
+implémentés ; le critère synthétique RGB + enriched LiDAR + calibration vers
+`camera_bev`, avec grille explicite et backward fonctionnel, est atteint.
 
-Créer une branche dédiée, par exemple :
-
-```text
-ec/camera-depth-bev-lift
-```
-
-Livrables minimaux :
-
-```text
-src/rgb_lidar_fusion/bev_projection.py
-tests/test_bev_projection.py
-configs/training/camera_bev_smoke.yaml
-```
-
-Critère de réussite du premier incrément :
-
-```text
-Un batch synthétique RGB + enriched LiDAR + calibration produit
-camera_bev avec une grille métrique documentée, des shapes validées
-et un backward PyTorch fonctionnel.
-```
+Préparer ensuite la [phase BEV 2](#phase-bev-2---branche-lidar-et-fusion) :
+définir le contrat du point cloud et de son encodeur LiDAR BEV, en conservant
+un repère et une grille compatibles avec camera BEV, avant la fusion et les
+heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.

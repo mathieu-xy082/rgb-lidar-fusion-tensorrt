@@ -4,6 +4,50 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `CameraDepthModel.forward_features()` exposes full-resolution `[B, 32, H, W]`
+  final-decoder features for the future BEV lift, preserving the depth output,
+  existing checkpoint schema, and feature-to-backbone gradients.
+- Full resized KITTI `P2`, camera-from-LiDAR transform, and depth scale carried
+  separately through dataset, model batches, holdout, and fixed evaluation.
+- Differentiable metric camera-z conversion and camera-to-LiDAR backprojection,
+  preserving full `P2` translation, v1 projection resize, and existing inputs.
+  Geometry tests cover frame axes, non-zero translation, resizing, per-sample
+  calibration, round trips, and depth gradients.
+- Explicit sparse/splatted/predicted depth selection with metric validity masks,
+  separate heuristic splat confidence, and mandatory support for learned depth.
+  Invalid depths are excluded with a retained mask and safe zero placeholders;
+  tests cover leakage under both holdouts and finite geometry gradients. No
+  change to training, checkpoints, or model architecture.
+- Functional full-resolution camera-feature BEV lift with explicit metric grid,
+  height/bounds filtering, masked cell means, optional heuristic splat weighting,
+  per-cell counts/mass, and image support diagnostics. Feature/backbone gradients
+  are tested; discrete placement does not train depth/calibration coordinates.
+- Standalone CPU KITTI BEV inspection with an existing checkpoint, raw-LiDAR
+  reference, PNG/JSON/NPZ outputs, and generated-fixture regression tests.
+  No BEV detector, new training, GPU latency claim, or lift export is introduced.
+
+### Changed
+
+- Standardized calibration fields, geometry arguments, and batch keys on
+  `t_vehicle_to_camera` (`T_vehicle_to_camera` in equations), with an explicit
+  projection/backprojection derivation and a tested numerical example in code.
+  Legacy JSON manifests using `t_camera_from_vehicle` remain readable; Python
+  callers should use the new name. Transform values and model weights are unchanged.
+
+### Validated
+
+- Prototype closure on 2026-11-02: qualitative held-out depth inspection on
+  frame 000366 and coherent sparse/unweighted-splat/weighted-splat BEV views on
+  frame 000000. Broader scene and dense-depth validation remain deferred.
+- Pre-integration review: 357 tests passed, one CUDA-only test skipped, and
+  100 randomized BEV aggregations matched an independent NumPy reference.
+  Real KITTI weighted-splat inspection completed on CPU with unchanged checkpoint
+  SHA-256. This does not establish GPU performance or lift export readiness.
+
 ## [1.1.0] - 2026-10-18 - Merge branch 'ec/camera-depth-backbone' into main 
 ### Added
 

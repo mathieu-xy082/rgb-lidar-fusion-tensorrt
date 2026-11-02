@@ -2,18 +2,21 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-10-15.
+Mise à jour : 2026-11-02.
 
 Statut : **backbone v1 implémenté et évalué sous supervision sparse**. Les deux
 pilotes random/blocs sur 512 frames et leur comparaison croisée sont terminés.
-L'inspection qualitative reste à faire avant clôture du workstream. La qualité
-dense, la sémantique apprise et le lift BEV ne sont pas encore validés.
+L'inspection held out de `000366` permet de clôturer v1 pour son périmètre de
+prototype. Le premier lift géométrique BEV a aussi été testé et inspecté sur
+`000000` ; sa branche est prête pour intégration dans main. La qualité dense,
+la sémantique apprise et la détection 3D ne sont pas établies.
 
 Documents liés :
 
 - [architecture BEV cible](bev-model-roadmap.md) ;
 - [milestones du projet](milestones.md) ;
-- [résultats du workstream](workstreams/camera-depth-backbone.md).
+- [résultats du workstream](workstreams/camera-depth-backbone.md) ;
+- [implémentation du raccord BEV](workstreams/camera-depth-bev-lift.md).
 
 ## Question
 
@@ -216,10 +219,12 @@ Le modèle peut retourner à la fois :
 - `depth_pred`, pour la loss intermédiaire ;
 - `feature_map`, pour préparer la réutilisation dans le futur lift BEV.
 
-Cette double sortie est un objectif de raccord, pas le contrat actuel :
-`CameraDepthModel.forward()` retourne uniquement `depth_pred`. Les modes sparse
-et enriched sont implémentés et testés ; le mode enriched constitue la référence
-des deux pilotes 512 frames. Il fournit 8 canaux LiDAR en plus des 3 canaux RGB.
+`CameraDepthModel.forward()` retourne toujours uniquement `depth_pred` pour
+préserver le contrat v1. La méthode `forward_features()` expose maintenant la
+sortie du dernier décodeur ; la tête existante permet d'obtenir la profondeur
+depuis ces features sans recalculer le backbone. Les modes sparse et enriched
+sont implémentés et testés ; le mode enriched constitue la référence des deux
+pilotes 512 frames. Il fournit 8 canaux LiDAR en plus des 3 canaux RGB.
 
 ## Lien avec le futur lift BEV
 
@@ -244,72 +249,146 @@ les accumuler dans une grille BEV.
 ## Prerequis du raccord BEV
 
 Cette section est la référence pour le prochain incrément architectural.
-Les éléments ci-dessous sont à développer/tester dans le chantier du lift ;
-ils ne sont pas déjà implémentés et ne demandent pas un nouvel entraînement préalable.
+Les quatre points ci-dessous sont implémentés dans un premier raccord BEV
+fonctionnel, testé sur des cas synthétiques et inspecté sur une frame KITTI CPU.
+La relecture et la comparaison des trois variantes sur `000000` sont terminées ;
+l'inspection d'autres scènes reste un suivi facultatif. Il n'y a pas encore
+d'encodeur LiDAR BEV, de fusion ou de détection 3D. Aucun nouvel entraînement
+n'a été nécessaire pour ce prototype.
 
 ### 1. Exposer les features sans casser le backbone
 
-- Ajouter un accès explicite aux features existantes, par exemple une méthode
-  dédiée, sans changer le retour actuel de `forward()` ni les clés des
-  checkpoints déjà entraînés.
-- Définir le contrat `image_features: [B, C, Hf, Wf]`, le niveau du réseau retenu
-  et la correspondance entre centres de features et pixels image. Une simple
-  division par le stride ne doit pas remplacer une convention documentée.
-- Tester shapes, valeurs finies, compatibilité des checkpoints et équivalence
-  de la prédiction de profondeur avec le chemin actuel. Garder les features
-  connectées au graphe pour le futur entraînement BEV.
+- [x] Exposer les features par `CameraDepthModel.forward_features(rgb, lidar_maps)`.
+- [x] Conserver le retour de `forward()` et les noms/shapes des paramètres v1.
+- [x] Fixer le contrat à `image_features: [B, 32, H, W]` : sortie de `decoder_0`,
+  juste avant `depth_head`, sans couche ni paramètre supplémentaire.
+- [x] Tester les modes sparse/enriched, les tailles paires/impaires, le
+  chargement strict des checkpoints et l'équivalence avec le calcul v1.
+- [x] Vérifier qu'une loss sur les features seules atteint les entrées,
+  l'encodeur et le décodeur, avec des gradients finis et non nuls. La tête de
+  profondeur n'est pas utilisée dans ce chemin et ne reçoit donc pas de gradient.
+
+La grille exposée est à pleine résolution : `features[b, :, v, u]` est aligné
+sur `rgb[b, :, v, u]` et `depth_pred[b, 0, v, u]`. Dans cette convention de grille,
+le centre de l'échantillon en haut à gauche est `(u=0, v=0)`, avec un pas de 1.
+Il n'y a ni conversion de stride ni décalage supplémentaire entre ces grilles,
+même pour les tailles impaires. Cet alignement n'affirme pas qu'une feature est
+une mesure 3D ponctuelle : son champ réceptif dépend du réseau. Le passage de
+ces indices aux coordonnées caméra sera traité au point 2.
+
+Pour calculer les deux sorties en une seule passe :
+
+```python
+image_features = model.forward_features(rgb, lidar_maps)  # [B, 32, H, W]
+depth_pred = model.depth_head(image_features)              # [B, 1, H, W]
+```
+
+Ne pas appeler en plus `model(rgb, lidar_maps)` dans ce cas, ce qui recalculerait
+le backbone. Les features ne sont ni détachées du graphe ni stockées sur le
+modèle ; le code appelant décide de leur durée de vie. Pour une inspection sans
+gradients, utiliser `model.eval()` avec `torch.no_grad()`, comme pour la profondeur.
 
 ### 2. Rendre la géométrie explicite
 
-- Convertir la profondeur normalisée en mètres avec le `max_depth_m` du
+- [x] Convertir la profondeur normalisée en mètres avec le `max_depth_m` du
   checkpoint, actuellement 80 m. Elle représente le **z caméra rectifiée**,
   pas la distance euclidienne au capteur.
-- Fournir au module de lift les matrices de calibration effectivement adaptées
+- [x] Fournir au module de lift les matrices de calibration effectivement adaptées
   à la résolution de l'image, pas seulement un chemin vers le fichier KITTI.
-  Le dataset effectue déjà ce redimensionnement pour la projection, mais ne
-  transmet pas encore ces matrices dans le batch.
-- Préserver la matrice KITTI `P2` complète et sa quatrième colonne de
+  Les tableaux `camera_projection: [B, 3, 4]`, `t_vehicle_to_camera: [B, 4, 4]`
+  et `max_depth_m: [B]` sont transmis jusqu'aux batches de profondeur, sans
+  devenir des canaux d'entrée du CNN ni dépendre du holdout.
+- [x] Préserver la matrice KITTI `P2` complète et sa quatrième colonne de
   translation ; ne pas supposer que les seuls intrinsics `K` suffisent pour
   inverser exactement la projection existante.
-- Documenter et tester caméra rectifiée -> repère LiDAR/véhicule -> BEV, avec
+- [x] Documenter et tester caméra rectifiée -> repère LiDAR/véhicule, avec
   les directions des transformations, les axes et les unités. Le repère dit
   véhicule dans le chemin KITTI actuel est celui du Velodyne, pas un `base_link`
-  ROS déjà calibré.
-- Si la grille de features est sous-échantillonnée, définir l'alignement de la
-  profondeur et de la calibration avec cette grille, y compris le traitement
-  des discontinuités et des pixels sans support.
+  ROS déjà calibré. La grille BEV utilisera d'abord ce repère ; son indexation
+  et ses bornes restent à fixer au point 4.
+
+`camera_geometry.normalized_depth_to_meters()` applique l'échelle explicite du
+checkpoint ; `backproject_depth_to_vehicle()` produit des XYZ métriques
+`[B, 3, H, W]` sans couper le graphe autograd. Pour `P2 = [A | t]`, le calcul est
+`A X_cam = (z + t_z) [u, v, 1] - t`, puis application de l'inverse de
+`T_vehicle_to_camera`. Le z désigne le repère caméra rectifié de référence,
+avant `P2`, et non un repère recentré sur la caméra 2.
+
+La convention de resize v1 est conservée : `u' = sx*u`, `v' = sy*v`, lignes
+complètes de `P2` redimensionnées. Elle diffère du mapping des centres de pixels
+du rééchantillonnage RGB PIL par un décalage sous-pixel ; elle ne sera pas
+corrigée silencieusement pour les checkpoints existants. L'arrondi des points
+dans les cartes sparse empêche aussi une inversion exacte vers les points raw.
+Voir le [contrat détaillé](workstreams/camera-depth-bev-lift.md#geometry-contract).
+Une future grille de features sous-échantillonnée devra définir son propre
+alignement profondeur/calibration et le traitement des discontinuités ; elle
+n'est pas introduite ici. Validité et confiance sont traitées séparément au point 3.
 
 ### 3. Séparer profondeur utilisable et confiance
 
-- Définir un masque de lift : profondeur finie, strictement positive, dans la
+- [x] Définir un masque de lift : profondeur finie, strictement positive, dans la
   plage métrique retenue et avec une règle de support explicite. La head
   actuelle est une régression linéaire non contrainte ; une sortie finie seule
   ne constitue pas une profondeur exploitable.
-- Exclure explicitement les valeurs invalides ; les remplacer par une valeur
+- [x] Exclure explicitement les valeurs invalides ; les remplacer par une valeur
   positive arbitraire ou un simple clamp ne suffit pas à les rendre valides.
-- Distinguer `confidence` du splatting, masque de validité et incertitude de
+- [x] Distinguer `confidence` du splatting, masque de validité et incertitude de
   `depth_pred`. La confiance existante est heuristique et ne calibre pas les
   prédictions du réseau. Une head d'incertitude apprise n'est pas un prérequis.
-- Pour le premier contrôle géométrique, utiliser une profondeur synthétique
-  connue, puis mesurée/splattée avec son support explicite. Brancher ensuite la
+- [x] Préparer des sources séparées pour le premier contrôle géométrique :
+  profondeur synthétique connue, puis mesurée/splattée avec son support explicite.
+  Brancher ensuite la
   profondeur apprise comme source distincte, sans déclarer fiables tous les
   pixels d'une carte dense ni utiliser les targets holdout comme entrées.
 
+`camera_depth_support.prepare_camera_depth_support()` retourne la source choisie,
+`depth_m`, `valid_mask` et, pour la source splattée uniquement, `splat_confidence`.
+Le support sparse vient des mesures conservées ; le support splatté exige une
+confiance finie dans `]0, 1]`, avec un seuil configurable. La source prédite exige
+un masque booléen explicite et ne reçoit pas la confiance du splatting comme
+incertitude. La plage de sélection métrique est indépendante de la normalisation.
+
+Les valeurs rejetées sont remplacées par zéro uniquement pour éviter les
+`NaN`/`Inf` dans une rétroprojection dense : leur masque reste faux et leurs
+XYZ devront être exclus avant l'agrégation BEV. Les tests vérifient notamment
+l'absence de fuite des targets sous les deux holdouts et un backward géométrique
+fini. Ces utilitaires sont utilisés par le lift fonctionnel du point 4 et sa
+commande d'inspection ; le `forward()` et l'entraînement de profondeur restent inchangés.
+
 ### 4. Fixer la grille et vérifier le lift
 
-- Définir les limites métriques, l'origine, les axes, la résolution, la sélection
+- [x] Définir les limites métriques, l'origine, les axes, la résolution, la sélection
   en hauteur et l'ordre d'indexation de `camera_bev: [B, C, Hbev, Wbev]`.
-- Choisir une agrégation explicite lorsque plusieurs pixels arrivent dans la
+- [x] Choisir une agrégation explicite lorsque plusieurs pixels arrivent dans la
   même cellule : somme/moyenne, et éventuelle pondération par la confiance.
   Tester aussi les cellules vides et l'exclusion des points hors grille.
-- Commencer par des tests synthétiques de backprojection/reprojection,
+- [x] Commencer par des tests synthétiques de backprojection/reprojection,
   calibration redimensionnée et `P2` à translation non nulle ; vérifier ensuite
   le placement dans des cellules BEV attendues.
-- Vérifier un backward fini et non nul vers les features/backbone. Avec un
+- [x] Vérifier un backward fini et non nul vers les features/backbone. Avec un
   scatter à indices discrets, cela ne garantit pas un gradient vers la
   profondeur ou la calibration via les coordonnées : documenter cette limite.
-- Inspecter ensuite une frame KITTI avec la géométrie LiDAR comme référence,
+- [x] Inspecter ensuite une frame KITTI avec la géométrie LiDAR comme référence,
   sans ajouter encore l'encodeur LiDAR BEV ni les heads de détection.
+
+`camera_bev.lift_camera_features_to_bev()` raccorde les features, la profondeur
+sélectionnée et la calibration complète. `BEVGridConfig` fixe des bornes
+métriques semi-ouvertes `[min, max)`, des lignes selon `x` avant et des colonnes
+selon `y` gauche, dans le repère Velodyne. Le filtre `z` est relatif au LiDAR,
+pas à un sol estimé. La résolution est explicite et les étendues XY doivent
+contenir un nombre entier de cellules.
+
+L'agrégation est une moyenne, éventuellement pondérée par la confiance du
+splatting de manière explicite. Le résultat contient les features BEV, un
+compteur de pixels, la somme des poids et le masque image des pixels retenus.
+Les cellules vides restent nulles ; le compteur permet de les distinguer de
+features réellement nulles. Les pixels invalides sont exclus avant indexation,
+les points hors grille ne sont jamais rabattus sur ses bords.
+
+Le [workstream](workstreams/camera-depth-bev-lift.md#reproduce-the-inspection)
+fournit la commande `scripts/inspect_camera_bev.py`, les conventions détaillées
+et les résultats de la première inspection CPU. Ce raccord PyTorch n'introduit
+aucun poids ni head supplémentaires et ne prétend pas être exporté ou temps réel.
 
 Le critère de passage est un raccord géométriquement cohérent et testable, pas
 un score de profondeur parfait. Les entraînements mêlant random/blocs, les études de
@@ -325,10 +404,11 @@ encore `CameraDepthModel` ou le lift.
 [fait]    2. Ajouter une masked depth loss
 [fait]    3. Tester sparse holdout depth prediction
 [fait]    4. Évaluer les deux pilotes 512 frames sur les deux holdouts
-[actif]   5. Inspecter les prédictions et consigner les limites de v1
-[prochain]6. Exposer les features et réaliser le raccord camera-depth -> BEV
-[prévu]   7. Ajouter une branche lidar_bev
-[prévu]   8. Ajouter fusion BEV + CenterPoint-like head
+[fait]    5. Inspection held out de 000366 et limites de v1 consignées
+[fait]    6. Exposer les features sans modifier le contrat depth/checkpoints
+[fait]    7. Raccord géométrique camera-depth -> BEV et première inspection CPU
+[prévu]   8. Ajouter une branche lidar_bev
+[prévu]   9. Ajouter fusion BEV + CenterPoint-like head
 ```
 
 ## Risques
@@ -343,16 +423,16 @@ encore `CameraDepthModel` ou le lift.
 
 ## Prochain incrément concret
 
-Les entraînements random/blocs et la comparaison croisée sont terminés. Il
-reste à inspecter quelques prédictions sur les mêmes frames et masques, puis à
-clôturer v1 comme fonctionnelle et évaluée sous supervision sparse, sans
-revendiquer une profondeur dense fiable partout.
+Les entraînements random/blocs, la comparaison croisée et l'inspection held out
+de `000366` permettent de clôturer v1 comme prototype fonctionnel évalué sous
+supervision sparse, sans revendiquer une profondeur dense fiable partout.
 
-Le prochain chantier architectural est le module `camera-depth -> camera_bev`
-décrit dans l'[architecture BEV](bev-model-roadmap.md). Il commence par les
-[prérequis de raccord](#prerequis-du-raccord-bev), en conservant l'architecture et
-les checkpoints actuels. Aucun entraînement mixte ou changement de backbone
-n'est requis avant les premiers tests géométriques.
+Le module `camera-depth -> camera_bev` décrit dans l'[architecture BEV](bev-model-roadmap.md)
+dispose maintenant d'un premier raccord géométrique relu et inspecté en trois
+variantes sur `000000`. La prochaine étape est l'intégration de sa branche
+dans main, puis la préparation de l'encodeur LiDAR BEV. Les checkpoints actuels, l'architecture
+du backbone et l'entraînement de profondeur sont conservés. Aucun entraînement
+mixte ni score de profondeur parfait n'est requis pour ce prototype.
 
 Les critères à jour sont suivis dans les
 [milestones](milestones.md), et les résultats d'exécution dans le

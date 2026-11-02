@@ -82,7 +82,7 @@ def project_lidar_to_image(
         [xyz_vehicle, np.ones((xyz_vehicle.shape[0], 1), dtype=np.float32)],
         axis=1,
     )
-    camera_h = (calibration.t_camera_from_vehicle @ homogeneous.T).T
+    camera_h = (calibration.t_vehicle_to_camera @ homogeneous.T).T
     camera_xyz = camera_h[:, :3]
 
     positive_depth = camera_xyz[:, 2] > 1e-6

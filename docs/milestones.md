@@ -70,9 +70,9 @@ bords, collisions et gradients vers le backbone sont testés. Une frame KITTI a
 sans nouvel entraînement. Les variantes sparse, splattée non pondérée et
 splattée pondérée sur `000000` ont été jugées visuellement cohérentes. La
 relecture du 2026-11-02 n'a trouvé aucun défaut bloquant : 357 tests réussis,
-un test CUDA ignoré. La branche `ec/camera-depth-bev-lift` est prête à intégrer
-dans `main` ; cette fusion n'est pas encore effectuée. La checklist technique
-de référence est dans les
+un test CUDA ignoré. La branche `ec/camera-depth-bev-lift` a été intégrée dans
+`main` par le merge `8290530`, puis publiée dans la release `1.2.0`. La checklist
+technique de référence est dans les
 [prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
 
 Implémentation incrémentale :
@@ -108,8 +108,23 @@ Architecture de référence :
 
 ## Prochaines étapes
 
-1. Ajouter un encodeur du point cloud de type PointPillars/VoxelNet vers
-   `lidar_bev`.
+### Chantier en préparation : encodeur LiDAR BEV
+
+Le [design LiDAR](bev-lidar-encoder.md) retient des piliers de 20 cm et un
+contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra sera recalculé
+sur la même grille ; pour la ROI initiale proposée, elle passe de 100 x 100
+à 250 x 250 cellules. Le PFN de référence proposé et le candidat à convolutions
+dilatées restent à implémenter et à valider, sans détection apprise à ce stade.
+
+Le [workstream LiDAR](workstreams/lidar-bev-encoder.md#progress) regroupe les
+tâches par périmètre : piliers/contrat, PFN/scatter, contexte, inspection et
+mesures de ressources. Le premier incrément sera la construction déterministe
+des piliers, indépendamment du réseau.
+
+### Ordre des incréments
+
+1. Ajouter l'encodeur du point cloud de type PointPillars vers `lidar_bev`,
+   avec son contexte spatial avant fusion et ses masques de mesures.
 2. Fusionner `camera_bev` et `lidar_bev` dans un backbone BEV commun.
 3. Ajouter des heads CenterPoint-like : centre, offset, hauteur, dimensions,
    orientation, classe et éventuellement vitesse.

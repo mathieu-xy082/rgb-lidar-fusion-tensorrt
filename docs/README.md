@@ -16,7 +16,9 @@ Pour comprendre le projet dans son état actuel :
 4. approfondir le
    [backbone camera-depth](bev-cam-depth-backbone.md), premier sous-système de
    cette architecture ;
-5. suivre l'[onboarding pratique](onboarding/README.md) pour exécuter le dépôt.
+5. lire le [design de l'encodeur LiDAR BEV](bev-lidar-encoder.md) pour le
+   prochain chantier et ses choix encore à valider ;
+6. suivre l'[onboarding pratique](onboarding/README.md) pour exécuter le dépôt.
 
 ## Statuts
 
@@ -34,7 +36,9 @@ Pour comprendre le projet dans son état actuel :
 | [BEV model roadmap](bev-model-roadmap.md) | Design | Architecture cible camera BEV + LiDAR BEV + fusion + heads 3D |
 | [BEV camera-depth backbone](bev-cam-depth-backbone.md) | V1 et premier raccord BEV clôturés | Justification du holdout et [contrats techniques du lift](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) |
 | [Camera-depth workstream](workstreams/camera-depth-backbone.md) | Prototype clôturé | Pilotes 512 frames, validation croisée, inspection de 000366, limites et historique GPU |
-| [Camera-depth BEV lift](workstreams/camera-depth-bev-lift.md) | Prêt pour intégration | Raccord et backward testés ; trois variantes BEV inspectées sur 000000 et relecture terminée |
+| [Camera-depth BEV lift](workstreams/camera-depth-bev-lift.md) | Intégré dans main, release 1.2.0 | Raccord et backward testés ; trois variantes BEV inspectées sur 000000 |
+| [BEV LiDAR encoder](bev-lidar-encoder.md) | Design | Piliers de 20 cm, contrat de grille commun et contexte pré-fusion ; variantes non validées |
+| [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | Préparation, non implémenté | Incréments testables : piliers, PFN/scatter, contexte, inspection et ressources |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 
 ## Guides techniques

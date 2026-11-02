@@ -89,6 +89,9 @@ La conception complète est décrite dans
 [docs/bev-model-roadmap.md](docs/bev-model-roadmap.md). Le sous-système
 camera-depth qui prépare le lift est détaillé dans
 [docs/bev-cam-depth-backbone.md](docs/bev-cam-depth-backbone.md).
+La [conception de l'encodeur LiDAR](docs/bev-lidar-encoder.md) précise le
+prochain chantier : piliers de 20 cm et contexte spatial avant fusion ; elle
+n'est pas encore implémentée.
 
 ## Contrat LiDAR image-space
 

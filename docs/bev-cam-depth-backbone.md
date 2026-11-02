@@ -8,7 +8,7 @@ Statut : **backbone v1 implémenté et évalué sous supervision sparse**. Les d
 pilotes random/blocs sur 512 frames et leur comparaison croisée sont terminés.
 L'inspection held out de `000366` permet de clôturer v1 pour son périmètre de
 prototype. Le premier lift géométrique BEV a aussi été testé et inspecté sur
-`000000` ; sa branche est prête pour intégration dans main. La qualité dense,
+`000000` ; il est intégré dans main depuis la release 1.2.0. La qualité dense,
 la sémantique apprise et la détection 3D ne sont pas établies.
 
 Documents liés :
@@ -17,6 +17,10 @@ Documents liés :
 - [milestones du projet](milestones.md) ;
 - [résultats du workstream](workstreams/camera-depth-backbone.md) ;
 - [implémentation du raccord BEV](workstreams/camera-depth-bev-lift.md).
+
+Le chantier suivant est le [design de l'encodeur LiDAR BEV](bev-lidar-encoder.md),
+avec des piliers de 20 cm et une grille caméra/LiDAR commune. Ce choix futur ne
+modifie pas les résultats historiques du lift inspecté à 0,50 m.
 
 ## Question
 
@@ -429,9 +433,10 @@ supervision sparse, sans revendiquer une profondeur dense fiable partout.
 
 Le module `camera-depth -> camera_bev` décrit dans l'[architecture BEV](bev-model-roadmap.md)
 dispose maintenant d'un premier raccord géométrique relu et inspecté en trois
-variantes sur `000000`. La prochaine étape est l'intégration de sa branche
-dans main, puis la préparation de l'encodeur LiDAR BEV. Les checkpoints actuels, l'architecture
-du backbone et l'entraînement de profondeur sont conservés. Aucun entraînement
+variantes sur `000000`. Son intégration dans main est terminée (release 1.2.0).
+La prochaine étape est l'[encodeur LiDAR BEV](bev-lidar-encoder.md), avec ses
+piliers de 20 cm et son contexte avant fusion. Les checkpoints actuels,
+l'architecture du backbone et l'entraînement de profondeur sont conservés. Aucun entraînement
 mixte ni score de profondeur parfait n'est requis pour ce prototype.
 
 Les critères à jour sont suivis dans les

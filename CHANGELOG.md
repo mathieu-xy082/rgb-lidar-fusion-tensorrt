@@ -4,6 +4,16 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+
+- NumPy-first raw XYZI pillar construction on the shared configurable BEV grid,
+  targeting 20 cm cells. Returns nine point features, explicit padding/source
+  indices, pre-cap measurement counts, and reproducible per-pillar overflow
+  sampling (64 retained points by default). Empty samples/batches, finite-input
+  policy, camera-grid alignment, and input/RNG preservation are tested. No
+  learned LiDAR encoder, training integration, or detector is introduced yet.
+
 ## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added
 

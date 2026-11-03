@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-11-02.
+Mise à jour : 2026-11-03.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -24,6 +24,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Accès aux features camera-depth | `forward_features()` expose `[B, 32, H, W]`, sans changer la sortie profondeur ni les checkpoints v1 |
 | Clôture du backbone v1 | Inspection held out de la frame `000366` et limites consignées ; prototype sparse-supervisé accepté |
 | Premier raccord caméra BEV | Grille, masques, agrégation et gradients testés ; trois variantes inspectées sur `000000`, relecture terminée |
+| Construction des piliers LiDAR | Entrée XYZI brute, grille 20 cm, neuf features, masques et sélection reproductible ; tests CPU et contrôle KITTI |
 
 ## Bilan camera-depth v1
 
@@ -108,7 +109,7 @@ Architecture de référence :
 
 ## Prochaines étapes
 
-### Chantier en préparation : encodeur LiDAR BEV
+### Chantier en cours : encodeur LiDAR BEV
 
 Le [design LiDAR](bev-lidar-encoder.md) retient des piliers de 20 cm et un
 contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra sera recalculé
@@ -116,10 +117,16 @@ sur la même grille ; pour la ROI initiale proposée, elle passe de 100 x 100
 à 250 x 250 cellules. Le PFN de référence proposé et le candidat à convolutions
 dilatées restent à implémenter et à valider, sans détection apprise à ce stade.
 
+La construction déterministe des piliers est implémentée sans réseau neuronal :
+les compteurs avant sélection, masques, indices source et features des points
+retenus sont explicites. Validation du 2026-11-03 : 415 tests réussis et un test
+CUDA ignoré, plus un contrôle CPU de la frame KITTI `000000`. Aucun entraînement
+LiDAR ni nouveau checkpoint n'a été produit.
+
 Le [workstream LiDAR](workstreams/lidar-bev-encoder.md#progress) regroupe les
 tâches par périmètre : piliers/contrat, PFN/scatter, contexte, inspection et
-mesures de ressources. Le premier incrément sera la construction déterministe
-des piliers, indépendamment du réseau.
+mesures de ressources. Le prochain incrément sera le PFN puis le scatter de
+features, avec prise en compte du padding dans la normalisation et l'agrégation.
 
 ### Ordre des incréments
 

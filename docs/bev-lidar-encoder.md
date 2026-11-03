@@ -1,10 +1,11 @@
 # BEV LiDAR encoder
 
-Mise à jour : 2026-11-02.
+Mise à jour : 2026-11-03.
 
-Statut : **design, non implémenté**. Ce document distingue les choix retenus,
-les paramètres proposés pour un premier prototype et les variantes à comparer.
-Il ne décrit ni un détecteur entraîné ni une reproduction complète de PointPillars.
+Statut : **préparation des piliers implémentée ; encodeur appris à développer**.
+Ce document distingue le contrat NumPy actuel, les choix retenus et les
+paramètres/variantes à valider. Il ne décrit ni un détecteur entraîné ni une
+reproduction complète de PointPillars.
 
 Documents liés :
 
@@ -87,9 +88,59 @@ bornes, résolution et éventuel offset doivent coïncider. Certains frameworks
 PointPillars utilisent les lignes pour y et les colonnes pour x, contrairement
 à notre contrat ; une réutilisation demandera un adaptateur explicite.
 
-## PFN de référence proposé
+## Contrat de construction des piliers implémenté
 
-Pour chaque point retenu d'un pilier, les neuf features proposées reprennent
+`rgb_lidar_fusion.lidar_pillars.build_lidar_pillars` reçoit une liste ou un
+tuple de nuages NumPy float32/float64 `[Ni, 4]`, avec Ni variable. Les nuages
+vides `[0, 4]` et le batch vide sont acceptés. Aucun padding d'entrée ni filtre
+de champ caméra n'est implicite. Les points sont convertis en float32 ; les
+valeurs XYZI non finies ou non représentables dans ce format sont rejetées
+avant le filtre de ROI. L'intensité est copiée sans normalisation ni clipping.
+
+```python
+from rgb_lidar_fusion.camera_bev import BEVGridConfig
+from rgb_lidar_fusion.lidar_pillars import build_lidar_pillars
+from rgb_lidar_fusion.project_lidar import load_velodyne_bin
+
+grid = BEVGridConfig((0.0, 50.0), (-25.0, 25.0), (-3.0, 3.0), 0.20)
+pillars = build_lidar_pillars(
+    [load_velodyne_bin("data/kitti/training/velodyne/000000.bin")],
+    grid=grid, max_points_per_pillar=64, seed=13,
+)
+```
+
+Le résultat `PillarBatch` contient :
+
+| Champ | Shape | Sens |
+|---|---|---|
+| `features` | `[P, M, 9]` | Features float32 des points retenus, padding nul |
+| `indices` | `[P, 3]` | Indices int64 `(batch, row_x, col_y)` |
+| `point_mask` | `[P, M]` | Points retenus, distincts du padding |
+| `point_indices` | `[P, M]` | Indices dans le nuage d'origine ; -1 pour le padding |
+| `point_count` | `[B, 1, Hbev, Wbev]` | Nombre de mesures par cellule avant limitation |
+| `grid` | configuration | Grille métrique partagée fournie à l'appel |
+
+P compte les piliers occupés de tout le batch ; M vaut 64 par défaut.
+`retained_count[P]`, `dropped_count[P]` et `observed_mask[B,1,Hbev,Wbev]`
+sont dérivés des indices, masques et compteurs. Les points hors ROI ne sont pas
+comptés comme dépassements de capacité. Aucun plafond global de piliers n'est
+ajouté. Les entrées ne sont pas modifiées.
+
+Le tirage sans remise en cas de dépassement est local à chaque pilier et
+reproductible à seed, batch et ordre d'entrée identiques. Il ne consomme pas
+le RNG global et ne dépend pas du dépassement d'un autre pilier. La seed par
+défaut est 13. Un changement de position dans le batch ou d'ordre des points
+peut modifier la sélection. Les indices retenus sont remis dans l'ordre source.
+
+L'indexation utilise le floor float32 et les gardes du lift caméra ; les rares
+indices proches du bord supérieur arrondis hors grille sont exclus, pas clampés.
+Ce prétraitement CPU n'est pas différentiable et n'est pas encore raccordé au
+dataset ou au runner d'entraînement. L'import du module NumPy ne charge pas Torch ;
+la configuration existante `BEVGridConfig` reste exposée par le module caméra.
+
+## Features actuelles et PFN de référence proposé
+
+Pour chaque point retenu d'un pilier, les neuf features implémentées reprennent
 le PointPillars original :
 
 ```text
@@ -102,16 +153,16 @@ Les coordonnées sont métriques dans le repère LiDAR ; les conventions
 d'intensité doivent être explicites. Aucun canal de splatting image n'entre
 dans ce PFN. Les moyennes sont calculées sur les points retenus, sans padding.
 
-Premiers paramètres proposés, encore à valider :
+Paramètre actuel et étapes neuronales encore proposées :
 
-- au plus 64 points par pilier, avec sélection reproductible en cas de
-  dépassement et compteurs des points écartés ;
+- au plus 64 points par pilier par défaut, sélection et compteurs testés ;
 - PFN `Linear(9, 32) -> BatchNorm -> ReLU -> max par canal entre les points` ;
 - scatter des vecteurs de piliers vers `[B, 32, 250, 250]` pour la ROI ci-dessus.
 
-Le padding doit être exclu de l'agrégation et ne pas biaiser les statistiques
-de normalisation ; un pilier vide ne doit pas créer de fausse observation.
-La sélection, les masques et les cas vides seront testés avant le réseau complet.
+La construction des piliers exclut déjà le padding du calcul des centroïdes.
+Le futur PFN devra aussi l'exclure de l'agrégation et éviter qu'il biaise les
+statistiques de normalisation ; un pilier vide ne doit pas créer de fausse
+observation. Les masques et cas vides sont testés avant le réseau complet.
 
 **BatchNorm est la référence proposée**, contrairement à l'idée initiale de
 LayerNorm. Un petit batch ne rend pas automatiquement BatchNorm inutilisable :
@@ -168,6 +219,9 @@ canaux caméra `C1` pour une future concaténation.
 ## Validation et limites
 
 Le [workstream](workstreams/lidar-bev-encoder.md#progress) détaille les incréments.
+La construction des piliers est validée sur CPU et sur une frame KITTI réelle ;
+aucun PFN ni bloc de contexte appris n'est encore implémenté. Le bilan et les
+compteurs avant/après sélection sont consignés dans ce workstream.
 Les premiers critères sont géométriques et logiciels : cellules attendues,
 bords, séparation des batches, padding, cas vides, valeurs finies, backward et
 alignement caméra/LiDAR sur une grille non carrée pour détecter les transpositions.

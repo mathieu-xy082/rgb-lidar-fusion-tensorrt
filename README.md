@@ -90,8 +90,8 @@ La conception complète est décrite dans
 camera-depth qui prépare le lift est détaillé dans
 [docs/bev-cam-depth-backbone.md](docs/bev-cam-depth-backbone.md).
 La [conception de l'encodeur LiDAR](docs/bev-lidar-encoder.md) précise le
-prochain chantier : piliers de 20 cm et contexte spatial avant fusion ; elle
-n'est pas encore implémentée.
+chantier en cours : la construction des piliers de 20 cm est implémentée et
+testée ; le PFN et le contexte spatial avant fusion restent à développer.
 
 ## Contrat LiDAR image-space
 

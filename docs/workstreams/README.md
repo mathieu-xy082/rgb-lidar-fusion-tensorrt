@@ -4,12 +4,13 @@ Un workstream est un journal d'implémentation : périmètre, décisions, résul
 et risques d'un chantier. Il complète les documents d'architecture sans
 devenir une source de vérité générale.
 
-## En préparation
+## En cours
 
-- [LiDAR BEV encoder](lidar-bev-encoder.md) : design consigné, implémentation
-  non commencée. Piliers de 20 cm, PFN/scatter, contexte avant fusion et
-  validation caméra/LiDAR en incréments autonomes. Les choix durables et les
-  variantes proposées sont distingués dans le [design](../bev-lidar-encoder.md).
+- [LiDAR BEV encoder](lidar-bev-encoder.md) : construction des piliers de 20 cm
+  implémentée et testée sur CPU, avec features par point, masques et sélection
+  reproductible. PFN/scatter, contexte avant fusion et inspection conjointe
+  caméra/LiDAR restent à développer. Les choix durables et les variantes
+  proposées sont distingués dans le [design](../bev-lidar-encoder.md).
 
 Ce chantier précède la fusion et les heads 3D. Voir les
 [milestones](../milestones.md).

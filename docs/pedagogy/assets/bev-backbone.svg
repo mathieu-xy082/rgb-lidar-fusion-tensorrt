@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="830" viewBox="0 0 1100 830" role="img" aria-labelledby="title desc"><title id="title">Backbone BEV : relier les cellules voisines</title><desc id="desc">Le contexte actuel contient deux blocs résiduels, quatre convolutions de dilatations 1,2,2,4. Le backbone commun caméra LiDAR est une cible distincte.</desc><defs><marker id="a" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1100" height="830" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="36" y="45" font-size="14" fill="#127761" font-weight="bold">02 / TRAITEMENT SPATIAL BEV</text>
+<text x="36" y="88" font-size="30" fill="#17283f" font-weight="bold">Passer des descriptions locales au contexte</text>
+<rect x="36" y="125" width="1028" height="95" rx="12" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="54" y="156" font-size="20" fill="#127761" font-weight="bold">Entrée : la carte issue du scatter</text>
+<text x="54" y="186" font-size="16" fill="#17283f">[B, 32, H, W] • chaque cellule contient une description locale</text>
+<path d="M550 230V258" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="36" y="270" width="490" height="180" rx="12" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="54" y="301" font-size="20" fill="#127761" font-weight="bold">Bloc résiduel 1</text>
+<text x="54" y="331" font-size="16" fill="#17283f">Conv 3×3, dilation 1 → ReLU</text>
+<text x="54" y="357" font-size="16" fill="#17283f">Conv 3×3, dilation 2</text>
+<text x="54" y="383" font-size="16" fill="#17283f">Ajouter l’entrée du bloc → ReLU</text>
+<text x="54" y="409" font-size="16" fill="#17283f">y = ReLU(x + F(x))</text>
+<rect x="574" y="270" width="490" height="180" rx="12" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="592" y="301" font-size="20" fill="#127761" font-weight="bold">Bloc résiduel 2</text>
+<text x="592" y="331" font-size="16" fill="#17283f">Conv 3×3, dilation 2 → ReLU</text>
+<text x="592" y="357" font-size="16" fill="#17283f">Conv 3×3, dilation 4</text>
+<text x="592" y="383" font-size="16" fill="#17283f">Ajouter l’entrée du bloc → ReLU</text>
+<text x="592" y="409" font-size="16" fill="#17283f">z = ReLU(y + G(y))</text>
+<path d="M534 360H562" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<text x="36" y="488" font-size="18" fill="#17283f" font-weight="bold">Même grille : stride 1, padding = dilation, 32 canaux.</text>
+<text x="36" y="520" font-size="18" fill="#17283f">Champ théorique cumulé : 3 → 7 → 11 → 19 cellules par axe.</text>
+<text x="36" y="552" font-size="18" fill="#17283f">À 20 cm : 19 × 19 cellules couvrent 3,8 × 3,8 m.</text>
+<text x="36" y="584" font-size="17" fill="#53647b">Une activation propagée dans une cellule vide ne crée pas une mesure LiDAR.</text>
+<rect x="36" y="620" width="1028" height="163" rx="12" fill="white" stroke="#127761" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="54" y="651" font-size="20" fill="#127761" font-weight="bold">Plus tard : un backbone BEV commun après fusion</text>
+<text x="54" y="681" font-size="16" fill="#17283f">camera_bev + lidar_bev alignés → concaténation → backbone commun</text>
+<text x="54" y="707" font-size="16" fill="#17283f">Sa structure et sa largeur restent à définir : aucun empilement précis n’est figé ici.</text>
+<text x="54" y="733" font-size="16" fill="#17283f">Il apportera un contexte multimodal ; il est distinct de LidarBEVContext.</text>
+</g></svg>

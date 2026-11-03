@@ -26,3 +26,10 @@ Ouvrir `explorers/pfn.html` localement :
 4. Tester les deux modes BatchNorm et les trois scénarios, puis réinitialiser.
 5. Réduire la fenêtre à 390 px : les contrôles doivent rester accessibles et les tableaux peuvent défiler horizontalement dans leur zone.
 6. Vérifier que le vocabulaire et la densité conviennent à un lecteur débutant.
+
+
+## Page des trois rôles après rebase
+
+La page `architecture-lidar-bev-head.md` et sa version autonome `explorers/architecture.html` décrivent l'encodeur local, le contexte BEV et la head de centres Car. Relecture de `lidar_bev.py`, `lidar_center_model.py`, des jalons, de la roadmap BEV et du workstream de diagnostic sur le commit `c6e0d6da157b42fcd8991c96b039e7b8fb31d96e`.
+
+Les trois nouvelles figures SVG ont été rendues et inspectées. La logique de navigation entre les trois panneaux et de comparaison des deux parcours a été vérifiée sous Node avec un DOM minimal. Les identifiants des SVG embarqués sont uniques et la page ne charge aucune dépendance externe. Les liens relatifs sont vérifiés contre l'arbre de la branche. L'affichage HTML réel en navigateur reste à inspecter ; aucune nouvelle exécution PyTorch ou expérience d'entraînement n'est revendiquée.

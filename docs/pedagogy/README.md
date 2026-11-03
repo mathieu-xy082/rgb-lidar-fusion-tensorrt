@@ -2,6 +2,13 @@
 
 Un parcours visuel en français pour comprendre le rôle des modules, leurs transformations et les compromis des choix retenus. Les exemples synthétiques ne représentent pas des performances de modèles entraînés.
 
+## Vue d’ensemble : les trois rôles du réseau
+
+Commencer par la [page encodeur LiDAR / backbone BEV / head](architecture-lidar-bev-head.md),
+avec trois figures lisibles sur GitHub, puis ouvrir sa [version visuelle autonome](explorers/architecture.html)
+pour naviguer entre les étapes et comparer le diagnostic LiDAR actuel à la cible multimodale.
+La head de centres Car ajoutée au dépôt y est distinguée des futures heads 3D.
+
 ## Premier ensemble : des points LiDAR au vecteur de pilier
 
 1. Observer la [vue de la branche LiDAR](assets/lidar-pfn.svg).

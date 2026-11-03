@@ -7,6 +7,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Official label-only preparation for existing KITTI frame IDs, protected
+  extraction, provenance and local annotation/geometry/target audit. Labels and
+  generated reports remain ignored; no supervised LiDAR run is launched yet.
 - NumPy-first raw XYZI pillar construction on the shared configurable BEV grid,
   targeting 20 cm cells. Returns nine point features, explicit padding/source
   indices, pre-cap measurement counts, and reproducible per-pillar overflow

@@ -40,3 +40,8 @@ Les trois nouvelles figures SVG ont été rendues et inspectées. La logique de 
 Ajout des formules des opérateurs et d'un laboratoire autonome 3×3/1×1, après lecture de `lidar_bev.py` et `lidar_center_model.py` au commit `a4a8017575bbdc314ac1cefed090df1930c433fc`. Le nombre de canaux est configuré, tandis que les paramètres sont apprenables. Les schémas de volumes sont explicitement non à l'échelle et ne représentent pas une hauteur physique.
 
 Les deux nouveaux SVG ont été rendus et inspectés. Le JavaScript a été exécuté sous Node avec un DOM minimal : 36 configurations (3×3/1×1, dilatations 1/2/4, deux sorties, centre et bords) vérifiées contre une référence Python indépendante ; toutes les sommes concordent, avec biais et padding. Le mode 1×1 désactive la dilation. Les identifiants des figures embarquées et les liens sont contrôlés. L'affichage HTML et les événements réels en navigateur restent à inspecter. Aucun test PyTorch ou entraînement supplémentaire n'est déclaré.
+
+
+## Écriture matricielle et rendu GitHub
+
+Remplacement des macros `operatorname` signalées comme refusées par GitHub. Les opérateurs sont écrits avec des symboles définis dans le texte ; les produits Linear, BatchNorm, scatter conceptuel, convolution via patches et head 1×1 précisent leurs dimensions. ReLU et max restent décrits comme opérations non linéaires. Les petits exemples matriciels Linear, BatchNorm, scatter et patch ont été vérifiés avec NumPy. Délimiteurs mathématiques contrôlés et absence de `operatorname` vérifiée ; le rendu GitHub authentifié n'a pas été inspecté visuellement dans cet environnement.

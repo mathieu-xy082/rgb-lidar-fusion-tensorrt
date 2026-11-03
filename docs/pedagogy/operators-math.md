@@ -25,141 +25,229 @@ Comme dans une illustration classique de CNN, chaque volume représente un tense
 
 Une carte `[B,32,H,W]` contient **32 valeurs par cellule**. Les dessins d’empilement représentent ces canaux, pas des étages de hauteur physique. Les 32 canaux du PFN sont des caractéristiques apprenables ; ce ne sont pas 32 classes d’objets.
 
-## 1. Linear : combiner les neuf caractéristiques d’un point
+## 1. Linear : un produit matriciel pour tous les points
 
-Pour chaque point valide $v$, le vecteur $x_v\in\mathbb{R}^{9}$ devient $h_v\in\mathbb{R}^{32}$ :
-
-$$
-h_{v,c}=\sum_{k=1}^{9}W_{c,k}x_{v,k},\qquad W\in\mathbb{R}^{32\times9}.
-$$
-
-Le PFN utilise **`bias=False`** : pas de terme $b_c$. Tous les points utilisent la même matrice. La dimension « points » reste V : `[V,9] → [V,32]`.
-
-Exemple réduit à trois entrées : $x=(2,1,-1)$ et une ligne de poids $w=(0{,}5,-1,2)$ donnent $h=0{,}5\times2-1\times1+2\times(-1)=-2$. On répète le produit scalaire pour chaque canal de sortie.
-
-## 2. BatchNorm : normaliser un canal sur les points valides
-
-Pour $V\ge2$ en entraînement :
+On range les points valides en **lignes** dans la matrice $X$. Chaque ligne contient neuf caractéristiques. Avec les conventions de `nn.Linear` :
 
 $$
-\mu_c=\frac1V\sum_{v=1}^{V}h_{v,c},\qquad
-\sigma_c^2=\frac1V\sum_{v=1}^{V}(h_{v,c}-\mu_c)^2,
+\underbrace{X}_{V\times9}\;
+\underbrace{W_{\mathrm{lin}}^{\mathsf T}}_{9\times32}
+=\underbrace{H_{\mathrm{lin}}}_{V\times32}.
+$$
+
+| Objet | Dimensions | Sens |
+|---|---|---|
+| $X$ | $V\times9$ | Une ligne par point valide |
+| $W_{\mathrm{lin}}$ | $32\times9$ | Une ligne de poids par canal de sortie |
+| $W_{\mathrm{lin}}^{\mathsf T}$ | $9\times32$ | Transposée utilisée dans le produit |
+| $H_{\mathrm{lin}}$ | $V\times32$ | Une ligne de 32 activations par point |
+
+La dimension intérieure 9 se contracte ; V reste le nombre de points. Le PFN utilise **`bias=False`** : aucun biais n’est ajouté. La lettre W sans indice reste réservée à la largeur de la grille ; $W_{\mathrm{lin}}$ désigne les poids.
+
+Exemple réduit à deux points, trois caractéristiques et deux canaux de sortie :
+
+$$
+\underbrace{\begin{bmatrix}2&1&-1\\0&2&1\end{bmatrix}}_{X:\;2\times3}
+\underbrace{\begin{bmatrix}0.5&1\\-1&0\\2&-1\end{bmatrix}}_{W_{\mathrm{lin}}^{\mathsf T}:\;3\times2}
+=
+\underbrace{\begin{bmatrix}-2&3\\0&-1\end{bmatrix}}_{H_{\mathrm{lin}}:\;2\times2}.
+$$
+
+Chaque résultat est le produit d’une ligne d’entrée par une colonne de poids. Une même matrice de poids est partagée entre tous les points.
+
+## 2. BatchNorm : statistiques par colonne, puis transformation matricielle
+
+On part de $H_{\mathrm{lin}}\in\mathbb R^{V\times32}$. Pour $V\ge2$ en entraînement, notons $\mathbf1_V$ le vecteur colonne de V uns :
+
+$$
+\underbrace{\mu}_{1\times32}
+=\frac1V\underbrace{\mathbf1_V^{\mathsf T}}_{1\times V}
+\underbrace{H_{\mathrm{lin}}}_{V\times32},
+\qquad
+\underbrace{E}_{V\times32}=H_{\mathrm{lin}}-\mathbf1_V\mu.
 $$
 
 $$
-\widehat h_{v,c}=\gamma_c\frac{h_{v,c}-\mu_c}{\sqrt{\sigma_c^2+\varepsilon}}+\beta_c,
-\qquad\varepsilon=10^{-3}.
+\underbrace{v}_{1\times32}
+=\frac1V\mathbf1_V^{\mathsf T}(E\odot E).
 $$
 
-Les points de **tous les piliers** participent à ces statistiques ; le padding est exclu avant Linear et BatchNorm. Les paramètres $\gamma_c,\beta_c$ sont appris.
+$\odot$ signifie multiplication **élément par élément**, et non produit matriciel. Le vecteur v contient les variances des 32 canaux. La moyenne est soustraite à chaque ligne via $\mathbf1_V\mu$.
 
-Exemple : pour un canal contenant les valeurs 1 et 3, la moyenne vaut 2 et la variance utilisée dans le forward vaut 1. Avec $\gamma=1,\beta=0$, les sorties sont environ −0,9995 et +0,9995.
+Pour chaque canal c, on définit $d_c=\gamma_c/\sqrt{v_c+\varepsilon}$, avec $\varepsilon=10^{-3}$. Puis :
 
-En évaluation, les statistiques mémorisées remplacent celles du lot. Le dépôt fait de même en entraînement si $V<2$, sans mise à jour des statistiques. Pour $V=0$, aucune moyenne du lot vide n’est calculée. Le momentum de `BatchNorm1d` vaut 0,01 ; la variance mémorisée par PyTorch utilise la correction non biaisée lors des mises à jour ordinaires, tandis que le forward ci-dessus utilise la variance divisée par V.
+$$
+\underbrace{A_{\mathrm{BN}}}_{V\times32}
+=\underbrace{E}_{V\times32}
+\underbrace{D}_{32\times32}
++\underbrace{\mathbf1_V}_{V\times1}
+\underbrace{\beta}_{1\times32},
+\qquad D=\mathrm{diag}(d_1,\ldots,d_{32}).
+$$
+
+D est une matrice diagonale : elle applique un facteur différent à chaque colonne. Les paramètres $\gamma$ et $\beta$ sont appris. **Le code ne construit pas D** : il multiplie et additionne directement par canal avec diffusion (*broadcasting*). La matrice sert à lire l’opération.
+
+Les points de tous les piliers participent aux statistiques ; le padding a été exclu avant Linear. Exemple : pour les valeurs 1 et 3 d’un canal, moyenne 2, variance 1 ; avec $\gamma=1,\beta=0$, sorties environ −0,9995 et +0,9995.
+
+En évaluation, les statistiques mémorisées remplacent celles du lot. Le dépôt fait de même en entraînement si $V<2$, sans les mettre à jour ; les expressions divisant par V ne sont donc pas utilisées pour V=0. Le momentum vaut 0,01. La variance mémorisée utilise la correction non biaisée lors des mises à jour ordinaires de PyTorch ; le forward utilise la variance divisée par V.
 
 ## 3. ReLU et max : deux opérations différentes
 
 $$
-a_{v,c}=\rho(\widehat h_{v,c})=\max(0,\widehat h_{v,c}).
+\underbrace{A}_{V\times32}=\rho\!\left(\underbrace{A_{\mathrm{BN}}}_{V\times32}\right),\qquad \rho(t)=\max(0,t).
 $$
 
-ReLU retire les valeurs négatives, sans changer la forme `[V,32]`. Ensuite, si $\mathcal V_p$ est l’ensemble des points valides du pilier p :
+ReLU est non linéaire : elle s’applique élément par élément et ne se remplace pas par une matrice de poids fixe. Elle conserve la forme `[V,32]`. Ensuite, si $\mathcal V_p$ est l’ensemble des points valides du pilier p :
 
 $$
 f_{p,c}=\begin{cases}
-\max_{v\in\mathcal V_p}a_{v,c},&\mathcal V_p\ne\varnothing,\\
+\max_{v\in\mathcal V_p}A_{v,c},&\mathcal V_p\ne\varnothing,\\
 0,&\mathcal V_p=\varnothing.
 \end{cases}
 $$
 
-Le max réduit les points **séparément pour chaque canal** : `[P,M,32] → [P,32]`. Avec $(0{,}8,0{,}2)$ pour le canal A et $(0{,}1,0{,}9)$ pour B, la sortie est $(0{,}8,0{,}9)$ : deux points différents fournissent les maxima. Les emplacements masqués valent $-\infty$ dans le tenseur interne de pooling, puis les piliers entièrement masqués sont explicitement mis à zéro.
+Le max est aussi une réduction non linéaire, pas un produit matriciel fixe. Il réduit les points **séparément pour chaque canal** : `[P,M,32] → [P,32]`. Avec $(0{,}8,0{,}2)$ pour le canal A et $(0{,}1,0{,}9)$ pour B, la sortie est $(0{,}8,0{,}9)$ : deux points différents fournissent les maxima. Les emplacements masqués valent $-\infty$ dans le tenseur interne de pooling, puis les piliers entièrement masqués sont explicitement mis à zéro.
 
-## 4. Scatter : placer une valeur sans la transformer
+## 4. Scatter : une matrice de placement, pour comprendre
 
-Si le pilier p possède l’indice $(b_p,r_p,s_p)$ :
-
-$$
-S_{b_p,c,r_p,s_p}=f_{p,c}.
-$$
-
-Toutes les autres cellules sont initialisées à zéro. Les indices de piliers sont uniques ; le code rejette les doublons. Le scatter ne somme pas plusieurs piliers et n’interpole pas leurs positions.
-
-**Placer n’est pas convoluer.** La grille spatiale apparaît à cette étape ; le PFN n’avait pas combiné les cellules voisines. Les compteurs avant limitation des points restent une information distincte des activations.
-
-## 5. Convolution 3×3 : sommer sur l’espace et sur les canaux
-
-Pour les convolutions du contexte LiDAR, de stride 1, sans biais, à dilation d :
+On aplatit les positions spatiales de tout le batch : $N=BHW$. La sortie du PFN est $F\in\mathbb R^{P\times32}$. On définit une matrice de placement Q :
 
 $$
-Y_{b,o,i,j}=\sum_{c=1}^{C_{in}}\sum_{u=-1}^{1}\sum_{v=-1}^{1}
-K_{o,c,u,v}\,X_{b,c,i+du,j+dv}.
+Q\in\{0,1\}^{N\times P},\qquad
+Q_{n,p}=1\;\text{si}\;n=b_pHW+r_pW+s_p.
 $$
 
-Ici, les indices spatiaux de K sont centrés en zéro pour alléger l’écriture. Une position hors grille fournit zéro via le padding. Il s’agit de la corrélation croisée nommée convolution dans `Conv2d` : on n’inverse pas les coefficients du noyau.
-
-**Un canal de sortie utilise tous les canaux d’entrée**, pas seulement la carte dessinée au premier plan. Le même noyau est réutilisé à chaque position. Les noyaux ont la forme `[Cout,Cin,3,3]` : pour 32 → 32, cela représente $32\times32\times9=9\,216$ poids par convolution.
-
-Exemple monocanal, sans biais :
+Chaque colonne contient un seul 1 : la position du pilier p. Les indices de piliers sont uniques, donc une ligne contient au plus un 1.
 
 $$
-\begin{bmatrix}1&2&0\\0&1&3\\2&0&1\end{bmatrix}
-\quad\text{avec}\quad
-\begin{bmatrix}1&0&-1\\1&0&-1\\1&0&-1\end{bmatrix}
-\quad\Longrightarrow\quad 1+0+0+0+0-3+2+0-1=-1.
+\underbrace{S_{\mathrm{flat}}}_{N\times32}
+=\underbrace{Q}_{N\times P}\;
+\underbrace{F}_{P\times32}.
 $$
 
-Cette valeur est une sortie de convolution **avant** ReLU : la ReLU la transformerait en zéro. Le laboratoire permet de changer la position, le canal de sortie et la dilation, et de suivre la somme de tous les produits sur deux canaux.
+Les lignes sans pilier restent nulles. On reforme ensuite `[B,H,W,32]`, puis on permute les axes vers `[B,32,H,W]`.
+
+**Cette matrice est conceptuelle : le code utilise `index_copy`, sans allouer Q.** Il ne somme pas de piliers concurrents et n’interpole pas leurs positions ; les doublons sont rejetés. Les compteurs avant limitation restent distincts des activations. Placer n’est pas convoluer : aucun voisinage n’est mélangé.
+
+## 5. Convolution 3×3 : extraire des patches, puis multiplier
+
+Pour chaque position de sortie de chaque élément du batch, on extrait le patch 3×3 de **tous les canaux d’entrée**, à dilation d et avec padding nul. Ce patch est aplati en une ligne de $9C_{\mathrm{in}}$ valeurs. En empilant les lignes, on obtient $U_d(X)$, souvent appelé *unfold* ou *im2col*.
+
+Pour le contexte actuel, stride 1 et padding d conservent H et W. On pose $N=BHW$ et on écrit :
+
+$$
+\underbrace{Y_{\mathrm{flat}}}_{N\times C_{\mathrm{out}}}
+=
+\underbrace{U_d(X)}_{N\times(9C_{\mathrm{in}})}
+\underbrace{K_{\mathrm{flat}}^{\mathsf T}}_{(9C_{\mathrm{in}})\times C_{\mathrm{out}}}.
+$$
+
+| Objet | Forme générale | Pour 32 → 32 |
+|---|---|---|
+| Patches $U_d(X)$ | $N\times(9C_{\mathrm{in}})$ | $N\times288$ |
+| Poids $K_{\mathrm{flat}}$ | $C_{\mathrm{out}}\times(9C_{\mathrm{in}})$ | $32\times288$ |
+| Sortie aplatie | $N\times C_{\mathrm{out}}$ | $N\times32$ |
+
+L’ordre d’aplatissement des canaux et des positions doit être identique pour les patches et les poids. On reforme la sortie en `[B,Cout,H,W]`. L’extraction de patches duplique des valeurs d’entrée ; c’est davantage qu’un simple changement de forme.
+
+Cette écriture explique `Conv2d` ; **elle n’affirme pas que le backend matérialise cette grande matrice**. Les noyaux sont utilisés sans retournement : la convolution de PyTorch est une corrélation croisée. Le contexte n’ajoute aucun biais.
+
+Exemple monocanal : un patch et un noyau 3×3 aplatis produisent une sortie scalaire :
+
+$$
+\underbrace{\begin{bmatrix}1&2&0&0&1&3&2&0&1\end{bmatrix}}_{1\times9}
+\underbrace{\begin{bmatrix}1\\0\\-1\\1\\0\\-1\\1\\0\\-1\end{bmatrix}}_{9\times1}
+=\underbrace{\begin{bmatrix}-1\end{bmatrix}}_{1\times1}.
+$$
+
+Avec plusieurs canaux, on prolonge les deux vecteurs avec les patches et les poids des autres canaux avant le produit. Chaque canal de sortie utilise tous les canaux d’entrée. Les poids du vrai contexte ont la forme `[32,32,3,3]`, soit 9 216 paramètres par convolution.
+
+La valeur −1 est avant activation ; une ReLU appliquée ensuite donnerait zéro. Le laboratoire garde la vue produit par produit pour déplier concrètement le produit matriciel.
 
 ### Dilation, stride et padding
 
-- **Dilation d** : écart entre positions échantillonnées par le noyau. Un 3×3 à d=2 lit neuf positions dans une étendue 5×5, par canal.
-- **Stride s** : déplacement du noyau entre deux positions de sortie ; s=1 dans le contexte actuel.
-- **Padding p** : valeurs ajoutées hors grille ; p=d conserve H et W avec un noyau 3×3 et s=1.
+- **Dilation d** : espacement des positions lues dans chaque patch. À d=2, le noyau lit neuf positions par canal dans une étendue 5×5. La largeur $9C_{\mathrm{in}}$ de la matrice de patches ne change pas.
+- **Stride s** : déplacement entre deux positions de sortie ; s=1 dans le contexte actuel.
+- **Padding p** : zéros hors grille ; p=d conserve H et W pour k=3 et s=1.
 
 $$
-H_{out}=\left\lfloor\frac{H+2p-d(k-1)-1}{s}+1\right\rfloor.
+H_{\mathrm{out}}=\left\lfloor\frac{H+2p-d(k-1)-1}{s}+1\right\rfloor.
 $$
 
-Même formule pour W. La dilation change les positions lues, pas le nombre de poids. Avec k=3, s=1 et les dilatations `(1,2,2,4)`, le champ théorique cumulé par axe est :
+Même formule pour W. Dans le cas général, la matrice de patches comporte $B H_{\mathrm{out}}W_{\mathrm{out}}$ lignes. La dilation ne change pas le nombre de poids. Avec les dilatations `(1,2,2,4)`, le champ théorique cumulé par axe vaut :
 
 $$
-R=1+\sum_{\ell=1}^{4}(k_\ell-1)d_\ell
-=1+2(1+2+2+4)=19.
+R=1+2(1+2+2+4)=19.
 $$
 
-Ce calcul donne l’étendue maximale des dépendances vis-à-vis de la grille issue du scatter. Aux bords, une partie correspond à du padding, pas à des mesures supplémentaires.
+Cette étendue de dépendances est mesurée par rapport à la grille issue du scatter. Aux bords, le padding n’ajoute aucune mesure réelle.
 
-## 6. Bloc résiduel : ajouter, pas concaténer
+## 6. Bloc résiduel : ajouter des tenseurs de mêmes dimensions
 
-Pour le premier bloc de `LidarBEVContext` :
-
-$$
-F(X)=\operatorname{Conv}_{d=2}\!\left(\rho(\operatorname{Conv}_{d=1}(X))\right),
-\qquad Y=\rho(X+F(X)).
-$$
-
-L’addition est élément par élément : mêmes B, C, H et W sur les deux chemins. Par exemple $X=0{,}6$ et $F(X)=-0{,}2$ donnent $Y=0{,}4$. Le second bloc applique la même structure avec d=2 puis d=4.
-
-Une concaténation empilerait les canaux et changerait leur nombre. L’addition résiduelle conserve 32 canaux. La concaténation caméra/LiDAR décrite dans la cible de fusion est une autre opération, dans un autre module encore à développer.
-
-## 7. Convolution 1×1 et sigmoid : la head de centres
-
-Une convolution 1×1 combine les canaux **à une position donnée**, sans lire directement les cellules voisines :
+Notons $\mathcal C_d$ la convolution 3×3 de dilation d, **sans biais**. Chaque couche possède ses propres poids ; les deux couches de dilation 2 ne partagent pas leurs paramètres. Le premier bloc effectue :
 
 $$
-q_{b,i,j}=b_q+\sum_{c=1}^{32}w_{q,c}X_{b,c,i,j},
-\qquad p_{b,i,j}=\operatorname{sigmoid}(q_{b,i,j})=\frac1{1+e^{-q_{b,i,j}}}.
+T=\rho\!\left(\mathcal C_1(X)\right),\qquad
+F(X)=\mathcal C_2(T),\qquad
+Y=\rho\!\left(X+F(X)\right).
 $$
 
-La head actuelle comporte des biais, contrairement aux convolutions du contexte. Elle produit un logit de centre Car et deux offsets :
+La définition matricielle de chaque $\mathcal C_d$ est celle de la section précédente. Tous les tenseurs X, T, F(X) et Y ont la forme `[B,32,H,W]`. Si l’on aplatit les positions en lignes :
 
 $$
-\delta^x_{b,i,j}=\operatorname{sigmoid}\!\left(b_x+\sum_cw_{x,c}X_{b,c,i,j}\right),
-\quad
-\delta^y_{b,i,j}=\operatorname{sigmoid}\!\left(b_y+\sum_cw_{y,c}X_{b,c,i,j}\right).
+\underbrace{Y_{\mathrm{flat}}}_{N\times32}
+=\rho\!\left(
+\underbrace{X_{\mathrm{flat}}}_{N\times32}
++\underbrace{F(X)_{\mathrm{flat}}}_{N\times32}
+\right).
 $$
 
-Formes : `[B,32,H,W] → [B,1,H,W]` pour les logits et `[B,2,H,W]` pour les offsets après sigmoid. Un score sigmoid n’est pas automatiquement une probabilité calibrée ; aucun apprentissage LiDAR n’est déclaré dans l’état relu.
+L’addition est élément par élément. Par exemple 0,6 + (−0,2), puis ReLU, donne 0,4. Le second bloc a la même structure avec d=2 puis d=4. Les activations non linéaires entre les convolutions empêchent de réduire tout le bloc à un unique produit par une matrice de poids fixe.
+
+**Addition et concaténation sont différentes :** concaténer deux matrices $N\times32$ le long des canaux donnerait $N\times64$, alors que leur addition reste $N\times32$. La future concaténation caméra/LiDAR est un autre module, encore à développer.
+
+## 7. Convolution 1×1 : un produit matriciel sur les canaux
+
+On range chaque cellule de la carte en une ligne de $Z\in\mathbb R^{N\times32}$, avec $N=BHW$. Pour une convolution 1×1, le patch contient seulement les 32 canaux de cette cellule ; aucun voisin spatial direct n’est lu.
+
+La head actuelle utilise **deux projections distinctes avec biais** :
+
+$$
+\underbrace{Q}_{N\times1}
+=\underbrace{Z}_{N\times32}
+\underbrace{W_h^{\mathsf T}}_{32\times1}
++\underbrace{\mathbf1_N}_{N\times1}
+\underbrace{b_h}_{1\times1},
+\qquad
+P_h=\sigma(Q).
+$$
+
+$$
+\underbrace{D_{\mathrm{logits}}}_{N\times2}
+=\underbrace{Z}_{N\times32}
+\underbrace{W_o^{\mathsf T}}_{32\times2}
++\underbrace{\mathbf1_N}_{N\times1}
+\underbrace{b_o}_{1\times2},
+\qquad
+\Delta=\sigma(D_{\mathrm{logits}}).
+$$
+
+| Paramètre ou sortie | Dimensions | Rôle |
+|---|---|---|
+| $W_h$, $b_h$ | $1\times32$, $1\times1$ | Projection vers le logit Car |
+| $W_o$, $b_o$ | $2\times32$, $1\times2$ | Projection vers les offsets XY |
+| $Q$, $P_h$ | $N\times1$ | Logits puis scores après sigmoid |
+| $\Delta$ | $N\times2$ | Fractions XY après sigmoid |
+
+Les biais sont recopiés sur toutes les lignes par $\mathbf1_N b$. Le code les stocke comme vecteurs de longueur 1 et 2. La sigmoid est appliquée **élément par élément** :
+
+$$
+\sigma(t)=\frac1{1+e^{-t}}.
+$$
+
+Le forward retourne les logits Car, reformés en `[B,1,H,W]`, et les offsets après sigmoid en `[B,2,H,W]`. La sigmoid des logits Car sert notamment au décodage et à la loss ; les logits restent la sortie de la head pour ce canal.
+
+Une convolution 1×1 mélange les canaux avec les mêmes poids à chaque cellule ; elle ne connecte pas toutes les positions spatiales entre elles comme une couche dense sur une image aplatie. Ses entrées portent néanmoins le contexte spatial acquis par les couches précédentes. Un score sigmoid n’est pas automatiquement une probabilité calibrée.
 
 ## 8. Décodage : du pic dans une carte aux mètres
 
@@ -169,7 +257,7 @@ $$
 x=x_{min}+(i+\delta^x)r,\qquad y=y_{min}+(j+\delta^y)r,
 $$
 
-où r est la résolution métrique. Il n’y a pas de décalage supplémentaire de $\tfrac12$ cellule : l’offset 0,5 désigne déjà le centre de la cellule. À r=0,20 m, i=10 et $\delta^x=0{,}25$, avec $x_{min}=0$, on obtient x=2,05 m.
+où r est la résolution métrique. Il n’y a pas de décalage supplémentaire de $1/2$ cellule : l’offset 0,5 désigne déjà le centre de la cellule. À r=0,20 m, i=10 et $\delta^x=0{,}25$, avec $x_{min}=0$, on obtient x=2,05 m.
 
 Cela fournit des centres x/y et scores, pas des boîtes orientées. La tête 3D cible devra ajouter les autres attributs.
 
@@ -180,3 +268,4 @@ Cela fournit des centres x/y et scores, pas des boîtes orientées. La tête 3D 
 - [Head 1×1, sigmoid et décodage](../../src/rgb_lidar_fusion/lidar_center_model.py).
 
 Le laboratoire utilise des tenseurs et noyaux fictifs de petite taille, en JavaScript. Les formes 32→32 du modèle sont décrites ici ; il ne s’agit pas d’un checkpoint ni d’une exécution PyTorch.
+

@@ -27,6 +27,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Construction des piliers LiDAR | Entrée XYZI brute, grille 20 cm, neuf features, masques et sélection reproductible ; tests CPU et contrôle KITTI |
 | PFN et scatter LiDAR | Linear/BatchNorm/ReLU/max masqué, features BEV stride 1, comptes pré-cap conservés ; tests et backward CPU |
 | Premier contexte LiDAR BEV | Deux blocs résiduels dilatés, support 19x19 vérifié, grille/mesures conservées ; comparaison multi-résolution CPU |
+| Inspection conjointe et diagnostic LiDAR | Caméra/LiDAR sur grille 20 cm, couverture hors FOV préservée ; premier forward/backward GPU batch 1 et pic mémoire mesurés |
 
 ## Bilan camera-depth v1
 
@@ -140,13 +141,21 @@ aucun optimum latence/précision ni déploiement GPU n'est démontré.
 
 Le [workstream LiDAR](workstreams/lidar-bev-encoder.md#progress) regroupe les
 tâches par périmètre : piliers/contrat, PFN/scatter, contexte, inspection et
-mesures de ressources. Le prochain incrément sera l'inspection conjointe des
-branches sur la grille de 20 cm, puis les mesures GPU de l'encodeur complet.
+mesures de ressources. L'inspection conjointe sur la grille de 20 cm et le
+diagnostic GPU LiDAR sont maintenant disponibles : 528 tests réussis et un test
+CUDA ignoré localement, plus un contrôle matériel distinct. Le garde-fou LiDAR
+est de 2 048 MiB libres ; celui de la caméra reste à 2 500 MiB. Le premier
+contrôle mesure 11,0 ms en forward, 35,3 ms en forward/backward et 180,5 MiB de
+pic PyTorch, sans caméra ni optimiseur. Le grouping CPU prend 95,7 ms séparément :
+ni temps réel global ni stabilité longue durée ne sont démontrés.
+
+Prochaine action : revue développeur des figures et du contrat, puis préparation
+du raccord/fusion des branches. L'encodeur LiDAR n'est pas entraîné en détection.
 
 ### Ordre des incréments
 
-1. Ajouter l'encodeur du point cloud de type PointPillars vers `lidar_bev`,
-   avec son contexte spatial avant fusion et ses masques de mesures.
+1. Relire et stabiliser le premier encodeur du point cloud de type PointPillars
+   vers `lidar_bev`, son contexte spatial et ses diagnostics.
 2. Fusionner `camera_bev` et `lidar_bev` dans un backbone BEV commun.
 3. Ajouter des heads CenterPoint-like : centre, offset, hauteur, dimensions,
    orientation, classe et éventuellement vitesse.

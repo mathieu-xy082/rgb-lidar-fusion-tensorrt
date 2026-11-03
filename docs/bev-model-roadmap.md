@@ -8,8 +8,9 @@ Statut : **design de référence**. Le backbone camera-depth préalable est
 implémenté, évalué sur les pilotes random/blocs 512 frames et clôturé après
 inspection qualitative. Le premier lift BEV géométrique est implémenté, relu
 et inspecté ; il est intégré dans main depuis la release 1.2.0. La branche
-LiDAR dispose des piliers, du PFN, du scatter et d'un premier contexte spatial
-testés sur CPU ; la fusion et les heads 3D restent à développer.
+LiDAR dispose des piliers, du PFN, du scatter et d'un premier contexte spatial,
+avec inspection conjointe à 20 cm et diagnostic GPU borné. La fusion et les
+heads 3D restent à développer ; aucune détection LiDAR n'est encore apprise.
 
 Documents liés :
 
@@ -354,9 +355,9 @@ implémentés ; le critère synthétique RGB + enriched LiDAR + calibration vers
 `camera_bev`, avec grille explicite et backward fonctionnel, est atteint.
 
 La [phase BEV 2](#phase-bev-2---branche-lidar-et-fusion) dispose maintenant de la
-construction des piliers, du PFN, du scatter et du contexte spatial testés.
-Inspecter ensuite les branches sur la même grille de 20 cm et mesurer les
-ressources GPU de l'encodeur. Suivre les incréments du
+construction des piliers, du PFN, du scatter et du contexte spatial testés,
+inspectés sur une même grille de 20 cm, avec un premier contrôle GPU LiDAR.
+Relire ces résultats avant de préparer la fusion. Suivre les incréments du
 [workstream LiDAR BEV](workstreams/lidar-bev-encoder.md#progress), sur un
 repère et une grille compatibles avec camera BEV, avant la fusion et les
 heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.

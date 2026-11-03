@@ -2,7 +2,7 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-11-02.
+Mise à jour : 2026-11-03.
 
 Statut : **backbone v1 implémenté et évalué sous supervision sparse**. Les deux
 pilotes random/blocs sur 512 frames et leur comparaison croisée sont terminés.
@@ -18,9 +18,9 @@ Documents liés :
 - [résultats du workstream](workstreams/camera-depth-backbone.md) ;
 - [implémentation du raccord BEV](workstreams/camera-depth-bev-lift.md).
 
-Le chantier suivant est le [design de l'encodeur LiDAR BEV](bev-lidar-encoder.md),
-avec des piliers de 20 cm et une grille caméra/LiDAR commune. Ce choix futur ne
-modifie pas les résultats historiques du lift inspecté à 0,50 m.
+Le [premier encodeur LiDAR BEV](bev-lidar-encoder.md) est également implémenté,
+avec des piliers de 20 cm et une inspection sur une grille caméra/LiDAR commune.
+Cela ne modifie pas les résultats historiques du lift inspecté à 0,50 m.
 
 ## Question
 
@@ -252,13 +252,13 @@ les accumuler dans une grille BEV.
 
 ## Prerequis du raccord BEV
 
-Cette section est la référence pour le prochain incrément architectural.
+Cette section conserve les contrats de référence du raccord architectural.
 Les quatre points ci-dessous sont implémentés dans un premier raccord BEV
 fonctionnel, testé sur des cas synthétiques et inspecté sur une frame KITTI CPU.
 La relecture et la comparaison des trois variantes sur `000000` sont terminées ;
-l'inspection d'autres scènes reste un suivi facultatif. Il n'y a pas encore
-d'encodeur LiDAR BEV, de fusion ou de détection 3D. Aucun nouvel entraînement
-n'a été nécessaire pour ce prototype.
+l'inspection d'autres scènes reste un suivi facultatif. Un premier encodeur
+LiDAR BEV est maintenant implémenté séparément, sans fusion ni détection 3D.
+Aucun nouvel entraînement n'a été nécessaire pour ces prototypes géométriques.
 
 ### 1. Exposer les features sans casser le backbone
 
@@ -434,9 +434,11 @@ supervision sparse, sans revendiquer une profondeur dense fiable partout.
 Le module `camera-depth -> camera_bev` décrit dans l'[architecture BEV](bev-model-roadmap.md)
 dispose maintenant d'un premier raccord géométrique relu et inspecté en trois
 variantes sur `000000`. Son intégration dans main est terminée (release 1.2.0).
-La prochaine étape est l'[encodeur LiDAR BEV](bev-lidar-encoder.md), avec ses
-piliers de 20 cm et son contexte avant fusion. Les checkpoints actuels,
-l'architecture du backbone et l'entraînement de profondeur sont conservés. Aucun entraînement
+L'[encodeur LiDAR BEV](bev-lidar-encoder.md), avec ses piliers de 20 cm et son
+contexte avant fusion, dispose aussi d'un premier contrôle fonctionnel. La
+prochaine étape est sa relecture puis la préparation de la fusion des branches.
+Les checkpoints actuels, l'architecture du backbone et l'entraînement de
+profondeur sont conservés. Aucun entraînement
 mixte ni score de profondeur parfait n'est requis pour ce prototype.
 
 Les critères à jour sont suivis dans les

@@ -2,7 +2,8 @@
 
 Mise à jour : 2026-11-03.
 
-Statut : **piliers, PFN, scatter et premier contexte BEV implémentés**.
+Statut : **premier encodeur fonctionnel implémenté, inspecté sur CPU et testé
+dans un diagnostic GPU borné**. Il n'est pas entraîné à la détection.
 Ce document distingue le contrat NumPy actuel, les choix retenus et les
 paramètres/variantes à valider. Il ne décrit ni un détecteur entraîné ni une
 reproduction complète de PointPillars.
@@ -76,11 +77,13 @@ Les cellules hors couverture caméra peuvent donc conserver du support LiDAR.
 Les masques des deux modalités restent distincts.
 
 Les inspections caméra précédentes utilisaient 0,50 m, soit 100 x 100 cellules.
-Le lift accepte déjà une résolution configurable : il faudra le recalculer à
-0,20 m depuis les features image et leur support de profondeur, sans interpoler
+Le lift accepte une résolution configurable : l'inspection conjointe le recalcule
+à 0,20 m depuis les features image et leur support de profondeur, sans interpoler
 la carte BEV 100 x 100. Changer ce binning ne nécessite pas, à lui seul, de
-réentraîner le backbone camera-depth. L'inspection à 20 cm reste à effectuer ;
-le défaut de la CLI reste actuellement à 0,50 m.
+réentraîner le backbone camera-depth. Le défaut caméra seul de la CLI reste
+à 0,50 m. L'inspection conjointe est
+maintenant disponible avec `--with-lidar --resolution 0.2`, dans un dossier
+distinct des figures historiques.
 
 Le rapport des résolutions vaut 2,5 : un stride entier ne suffit pas à aligner
 ces deux grilles. Une égalité de shape ne suffit pas non plus : axes, origine,
@@ -303,10 +306,11 @@ canaux caméra `C1` pour une future concaténation.
 Le [workstream](workstreams/lidar-bev-encoder.md#progress) détaille les incréments.
 Les piliers, le PFN, le scatter et le contexte sont testés sur CPU, avec
 forward/backward sur une frame KITTI réelle et poids aléatoires. La suite
-complète passe à 517 tests réussis et un test CUDA ignoré. Aucun entraînement
-LiDAR n'est effectué. Le bilan et les compteurs avant/après sélection sont
-consignés dans ce workstream. L'inspection caméra/LiDAR à 20 cm et les mesures
-GPU restent à effectuer.
+complète passe à 528 tests réussis et un test CUDA ignoré. L'inspection conjointe
+à 20 cm et un diagnostic GPU séparé sont consignés dans le
+[workstream](workstreams/lidar-bev-encoder.md#4-scope-inspection-compatibility-and-resources).
+La revue visuelle par le développeur reste à faire ; aucun entraînement LiDAR
+n'est effectué.
 Les premiers critères sont géométriques et logiciels : cellules attendues,
 bords, séparation des batches, padding, cas vides, valeurs finies, backward et
 alignement caméra/LiDAR sur une grille non carrée pour détecter les transpositions.
@@ -319,9 +323,15 @@ bloque pas l'implémentation du premier encodeur.
 
 Passer de 100 x 100 à 250 x 250 représente 6,25 fois plus de cellules pour les
 tenseurs denses, pas nécessairement 6,25 fois la latence ou la mémoire globale.
-Sur le GPU de 4 Go, commencer les mesures avec batch 1 et profiler forward,
-backward et mémoire, sans extrapoler depuis la seule taille d'un tenseur.
-L'export ONNX/TensorRT et le temps réel restent à valider séparément.
+Le diagnostic `scripts/probe_lidar_bev.py` utilise un seuil local de **2 048 MiB
+libres**, sans changer le seuil caméra/commun de 2 500 MiB ni les contrôles de
+récupération/processus concurrents. Sur le GPU de 4 Go, un premier contrôle
+batch 1 a mesuré 11,0 ms en forward et 35,3 ms en forward/backward, pic PyTorch
+180,5 MiB. Ce n'est qu'une itération mesurée après warmup, sans caméra ni Adam.
+Le regroupement CPU a pris séparément 95,7 ms : aucune cadence temps réel
+globale ne doit être déduite du seul temps GPU. Plusieurs scènes, stabilité,
+latence p50/p95 et mémoire du futur modèle fusionné restent à mesurer.
+L'export ONNX/TensorRT reste à valider séparément.
 
 ## Références
 

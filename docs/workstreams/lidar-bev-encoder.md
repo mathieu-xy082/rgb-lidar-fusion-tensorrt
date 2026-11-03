@@ -6,10 +6,12 @@ Parent branch: `main` (camera-depth BEV lift / release 1.2.0).
 
 Updated: 2026-11-03.
 
-Status: scopes 1 to 3 implemented and CPU-tested: raw XYZI grouping, masked
+Status: scopes 1 to 4 implemented and initially validated: raw XYZI grouping, masked
 PFN, stride-1 scatter, and residual dilated pre-fusion context, preserving
 measurement evidence. A small multi-resolution reference was compared on CPU.
-Joint camera/LiDAR inspection and GPU resource measurements remain scope 4.
+Joint camera/LiDAR inspection at 20 cm and a bounded LiDAR-only GPU diagnostic
+are recorded below. Developer review of the artifacts remains separate from
+this technical validation; no deployment/stability claim is made.
 No fusion, detector, or LiDAR training integration is implemented.
 
 References:
@@ -233,16 +235,103 @@ GPU measurements are needed before selecting a deployment architecture.
 
 ### 4. Scope: inspection, compatibility, and resources
 
-- [ ] Recompute camera BEV directly at 0.20 m from image features and depth support.
-- [ ] Inspect synthetic and real KITTI alignment on identical grid bounds,
+- [x] Recompute camera BEV directly at 0.20 m from image features and depth support.
+- [x] Inspect synthetic and real KITTI alignment on identical grid bounds,
   including raw LiDAR outside camera coverage.
-- [ ] Keep 0.20 m artifacts separate from the historical 0.50 m inspections.
-- [ ] Run focused tests and existing camera-depth/lift regression checks.
-- [ ] Measure batch-1 GPU forward/backward latency and peak memory on the 4 GB
+- [x] Keep 0.20 m artifacts separate from the historical 0.50 m inspections.
+- [x] Run focused tests and existing camera-depth/lift regression checks.
+- [x] Measure batch-1 GPU forward/backward latency and peak memory on the 4 GB
   device; report settings and results rather than promising real-time operation.
 
 Exit criterion: reproducible inspection and validation report with no camera
 regression, explicit grid/evidence contracts, and measured resource limits.
+
+#### Joint inspection
+
+```bash
+pdm run python scripts/inspect_camera_bev.py \
+  --checkpoint results/training/kitti_camera_depth_block_dropout_512/checkpoints/latest.pt \
+  --source splatted --weight-by-splat-confidence --with-lidar --resolution 0.2
+```
+
+The existing camera-only mode keeps its 0.5 m default, four-panel figure and
+artifact schema. The opt-in joint mode writes under
+`results/analysis/camera_lidar_bev/res_0.2m/` by default, with a resolution/joint
+suffix even for explicit output directories. It recomputes camera BEV directly
+from full-resolution features, input depth/support, and calibration; it does
+not resize the historical 100x100 BEV. Existing 0.5 m artifacts are untouched.
+
+The nine panels show RGB, native ROI LiDAR, camera-FOV LiDAR, camera pixel
+counts, pre-cap LiDAR counts, support overlap, and separate camera/PFN/context
+feature RMS. Both feature grids share axes, bounds, origin and 20 cm cells.
+LiDAR weights are explicitly random (seed 13); RMS and overlap are not object
+scores or accuracy metrics. CPU initialization is isolated from global RNG
+state and does not seed CUDA. No holdout or learned-depth placement is used.
+The NPZ adds both LiDAR feature maps, evidence, source pillar indices, retained/
+dropped counts, and a categorical support map to the unchanged camera fields.
+
+On real `000000`, the epoch-5/step-2050 camera checkpoint gave 191,636 accepted
+splatted pixels in 2,579 cells. Native LiDAR retained all 62,984 ROI measurements
+in 6,246 cells before the per-pillar cap. Shared support: 2,408 cells; camera
+only: 171; LiDAR only: 3,838. Camera-only cells can arise from splatting and
+rounded projection/backprojection; they are not new raw measurements or proof
+of a calibration defect. Different support does not imply misalignment.
+
+The generated figure was inspected for axis orientation, scene placement and
+the expected larger native LiDAR coverage. No gross shift/inversion was seen.
+The context panel spreads activations without changing raw evidence. This is
+one geometric prototype inspection, not semantic validation or developer signoff.
+The trusted camera checkpoint SHA-256 remains
+`3561742ce6de01bf71e6ae290b8e5f707011cb16434e06f9bf3cee59d7d13ece`.
+
+#### Bounded GPU diagnostic and memory guard
+
+```bash
+timeout 90s pdm run python scripts/probe_lidar_bev.py \
+  --velodyne data/kitti/training/velodyne/000000.bin \
+  --device cuda --warmup 1 --iterations 1
+```
+
+Run in a fresh process. Incremental JSONL logs under `results/diagnostics/`
+record preflight, grouping, transfer, synchronized forward/backward, validation,
+and memory peaks. Existing log paths are refused. CPU mode tests the tool; it
+does not validate GPU health. The default is one warmup and three measured
+iterations per mode; the first hardware control above deliberately used one.
+No optimizer, checkpoint write, or automatic retry is performed. On failure,
+the tool does not synchronize again, empty the cache, or query CUDA counters.
+
+**The LiDAR-only threshold is 2,048 MiB (2 GiB)**, configurable through
+`--minimum-free-memory-mib`. This is a diagnostic starting margin, not an
+established requirement for every scene. The shared/camera preflight default
+remains **2,500 MiB**; recovery-action and concurrent-compute-process checks are
+unchanged. A lower memory threshold does not repair or prevent driver failures.
+
+Hardware control on 2026-11-03: RTX 500 Ada Generation Laptop, driver
+615.71.09, Torch 2.13.0+cu129, FP32 batch 1, 6,246 pillars/55,465 retained points.
+Preflight reported ready, 2,270 MiB free, no recovery action and no competing
+CUDA compute process. Both modes completed after one warmup and one measured
+iteration each:
+
+| LiDAR encoder mode | Measured wall time | Peak PyTorch allocation |
+| --- | ---: | ---: |
+| Eval forward | 11.0 ms | 122.9 MiB |
+| Train forward + backward | 35.3 ms | 180.5 MiB |
+
+CPU grouping took 95.7 ms separately; initial model setup/transfer took 150.8 ms.
+The GPU wall times exclude these, camera processing, I/O, optimizer state,
+fusion, heads and export. Peaks are PyTorch allocations, not all driver/desktop
+VRAM. This is a single indicative sample with synchronized diagnostics, not a
+p50/p95 benchmark, an end-to-end FPS result, or a long-run driver stability test.
+In particular, raw CPU grouping remains a latency bottleneck to investigate.
+Log: `results/diagnostics/lidar_bev_20261103T152254Z_182519.jsonl` (ignored).
+
+Local regression validation: 528 tests passed, one CUDA-only test skipped in
+the sandboxed suite. The real GPU diagnostic was run separately with hardware
+access. Tests cover joint sparse/splatted views, raw points outside camera FOV,
+checkpoint/input preservation, RNG isolation, incremental logs, no overwrite,
+preflight refusal before setup, and failure logging without retry. No notebook
+execution state was modified. Broader scenes, developer visual review, trained
+detection quality and deployment benchmarking remain follow-ups.
 
 ## Deferred validation
 

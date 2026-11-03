@@ -20,7 +20,8 @@ Le socle implémenté couvre :
 - un premier lift géométrique des features caméra vers BEV, avec masques,
   agrégation par cellule, tests de backward et inspection KITTI sur CPU ;
 - une préparation des piliers LiDAR bruts et un PFN/scatter vers BEV, avec
-  masques, compteurs et contexte dilaté résiduel testés, sans entraînement LiDAR ;
+  masques, compteurs et contexte dilaté résiduel testés, une inspection conjointe
+  caméra/LiDAR et un premier diagnostic GPU borné, sans entraînement LiDAR ;
 - des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
@@ -93,8 +94,10 @@ camera-depth qui prépare le lift est détaillé dans
 [docs/bev-cam-depth-backbone.md](docs/bev-cam-depth-backbone.md).
 La [conception de l'encodeur LiDAR](docs/bev-lidar-encoder.md) précise le
 chantier en cours : piliers de 20 cm, PFN/scatter et premier contexte spatial
-avant fusion sont implémentés et testés sur CPU. L'inspection conjointe des
-branches caméra/LiDAR et les mesures GPU restent à effectuer.
+avant fusion sont implémentés, inspectés sur une grille commune de 20 cm et
+testés dans un premier diagnostic GPU. Cela ne valide ni la détection ni le
+temps réel de la chaîne complète. Commandes et limites dans le
+[workstream LiDAR](docs/workstreams/lidar-bev-encoder.md#4-scope-inspection-compatibility-and-resources).
 
 ## Contrat LiDAR image-space
 

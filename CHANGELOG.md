@@ -26,6 +26,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Empty/odd/non-square grids and full PFN-to-context backward are CPU-tested.
   A reproducible CPU comparison against a small multi-resolution reference
   records parameter/timing trade-offs, without detection or GPU claims.
+- Opt-in joint camera/LiDAR BEV inspection on a shared configurable grid,
+  keeping historical camera-only defaults/artifacts and native LiDAR outside
+  camera coverage. Figures and NPZ/JSON separate measurements, splat support,
+  and random-weight LiDAR features rather than claiming semantic scores.
+- Bounded, incremental-log LiDAR-only CPU/CUDA diagnostics for batch-1 FP32
+  PFN/scatter/context forward/backward and peak PyTorch allocation, without
+  optimizer/checkpoint writes or retries after failure. The local default
+  memory guard is 2048 MiB; camera preflight remains at 2500 MiB. One measured
+  GPU iteration per mode completed on real KITTI after warmup; this is not an
+  end-to-end real-time, detection-quality, or long-run stability result.
 
 ## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added

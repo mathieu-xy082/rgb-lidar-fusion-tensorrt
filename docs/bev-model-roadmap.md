@@ -8,8 +8,8 @@ Statut : **design de référence**. Le backbone camera-depth préalable est
 implémenté, évalué sur les pilotes random/blocs 512 frames et clôturé après
 inspection qualitative. Le premier lift BEV géométrique est implémenté, relu
 et inspecté ; il est intégré dans main depuis la release 1.2.0. La branche
-LiDAR dispose des piliers, du PFN et d'un scatter BEV testés sur CPU ; son
-contexte spatial, la fusion et les heads 3D restent à développer.
+LiDAR dispose des piliers, du PFN, du scatter et d'un premier contexte spatial
+testés sur CPU ; la fusion et les heads 3D restent à développer.
 
 Documents liés :
 
@@ -252,8 +252,9 @@ proposée de 50 x 50 m, les sorties auront 250 x 250 cellules. Le lift caméra
 sera recalculé à cette résolution, sans interpoler les anciennes cartes à 0,50 m.
 
 Avant fusion, le bloc LiDAR vise un champ réceptif théorique d'environ
-3,8 x 3,8 m. Quatre convolutions de dilatations `(1, 2, 2, 4)` sont un candidat
-à comparer à un petit backbone multi-résolution, pas une architecture validée.
+3,8 x 3,8 m. Quatre convolutions de dilatations `(1, 2, 2, 4)`, en deux blocs
+résiduels à 32 canaux, sont implémentées et vérifiées sur CPU. Une variante
+multi-résolution est comparée, sans validation de précision ou performance GPU.
 Le PFN implémenté utilise BatchNorm sur les seuls points valides plutôt que la
 variante LayerNorm initialement évoquée, avec une sortie à 32 canaux et un
 scatter à stride 1. Le backbone BEV commun apportera ensuite le contexte
@@ -353,8 +354,9 @@ implémentés ; le critère synthétique RGB + enriched LiDAR + calibration vers
 `camera_bev`, avec grille explicite et backward fonctionnel, est atteint.
 
 La [phase BEV 2](#phase-bev-2---branche-lidar-et-fusion) dispose maintenant de la
-construction des piliers, du PFN et du scatter testés. Ajouter ensuite le
-contexte spatial LiDAR. Suivre les incréments du
+construction des piliers, du PFN, du scatter et du contexte spatial testés.
+Inspecter ensuite les branches sur la même grille de 20 cm et mesurer les
+ressources GPU de l'encodeur. Suivre les incréments du
 [workstream LiDAR BEV](workstreams/lidar-bev-encoder.md#progress), sur un
 repère et une grille compatibles avec camera BEV, avant la fusion et les
 heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.

@@ -37,8 +37,8 @@ Pour comprendre le projet dans son état actuel :
 | [BEV camera-depth backbone](bev-cam-depth-backbone.md) | V1 et premier raccord BEV clôturés | Justification du holdout et [contrats techniques du lift](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) |
 | [Camera-depth workstream](workstreams/camera-depth-backbone.md) | Prototype clôturé | Pilotes 512 frames, validation croisée, inspection de 000366, limites et historique GPU |
 | [Camera-depth BEV lift](workstreams/camera-depth-bev-lift.md) | Intégré dans main, release 1.2.0 | Raccord et backward testés ; trois variantes BEV inspectées sur 000000 |
-| [BEV LiDAR encoder](bev-lidar-encoder.md) | Partiel : piliers et PFN/scatter implémentés | Contrats NumPy/Torch, masques et backward ; contexte pré-fusion encore proposé |
-| [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | En cours, étapes 1 et 2 validées | Piliers et PFN/scatter testés ; suites : contexte, inspection et ressources |
+| [BEV LiDAR encoder](bev-lidar-encoder.md) | Piliers, PFN/scatter et premier contexte implémentés | Contrats NumPy/Torch et contexte dilaté ; validation CPU, sans entraînement LiDAR |
+| [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | En cours, étapes 1 à 3 validées sur CPU | Champ réceptif et comparaison multi-résolution ; suites : inspection conjointe et ressources GPU |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 
 ## Guides techniques

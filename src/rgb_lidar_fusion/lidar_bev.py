@@ -1,4 +1,4 @@
-"""Masked pillar feature encoding and stride-1 scatter into the shared BEV grid."""
+"""Masked pillar encoding, stride-1 scatter, and local spatial BEV context."""
 
 from __future__ import annotations
 
@@ -90,6 +90,74 @@ class LidarBEVFeatures:
     @property
     def observed_mask(self) -> torch.Tensor:
         return self.point_count > 0
+
+
+class _BEVResidualBlock(nn.Module):
+    def __init__(self, channels: int, dilations: tuple[int, int]) -> None:
+        super().__init__()
+        self.convs = nn.Sequential(
+            nn.Conv2d(channels, channels, 3, padding=dilations[0], dilation=dilations[0], bias=False),
+            nn.ReLU(),
+            nn.Conv2d(channels, channels, 3, padding=dilations[1], dilation=dilations[1], bias=False),
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        return F.relu(features + self.convs(features))
+
+
+class LidarBEVContext(nn.Module):
+    """Add pre-fusion context without changing the metric grid or raw evidence.
+
+    Two residual blocks use 3x3 convolutions with dilations (1, 2) and (2, 4).
+    All four have stride 1 and padding equal to dilation, preserving cell
+    centers even for odd/non-square grids. Width stays constant (default 32).
+    No bias or normalization is added: zero input stays zero, and spatial
+    normalization statistics cannot introduce dependencies outside the local
+    convolutional field. The PFN's own BatchNorm is unchanged.
+
+    The maximum theoretical field is 1 + 2*(1+2+2+4) = 19 cells per axis,
+    or 3.8 m at 20 cm resolution, not a guaranteed learned/effective field or
+    proof of object recognition. At ROI edges, padding adds no observations.
+    Non-zero output can propagate into unobserved neighboring cells without
+    changing point_count/observed_mask. No support mask is reapplied to erase it.
+
+    Inputs and model must already share dtype/device (float32 or float64).
+    Counts are cloned into the result; inputs are never mutated. Empty batches
+    and empty samples are valid. No fusion, detector, or training runner is added.
+    """
+
+    dilations = (1, 2, 2, 4)
+    receptive_field_cells = 19
+
+    def __init__(self, *, channels: int = 32) -> None:
+        super().__init__()
+        if isinstance(channels, bool) or not isinstance(channels, Integral) or channels < 1:
+            raise ValueError("channels must be a positive integer.")
+        self.channels = int(channels)
+        self.blocks = nn.Sequential(
+            _BEVResidualBlock(self.channels, self.dilations[:2]),
+            _BEVResidualBlock(self.channels, self.dilations[2:]),
+        )
+
+    def forward(self, bev: LidarBEVFeatures) -> LidarBEVFeatures:
+        features, counts = bev.features, bev.point_count
+        if (
+            features.ndim != 4 or features.shape[1] != self.channels
+            or features.shape[2] < 1 or features.shape[3] < 1
+        ):
+            raise ValueError("features must have shape [B, channels, Hbev, Wbev] with positive spatial sizes.")
+        if features.dtype not in (torch.float32, torch.float64):
+            raise ValueError("features must have float32 or float64 dtype.")
+        parameter = next(self.parameters())
+        if features.device != parameter.device or features.dtype != parameter.dtype:
+            raise ValueError("features must share the module's device and dtype.")
+        if counts.shape != (features.shape[0], 1, *features.shape[2:]) or counts.dtype != torch.int64:
+            raise ValueError("point_count must have int64 shape [B, 1, Hbev, Wbev] aligned with features.")
+        if counts.device != features.device:
+            raise ValueError("point_count must share the feature device.")
+        if not torch.isfinite(features).all() or torch.any(counts < 0):
+            raise ValueError("features must be finite and point_count non-negative.")
+        return LidarBEVFeatures(features=self.blocks(features), point_count=counts.clone())
 
 
 def scatter_pillar_features(

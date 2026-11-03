@@ -26,6 +26,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Premier raccord caméra BEV | Grille, masques, agrégation et gradients testés ; trois variantes inspectées sur `000000`, relecture terminée |
 | Construction des piliers LiDAR | Entrée XYZI brute, grille 20 cm, neuf features, masques et sélection reproductible ; tests CPU et contrôle KITTI |
 | PFN et scatter LiDAR | Linear/BatchNorm/ReLU/max masqué, features BEV stride 1, comptes pré-cap conservés ; tests et backward CPU |
+| Premier contexte LiDAR BEV | Deux blocs résiduels dilatés, support 19x19 vérifié, grille/mesures conservées ; comparaison multi-résolution CPU |
 
 ## Bilan camera-depth v1
 
@@ -115,9 +116,8 @@ Architecture de référence :
 Le [design LiDAR](bev-lidar-encoder.md) retient des piliers de 20 cm et un
 contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra sera recalculé
 sur la même grille ; pour la ROI initiale proposée, elle passe de 100 x 100
-à 250 x 250 cellules. Le PFN de référence et le scatter sont implémentés ; le
-candidat à convolutions dilatées reste à développer et à valider, sans détection
-apprise à ce stade.
+à 250 x 250 cellules. Le PFN, le scatter et le premier bloc de contexte dilaté
+sont implémentés et testés sur CPU, sans détection apprise à ce stade.
 
 La construction déterministe des piliers est implémentée sans réseau neuronal :
 les compteurs avant sélection, masques, indices source et features des points
@@ -131,10 +131,17 @@ zéro/un point valide, cartes BEV et gradients finis, compteurs bruts conservés
 Le contrôle KITTI `000000` utilise des poids aléatoires, sans optimizer step ;
 il ne constitue pas un résultat de détection ni une mesure de performance GPU.
 
+Le contexte résiduel à dilatations `(1, 2, 2, 4)` est aussi implémenté : support
+19x19 vérifié, sortie à stride 1 et mesures brutes conservées. La suite complète
+atteint 517 tests réussis et un test CUDA ignoré. Une variante multi-résolution
+est plus rapide dans le contrôle CPU local, mais le bloc dilaté reste la première
+référence fonctionnelle pour son champ uniforme et son alignement direct ;
+aucun optimum latence/précision ni déploiement GPU n'est démontré.
+
 Le [workstream LiDAR](workstreams/lidar-bev-encoder.md#progress) regroupe les
 tâches par périmètre : piliers/contrat, PFN/scatter, contexte, inspection et
-mesures de ressources. Le prochain incrément sera le bloc de contexte spatial
-avant fusion, avec vérification de son champ réceptif et de l'alignement.
+mesures de ressources. Le prochain incrément sera l'inspection conjointe des
+branches sur la grille de 20 cm, puis les mesures GPU de l'encodeur complet.
 
 ### Ordre des incréments
 

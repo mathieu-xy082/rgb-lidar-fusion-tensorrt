@@ -2,7 +2,7 @@
 
 Mise à jour : 2026-11-03.
 
-Statut : **piliers, PFN et scatter implémentés ; contexte BEV à développer**.
+Statut : **piliers, PFN, scatter et premier contexte BEV implémentés**.
 Ce document distingue le contrat NumPy actuel, les choix retenus et les
 paramètres/variantes à valider. Il ne décrit ni un détecteur entraîné ni une
 reproduction complète de PointPillars.
@@ -208,12 +208,12 @@ backward vers les features retenues et les paramètres ; le prétraitement NumPy
 et les coordonnées discrètes ne deviennent pas différentiables. Aucun raccord
 au runner d'entraînement n'est ajouté.
 
-## Contexte avant fusion : candidat dilaté
+## Contexte avant fusion : premier bloc dilaté
 
 Quatre convolutions 3 x 3 de stride 1 sans dilation couvriraient seulement
 9 x 9 cellules, soit 1,8 x 1,8 m. Ce contexte est inférieur à notre cible.
 
-Un candidat léger conserve quatre convolutions, mais utilise les dilatations
+Le premier bloc implémenté conserve quatre convolutions et utilise les dilatations
 `(1, 2, 2, 4)`, avec stride 1 et padding égal à la dilation :
 
 | Couche | Dilation | Champ réceptif cumulé | Étendue en mètres |
@@ -223,26 +223,68 @@ Un candidat léger conserve quatre convolutions, mais utilise les dilatations
 | Conv 3 | 2 | 11 x 11 | 2,2 x 2,2 |
 | Conv 4 | 4 | 19 x 19 | 3,8 x 3,8 |
 
-Pour ces convolutions à stride 1 : `R = 1 + sum((k_i - 1) * d_i) = 19`.
-Le calcul porte sur les dépendances spatiales des convolutions, à l'intérieur
-de la grille ; le padding ne fournit pas d'observations hors ROI.
+`lidar_bev.LidarBEVContext` regroupe les couches en deux blocs résiduels :
+
+```text
+Bloc 1 : y = ReLU(x + Conv_d2(ReLU(Conv_d1(x))))
+Bloc 2 : z = ReLU(y + Conv_d4(ReLU(Conv_d2(y))))
+```
+
+Ici, `Conv_dk` est une convolution 3x3 de dilation k ; x et z sont les cartes
+BEV d'entrée et de sortie, sur la même grille.
+
+La largeur reste constante, 32 par défaut ; les convolutions sont sans biais.
+Aucune normalisation spatiale n'est ajoutée : les cellules vides n'entrent pas
+dans de nouvelles statistiques globales et une entrée nulle reste nulle. La
+BatchNorm du PFN ne change pas. Chaque convolution conserve les centres de
+cellules grâce à stride 1 et padding égal à la dilation, y compris pour des
+dimensions impaires ou non carrées.
+
+Pour ces convolutions : `R = 1 + sum((k_i - 1) * d_i) = 19`. Le calcul porte
+sur les dépendances du bloc par rapport à la grille issue du scatter, pas sur
+une qualité apprise. Le padding ne fournit pas d'observations hors ROI. Des tests
+contrôlés par gradient et impulsion vérifient le support complet 19x19, son
+centrage et son absence de débordement vers le bord opposé.
+
+À la suite de l'exemple PFN/scatter :
+
+```python
+from rgb_lidar_fusion.lidar_bev import LidarBEVContext
+
+context = LidarBEVContext().eval()  # Poids aleatoires, pas un detecteur entraine.
+with torch.no_grad():
+    contextual_bev = context(bev)
+lidar_bev = contextual_bev.features  # Meme grille ; compteurs/masque conserves.
+```
+
+Le module reçoit/retourne `LidarBEVFeatures`, sans modifier son entrée. Il copie
+les compteurs de mesures et ne remasque pas les features propagées dans les
+cellules sans observation. Les batches vides et cartes nulles restent valides,
+avec backward fini. Aucun raccord au training, fusion ou head n'est ajouté.
 
 À largeur constante, la dilation n'augmente pas le nombre de coefficients
 des noyaux. Elle ne garantit cependant ni la même latence sur GPU, ni une
 meilleure précision. Le champ réceptif effectif appris peut être plus restreint
 que ce maximum théorique ; la sparsité LiDAR peut aussi limiter le contexte utile.
 
-**Cette séquence est une proposition, pas un choix validé ni une architecture
-PointPillars standard.** Elle devra être comparée à un petit backbone
-multi-résolution. Si celui-ci change le stride, sa sortie et celle de la caméra
-devront être réalignées explicitement. Largeur, normalisation du bloc et
-connexions résiduelles restent à préciser avant son implémentation.
+**Ce choix est validé fonctionnellement, pas en précision de détection ni en
+performance GPU ; ce n'est pas le backbone PointPillars standard.** Le script
+`scripts/compare_lidar_bev_context.py` le compare sur CPU à une petite variante
+multi-résolution, avec un retour explicite à la grille d'origine par convolution
+transposée. Cette variante est plus rapide sur le contrôle CPU local, mais son
+champ varie entre 17 et 19 cellules selon la parité des indices de sortie.
+
+Le bloc dilaté reste la première référence pour son contexte uniforme, son
+alignement direct et ses 36 864 paramètres, contre 55 296 pour la variante.
+Ce compromis n'est pas une preuve d'optimalité. Le
+[workstream](workstreams/lidar-bev-encoder.md#cpu-comparison-and-first-context-choice)
+donne la commande, les mesures CPU, la structure de comparaison et les limites.
+Le choix pour le déploiement devra être réévalué avec supervision et mesures GPU.
 
 ## Sorties et sens des masques
 
-Le résultat actuel `LidarBEVFeatures` contient `features`, une copie des
-`point_count` fournis et la propriété `observed_mask`. Il décrit la carte
-**avant** le bloc de contexte ; le contrat cible après contexte est :
+`LidarBEVFeatures` contient `features`, une copie des `point_count` fournis et
+la propriété `observed_mask`, avant comme après le bloc de contexte :
 
 | Sortie | Shape | Sens |
 |---|---|---|
@@ -250,8 +292,8 @@ Le résultat actuel `LidarBEVFeatures` contient `features`, une copie des
 | `point_count` | `[B, 1, Hbev, Wbev]` | Mesures dans la ROI par cellule avant limitation des points |
 | `observed_mask` | `[B, 1, Hbev, Wbev]` | Présence d'au moins une mesure LiDAR |
 
-Avec le futur bloc de contexte, les features pourront devenir non nulles dans
-une cellule non observée grâce aux convolutions voisines. Cela ne la transformera
+Les features peuvent devenir non nulles dans une cellule non observée grâce
+aux convolutions voisines. Cela ne la transforme
 pas en mesure, en espace libre ou en prédiction d'occupation. Les compteurs restent ceux des
 mesures, pas ceux des activations. `C2` n'a pas besoin d'être égal au nombre de
 canaux caméra `C1` pour une future concaténation.
@@ -259,15 +301,16 @@ canaux caméra `C1` pour une future concaténation.
 ## Validation et limites
 
 Le [workstream](workstreams/lidar-bev-encoder.md#progress) détaille les incréments.
-Les piliers, le PFN et le scatter sont testés sur CPU, avec forward/backward
-sur une frame KITTI réelle et poids PFN aléatoires. La suite complète passe à
-472 tests réussis et un test CUDA ignoré. Aucun bloc de contexte n'est encore
-implémenté, aucun entraînement LiDAR effectué. Le bilan et les compteurs
-avant/après sélection sont consignés dans ce workstream.
+Les piliers, le PFN, le scatter et le contexte sont testés sur CPU, avec
+forward/backward sur une frame KITTI réelle et poids aléatoires. La suite
+complète passe à 517 tests réussis et un test CUDA ignoré. Aucun entraînement
+LiDAR n'est effectué. Le bilan et les compteurs avant/après sélection sont
+consignés dans ce workstream. L'inspection caméra/LiDAR à 20 cm et les mesures
+GPU restent à effectuer.
 Les premiers critères sont géométriques et logiciels : cellules attendues,
 bords, séparation des batches, padding, cas vides, valeurs finies, backward et
 alignement caméra/LiDAR sur une grille non carrée pour détecter les transpositions.
-Le champ réceptif convolutif sera également vérifié sur un cas contrôlé.
+Le champ réceptif convolutif est vérifié sur des cas contrôlés.
 
 Un backward synthétique ne prouve aucune reconnaissance d'objet. Pour évaluer
 l'autonomie de la branche, il faudra ultérieurement des annotations 3D, une
@@ -285,8 +328,8 @@ L'export ONNX/TensorRT et le temps réel restent à valider séparément.
 - [PointPillars, 2019](https://arxiv.org/abs/1812.05784) : PFN et backbone 2D
   multi-résolution ; notre cible n'en reproduit pas le détecteur complet.
 - [Convolutions dilatées, ICLR 2016](https://arxiv.org/abs/1511.07122) :
-  élargissement du contexte sans réduction de résolution ; la séquence proposée
-  ici n'est pas une recette validée pour notre dataset.
+  élargissement du contexte sans réduction de résolution ; la séquence retenue
+  ici est testée fonctionnellement, pas validée en détection sur notre dataset.
 - [PillarNeXt, CVPR 2023](https://arxiv.org/abs/2305.04925) : importance du
   backbone, du champ réceptif et de l'entraînement pour les approches par piliers ;
   ces résultats ne constituent pas une revendication SOTA pour notre projet.

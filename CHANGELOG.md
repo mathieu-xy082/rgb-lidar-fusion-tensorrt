@@ -18,8 +18,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pre-cap measurement evidence. Padding is excluded from normalization and
   pooling; empty/singleton training calls use unchanged BN running statistics.
   CPU tests and a randomly initialized KITTI forward/backward check cover this
-  first trainable representation; no spatial context, LiDAR training runner,
-  detection head, or GPU/export validation is introduced.
+  first trainable representation; no LiDAR training runner, detection head,
+  or GPU/export validation is introduced.
+- Residual LiDAR BEV context with four bias-free stride-1 convolutions at
+  dilations `(1, 2, 2, 4)`, preserving the grid and raw measurement evidence.
+  Controlled impulse/gradient tests verify a complete 19x19 receptive field.
+  Empty/odd/non-square grids and full PFN-to-context backward are CPU-tested.
+  A reproducible CPU comparison against a small multi-resolution reference
+  records parameter/timing trade-offs, without detection or GPU claims.
 
 ## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added

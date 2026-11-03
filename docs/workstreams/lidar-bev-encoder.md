@@ -6,10 +6,11 @@ Parent branch: `main` (camera-depth BEV lift / release 1.2.0).
 
 Updated: 2026-11-03.
 
-Status: scopes 1 and 2 implemented and CPU-tested: raw XYZI grouping, masked
-PFN, stride-1 scatter, and preserved measurement evidence. No context block,
-fusion, detector, or LiDAR training integration is implemented. The pre-fusion
-context objective is agreed; its architecture remains a proposed choice.
+Status: scopes 1 to 3 implemented and CPU-tested: raw XYZI grouping, masked
+PFN, stride-1 scatter, and residual dilated pre-fusion context, preserving
+measurement evidence. A small multi-resolution reference was compared on CPU.
+Joint camera/LiDAR inspection and GPU resource measurements remain scope 4.
+No fusion, detector, or LiDAR training integration is implemented.
 
 References:
 
@@ -40,8 +41,8 @@ results at 0.5 m; the new shared-grid inspection will use 0.2 m explicitly.
 - [x] Record a 19-cell receptive-field candidate and its limitations.
 - [x] Distinguish agreed choices, proposed parameters, and unimplemented work.
 
-These preparation checks record design discussion only. Scope 1 validation is
-recorded below; a 3.8 m theoretical receptive field is not object-recognition evidence.
+These preparation checks record design discussion only. Validation for scopes
+1 to 3 is recorded below; a theoretical field is not object-recognition evidence.
 
 ### 1. Scope: raw XYZI input, pillars, and shared grid
 
@@ -148,18 +149,87 @@ into neighboring cells.
 
 ### 3. Scope: pre-fusion spatial context
 
-- [ ] Specify width, normalization, activation, and any residual connections.
-- [ ] Evaluate the four-convolution candidate with dilations `(1, 2, 2, 4)`,
+- [x] Specify width, normalization, activation, and any residual connections.
+- [x] Evaluate the four-convolution candidate with dilations `(1, 2, 2, 4)`,
   stride 1, matching padding, and a 19 x 19 cell theoretical receptive field.
-- [ ] Verify preserved grid alignment and receptive-field support on a
+- [x] Verify preserved grid alignment and receptive-field support on a
   controlled convolution test, independently of random trained activations.
-- [ ] Compare with a small multi-resolution alternative before declaring the
+- [x] Compare with a small multi-resolution alternative before declaring the
   context architecture validated; document any output-stride alignment.
-- [ ] Test finite forward/backward and distinguish propagated features from
+- [x] Test finite forward/backward and distinguish propagated features from
   direct observations in empty cells.
 
 Exit criterion: a documented context choice with checked spatial dependencies,
 shape/alignment, and resource trade-offs, without claiming learned detections.
+
+Implemented as `lidar_bev.LidarBEVContext`, default width 32, with two residual
+blocks. Each block applies Conv/ReLU/Conv, adds its input, then applies ReLU.
+The dilation pairs are `(1, 2)` and `(2, 4)`; all convolutions use 3x3 kernels,
+stride 1, padding equal to dilation, and no bias. No spatial normalization is
+added, preserving strict local dependencies and a zero response to empty input.
+The existing PFN BatchNorm is unchanged. This is a first functional reference,
+not a detector-quality or state-of-the-art architecture selection.
+
+`context(scattered_bev)` accepts/returns `LidarBEVFeatures`, preserving shape,
+axes, cell centers, and cloned pre-cap measurement counts. Features may spread
+into cells whose observed mask stays false; no measurement mask is reapplied
+to erase context. Empty samples and empty batches have finite zero backward.
+No new device move, trainable placement, or change to PFN/scatter keys is added.
+
+Controlled positive-weight tests verify an exact, contiguous 19x19 input-cell
+support for an interior output, in train and eval modes. The support is relative
+to the scattered feature grid; 20 cm cells give 3.8 m. Impulse tests check its
+center and ROI clipping without wraparound; residual identity tests and odd,
+even, non-square shapes check that shape preservation does not hide a shift.
+
+Validation on 2026-11-03: 45 new context/comparison tests passed; the complete
+suite passed with 517 tests and one CUDA-only skip. Tests include numerical
+gradients, unchanged evidence, finite parameter/input backward through the
+complete PFN/scatter/context path, and zero padding gradients. Camera tests,
+depth checkpoints, and notebooks were not modified.
+
+On real KITTI `000000`, CPU forward/backward with random PFN/context weights
+returned `[1,32,250,250]`, preserving 6,246 observed cells and 62,984 pre-cap
+points. Features became non-zero in 21,069 unobserved cells; these are contextual
+activations, not new measurements or detected objects. The raw cloud was
+unchanged. No optimizer step, checkpoint, learned metric, or GPU run was produced.
+
+#### CPU comparison and first context choice
+
+Reproduce with:
+
+```bash
+pdm run python scripts/compare_lidar_bev_context.py --iterations 7 --warmup 2
+```
+
+The comparison-only alternative uses a fine 3x3 Conv/ReLU, a stride-2 3x3
+Conv/ReLU, three coarse 3x3 Conv/ReLU layers, then a stride-2 3x3 transposed
+convolution plus the fine branch and ReLU. Width remains 32, with no bias or
+normalization. The downsampled index-zero center is preserved; explicit
+transposed-convolution `output_size` restores even/odd/non-square dimensions,
+without a fractional resize. Its field is 17 cells at even output indices and
+19 at odd indices, independently per axis, as checked by controlled gradients.
+It is an experimental reference in the script, not a second production API.
+
+Local CPU control, FP32 `[1,32,250,250]`, one Torch thread, two warmups,
+median of seven iterations, random weights, context only:
+
+| Block | Parameters | Forward (ms) | Forward + backward (ms) |
+| --- | ---: | ---: | ---: |
+| Dilated residual | 36,864 | 73.8 | 289.2 |
+| Multi-resolution reference | 55,296 | 38.0 | 106.7 |
+
+The JSON report is ignored under
+`results/analysis/lidar_bev/context_comparison_cpu.json`. Both variants use the
+same input validation/evidence-copying path. Timing excludes raw grouping,
+PFN, detection, optimizer updates, and GPU work; reported parameter storage is
+not peak activation/workspace memory. CPU measurements vary with the host/load.
+
+The dilated block is retained as the first functional reference for its uniform
+19-cell context, direct stride-1 grid alignment, and fewer parameters. The
+multi-resolution alternative is faster in this CPU control; the dilated choice
+is **not** a demonstrated latency/accuracy optimum. Detection supervision and
+GPU measurements are needed before selecting a deployment architecture.
 
 ### 4. Scope: inspection, compatibility, and resources
 

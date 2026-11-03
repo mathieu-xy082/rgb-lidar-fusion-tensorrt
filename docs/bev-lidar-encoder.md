@@ -2,7 +2,7 @@
 
 Mise à jour : 2026-11-03.
 
-Statut : **préparation des piliers implémentée ; encodeur appris à développer**.
+Statut : **piliers, PFN et scatter implémentés ; contexte BEV à développer**.
 Ce document distingue le contrat NumPy actuel, les choix retenus et les
 paramètres/variantes à valider. Il ne décrit ni un détecteur entraîné ni une
 reproduction complète de PointPillars.
@@ -138,7 +138,7 @@ Ce prétraitement CPU n'est pas différentiable et n'est pas encore raccordé au
 dataset ou au runner d'entraînement. L'import du module NumPy ne charge pas Torch ;
 la configuration existante `BEVGridConfig` reste exposée par le module caméra.
 
-## Features actuelles et PFN de référence proposé
+## PFN et scatter implémentés
 
 Pour chaque point retenu d'un pilier, les neuf features implémentées reprennent
 le PointPillars original :
@@ -153,22 +153,60 @@ Les coordonnées sont métriques dans le repère LiDAR ; les conventions
 d'intensité doivent être explicites. Aucun canal de splatting image n'entre
 dans ce PFN. Les moyennes sont calculées sur les points retenus, sans padding.
 
-Paramètre actuel et étapes neuronales encore proposées :
+Configuration actuelle :
 
 - au plus 64 points par pilier par défaut, sélection et compteurs testés ;
-- PFN `Linear(9, 32) -> BatchNorm -> ReLU -> max par canal entre les points` ;
+- PFN `Linear(9, 32, bias=False) -> BatchNorm -> ReLU -> max par canal entre les points` ;
 - scatter des vecteurs de piliers vers `[B, 32, 250, 250]` pour la ROI ci-dessus.
 
-La construction des piliers exclut déjà le padding du calcul des centroïdes.
-Le futur PFN devra aussi l'exclure de l'agrégation et éviter qu'il biaise les
-statistiques de normalisation ; un pilier vide ne doit pas créer de fausse
-observation. Les masques et cas vides sont testés avant le réseau complet.
+`lidar_bev.PillarFeatureNet` reçoit les features Torch `[P, M, 9]` et leur
+masque booléen `[P, M]`. Seuls les points valides passent dans Linear,
+BatchNorm1d (`eps=1e-3`, `momentum=0.01`) et ReLU ; le max est ensuite effectué
+par pilier et canal. Le padding n'entre ni dans les statistiques ni dans
+l'agrégation, même s'il contient NaN/Inf. Un pilier entièrement masqué rend
+un vecteur nul. La largeur est configurable, avec 32 canaux par défaut.
 
-**BatchNorm est la référence proposée**, contrairement à l'idée initiale de
+**BatchNorm est la référence implémentée**, contrairement à l'idée initiale de
 LayerNorm. Un petit batch ne rend pas automatiquement BatchNorm inutilisable :
-les statistiques peuvent agréger plusieurs points et piliers. LayerNorm reste
-une variante possible, pas une amélioration démontrée. La largeur 32, contre
-64 dans le PFN original, est un compromis proposé, pas une décision de précision.
+les statistiques agrègent les points valides des différents piliers. En mode
+training, avec zéro ou un seul point valide au total, le PFN utilise les
+statistiques courantes sans les mettre à jour, ni incrémenter le compteur BN.
+Les gradients vers les features et paramètres restent connectés. Les valeurs
+initiales moyenne=0/variance=1 ne sont pas une calibration apprise.
+
+LayerNorm reste une variante possible, pas une amélioration démontrée. La
+largeur 32, contre 64 dans le PFN original, est un premier compromis logiciel,
+pas un résultat validé en détection.
+
+Le scatter reçoit un vecteur `[P, C]` par cellule occupée, les indices
+`[P, 3]` et les compteurs pré-cap `[B, 1, Hbev, Wbev]`. Il conserve strictement
+les axes et le stride 1, sans interpolation. Les indices doivent couvrir
+exactement les cellules de compteur positif ; les doublons et coordonnées
+invalides sont rejetés. Les cellules vides restent nulles. Aucun voisinage
+spatial n'est encore traité.
+
+À la suite de l'exemple de construction des piliers :
+
+```python
+import torch
+from rgb_lidar_fusion.lidar_bev import PillarFeatureNet, scatter_pillar_features
+
+pfn = PillarFeatureNet().eval()  # Poids aleatoires, pas un modele entraine.
+point_features = torch.from_numpy(pillars.features)
+with torch.no_grad():
+    vectors = pfn(point_features, torch.from_numpy(pillars.point_mask))
+    bev = scatter_pillar_features(
+        vectors, indices=torch.from_numpy(pillars.indices),
+        point_count=torch.from_numpy(pillars.point_count),
+    )
+lidar_bev = bev.features  # [B, 32, Hbev, Wbev], avant contexte spatial.
+```
+
+Les tenseurs doivent partager dtype et device avec le PFN, sans conversion ni
+déplacement implicite. Le PFN/scatter accepte float32/float64 et fournit un
+backward vers les features retenues et les paramètres ; le prétraitement NumPy
+et les coordonnées discrètes ne deviennent pas différentiables. Aucun raccord
+au runner d'entraînement n'est ajouté.
 
 ## Contexte avant fusion : candidat dilaté
 
@@ -202,26 +240,30 @@ connexions résiduelles restent à préciser avant son implémentation.
 
 ## Sorties et sens des masques
 
-Contrat proposé :
+Le résultat actuel `LidarBEVFeatures` contient `features`, une copie des
+`point_count` fournis et la propriété `observed_mask`. Il décrit la carte
+**avant** le bloc de contexte ; le contrat cible après contexte est :
 
 | Sortie | Shape | Sens |
 |---|---|---|
-| `lidar_bev` | `[B, C2, Hbev, Wbev]` | Features après contexte LiDAR ; C2 proposé à 32 |
+| `lidar_bev` | `[B, C2, Hbev, Wbev]` | Features après contexte LiDAR ; PFN actuel à 32 canaux |
 | `point_count` | `[B, 1, Hbev, Wbev]` | Mesures dans la ROI par cellule avant limitation des points |
 | `observed_mask` | `[B, 1, Hbev, Wbev]` | Présence d'au moins une mesure LiDAR |
 
-Les features peuvent devenir non nulles dans une cellule non observée grâce
-aux convolutions voisines. Cela ne transforme pas cette cellule en mesure,
-en espace libre ou en prédiction d'occupation. Les compteurs restent ceux des
+Avec le futur bloc de contexte, les features pourront devenir non nulles dans
+une cellule non observée grâce aux convolutions voisines. Cela ne la transformera
+pas en mesure, en espace libre ou en prédiction d'occupation. Les compteurs restent ceux des
 mesures, pas ceux des activations. `C2` n'a pas besoin d'être égal au nombre de
 canaux caméra `C1` pour une future concaténation.
 
 ## Validation et limites
 
 Le [workstream](workstreams/lidar-bev-encoder.md#progress) détaille les incréments.
-La construction des piliers est validée sur CPU et sur une frame KITTI réelle ;
-aucun PFN ni bloc de contexte appris n'est encore implémenté. Le bilan et les
-compteurs avant/après sélection sont consignés dans ce workstream.
+Les piliers, le PFN et le scatter sont testés sur CPU, avec forward/backward
+sur une frame KITTI réelle et poids PFN aléatoires. La suite complète passe à
+472 tests réussis et un test CUDA ignoré. Aucun bloc de contexte n'est encore
+implémenté, aucun entraînement LiDAR effectué. Le bilan et les compteurs
+avant/après sélection sont consignés dans ce workstream.
 Les premiers critères sont géométriques et logiciels : cellules attendues,
 bords, séparation des batches, padding, cas vides, valeurs finies, backward et
 alignement caméra/LiDAR sur une grille non carrée pour détecter les transpositions.

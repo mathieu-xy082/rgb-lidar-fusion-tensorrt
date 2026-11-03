@@ -6,10 +6,10 @@ Parent branch: `main` (camera-depth BEV lift / release 1.2.0).
 
 Updated: 2026-11-03.
 
-Status: scope 1 implemented and CPU-tested: raw XYZI grouping, nine point
-features, measurement counts, and reproducible overflow selection. No PFN,
-context block, fusion, or detector is implemented. The pre-fusion context
-objective is agreed; neural architecture parameters remain proposed choices.
+Status: scopes 1 and 2 implemented and CPU-tested: raw XYZI grouping, masked
+PFN, stride-1 scatter, and preserved measurement evidence. No context block,
+fusion, detector, or LiDAR training integration is implemented. The pre-fusion
+context objective is agreed; its architecture remains a proposed choice.
 
 References:
 
@@ -95,17 +95,56 @@ camera-BEV inspection at 20 cm, recognition quality, or GPU performance.
 
 ### 2. Scope: PFN, scatter, and measurement evidence
 
-- [ ] Confirm the PFN width and normalization implementation; use the standard
+- [x] Confirm the PFN width and normalization implementation; use the standard
   Linear/BatchNorm/ReLU/channel-wise-max pattern as the proposed reference.
-- [ ] Exclude padding from pooling and prevent padding from biasing normalization.
-- [ ] Scatter learned vectors while retaining pre-cap `point_count` and
+- [x] Exclude padding from pooling and prevent padding from biasing normalization.
+- [x] Scatter learned vectors while retaining pre-cap `point_count` and
   `observed_mask` separately from contextualized activations.
-- [ ] Test point-order invariance without overflow, padding, single-point
+- [x] Test point-order invariance without overflow, padding, single-point
   pillars, empty samples/batches, expected scatter cells, and finite backward.
 
 Exit criterion: finite `[B, C2, Hbev, Wbev]` features plus explicit measurement
 evidence, with gradients to PFN parameters and retained point features. Discrete
 pillar assignment does not promise gradients through cell selection.
+
+Implemented in `rgb_lidar_fusion.lidar_bev` as two explicit components:
+
+- `PillarFeatureNet(features, point_mask)` returns `[P, C]`, with C=32 by
+  default and configurable positive width. It applies bias-free Linear,
+  BatchNorm1d (`eps=1e-3`, `momentum=0.01`), and ReLU to **valid points only**,
+  then a masked per-pillar/channel max. Empty pillars return zero vectors.
+- `scatter_pillar_features(pillar_features, indices=..., point_count=...)`
+  returns `LidarBEVFeatures`: `[B, C, Hbev, Wbev]` features, a cloned pre-cap
+  count snapshot, and a derived observed mask. It preserves row-x/column-y and
+  stride 1. All positive-count cells must have exactly one pillar; duplicate,
+  missing, out-of-grid, and empty-cell indices are rejected.
+
+Inputs are explicit Torch tensors already placed on the module's dtype/device;
+there is no hidden NumPy conversion, device move, or dataset/runner integration.
+The PFN supports float32/float64. Non-finite selected features are rejected;
+masked padding may contain arbitrary values without entering Linear or BN.
+
+Training batches with at least two valid points update BN statistics across
+those points, even when each pillar contains only one point. With zero or one
+valid point in the entire call, training uses existing running statistics
+without updating them or the BN batch counter; affine/input gradients remain
+connected. Initial statistics are mean=0/variance=1, not calibrated statistics.
+This explicit degenerate-input policy is not an alternative normalization study.
+
+Validation on 2026-11-03: 57 new PFN/scatter tests passed; the complete suite
+passed with 472 tests and one CUDA-only skip. Checks include a direct reference
+for Linear/BN/ReLU/max, unchanged BN statistics under extra/altered padding,
+point/pillar permutations, singleton and empty cases, malformed contracts,
+double-precision gradchecks, non-square placement, and finite parameter/input
+backward with zero padding gradients. Existing camera tests remain unchanged.
+
+A CPU forward/backward on real frame `000000` produced `[6246, 32]` pillar
+vectors and `[1, 32, 250, 250]` BEV features. All 6,246 observed cells and 62,984
+pre-cap measurements were preserved; the raw cloud was unchanged. The PFN was
+randomly initialized, with no optimizer step or checkpoint. This is not object
+recognition evidence, a 20 cm camera/LiDAR visual inspection, or a GPU benchmark.
+Spatial context still belongs to scope 3; this scatter does not spread features
+into neighboring cells.
 
 ### 3. Scope: pre-fusion spatial context
 

@@ -7,10 +7,10 @@ devenir une source de vérité générale.
 ## En cours
 
 - [LiDAR BEV encoder](lidar-bev-encoder.md) : construction des piliers de 20 cm
-  implémentée et testée sur CPU, avec features par point, masques et sélection
-  reproductible. PFN/scatter, contexte avant fusion et inspection conjointe
-  caméra/LiDAR restent à développer. Les choix durables et les variantes
-  proposées sont distingués dans le [design](../bev-lidar-encoder.md).
+  et PFN/scatter implémentés et testés sur CPU, avec masques, sélection
+  reproductible, compteurs et backward. Le contexte avant fusion et
+  l'inspection conjointe caméra/LiDAR restent à développer. Les choix durables
+  et les variantes proposées sont distingués dans le [design](../bev-lidar-encoder.md).
 
 Ce chantier précède la fusion et les heads 3D. Voir les
 [milestones](../milestones.md).

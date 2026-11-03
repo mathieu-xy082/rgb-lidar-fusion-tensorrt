@@ -19,14 +19,16 @@ Le socle implémenté couvre :
 - un backbone camera-depth dense entraîné par holdout de mesures LiDAR ;
 - un premier lift géométrique des features caméra vers BEV, avec masques,
   agrégation par cellule, tests de backward et inspection KITTI sur CPU ;
+- une préparation des piliers LiDAR bruts et un PFN/scatter vers BEV, avec
+  masques, compteurs et backward testés, sans entraînement ni contexte spatial ;
 - des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
 
 Le lift BEV est un prototype PyTorch fonctionnel, relu et inspecté, clôturé pour
 ce premier périmètre ; ce n'est pas une détection 3D ni un module validé temps réel.
-Le point cloud brut conservera ensuite sa propre branche BEV avant la fusion
-et les têtes de détection 3D. Voir le
+Le point cloud brut dispose aussi d'un premier PFN/scatter BEV ; son contexte
+spatial, la fusion et les têtes de détection 3D restent à développer. Voir le
 [workstream du lift](docs/workstreams/camera-depth-bev-lift.md).
 
 L'état détaillé et les critères de sortie sont suivis dans
@@ -90,8 +92,8 @@ La conception complète est décrite dans
 camera-depth qui prépare le lift est détaillé dans
 [docs/bev-cam-depth-backbone.md](docs/bev-cam-depth-backbone.md).
 La [conception de l'encodeur LiDAR](docs/bev-lidar-encoder.md) précise le
-chantier en cours : la construction des piliers de 20 cm est implémentée et
-testée ; le PFN et le contexte spatial avant fusion restent à développer.
+chantier en cours : les piliers de 20 cm et le PFN/scatter sont implémentés et
+testés ; le contexte spatial avant fusion reste à développer.
 
 ## Contrat LiDAR image-space
 

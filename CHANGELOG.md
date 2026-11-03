@@ -11,8 +11,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   targeting 20 cm cells. Returns nine point features, explicit padding/source
   indices, pre-cap measurement counts, and reproducible per-pillar overflow
   sampling (64 retained points by default). Empty samples/batches, finite-input
-  policy, camera-grid alignment, and input/RNG preservation are tested. No
-  learned LiDAR encoder, training integration, or detector is introduced yet.
+  policy, camera-grid alignment, and input/RNG preservation are tested. This
+  grouping step has no learned parameters.
+- Mask-aware `PillarFeatureNet` (Linear/BatchNorm/ReLU/max, 32 channels by
+  default) and differentiable stride-1 LiDAR BEV scatter preserving raw
+  pre-cap measurement evidence. Padding is excluded from normalization and
+  pooling; empty/singleton training calls use unchanged BN running statistics.
+  CPU tests and a randomly initialized KITTI forward/backward check cover this
+  first trainable representation; no spatial context, LiDAR training runner,
+  detection head, or GPU/export validation is introduced.
 
 ## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added

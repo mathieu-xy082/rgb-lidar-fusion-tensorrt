@@ -25,6 +25,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Clôture du backbone v1 | Inspection held out de la frame `000366` et limites consignées ; prototype sparse-supervisé accepté |
 | Premier raccord caméra BEV | Grille, masques, agrégation et gradients testés ; trois variantes inspectées sur `000000`, relecture terminée |
 | Construction des piliers LiDAR | Entrée XYZI brute, grille 20 cm, neuf features, masques et sélection reproductible ; tests CPU et contrôle KITTI |
+| PFN et scatter LiDAR | Linear/BatchNorm/ReLU/max masqué, features BEV stride 1, comptes pré-cap conservés ; tests et backward CPU |
 
 ## Bilan camera-depth v1
 
@@ -114,8 +115,9 @@ Architecture de référence :
 Le [design LiDAR](bev-lidar-encoder.md) retient des piliers de 20 cm et un
 contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra sera recalculé
 sur la même grille ; pour la ROI initiale proposée, elle passe de 100 x 100
-à 250 x 250 cellules. Le PFN de référence proposé et le candidat à convolutions
-dilatées restent à implémenter et à valider, sans détection apprise à ce stade.
+à 250 x 250 cellules. Le PFN de référence et le scatter sont implémentés ; le
+candidat à convolutions dilatées reste à développer et à valider, sans détection
+apprise à ce stade.
 
 La construction déterministe des piliers est implémentée sans réseau neuronal :
 les compteurs avant sélection, masques, indices source et features des points
@@ -123,10 +125,16 @@ retenus sont explicites. Validation du 2026-11-03 : 415 tests réussis et un tes
 CUDA ignoré, plus un contrôle CPU de la frame KITTI `000000`. Aucun entraînement
 LiDAR ni nouveau checkpoint n'a été produit.
 
+Le PFN à 32 canaux et le scatter sont maintenant testés : 472 tests réussis,
+un test CUDA ignoré. Padding exclu de BatchNorm/max, politique explicite pour
+zéro/un point valide, cartes BEV et gradients finis, compteurs bruts conservés.
+Le contrôle KITTI `000000` utilise des poids aléatoires, sans optimizer step ;
+il ne constitue pas un résultat de détection ni une mesure de performance GPU.
+
 Le [workstream LiDAR](workstreams/lidar-bev-encoder.md#progress) regroupe les
 tâches par périmètre : piliers/contrat, PFN/scatter, contexte, inspection et
-mesures de ressources. Le prochain incrément sera le PFN puis le scatter de
-features, avec prise en compte du padding dans la normalisation et l'agrégation.
+mesures de ressources. Le prochain incrément sera le bloc de contexte spatial
+avant fusion, avec vérification de son champ réceptif et de l'alignement.
 
 ### Ordre des incréments
 

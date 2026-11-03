@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Optional LiDAR-only Car-center/XY-offset head, stable masked focal/L1 objective,
+  and metric center decoding. Target construction preserves full calibration,
+  converts bottom centers correctly, and excludes unknown/DontCare frustums from
+  negative supervision. This is not a mandatory fused-model head or full 3D AP.
 - Official label-only preparation for existing KITTI frame IDs, protected
   extraction, provenance and local annotation/geometry/target audit. Labels and
   generated reports remain ignored; no supervised LiDAR run is launched yet.

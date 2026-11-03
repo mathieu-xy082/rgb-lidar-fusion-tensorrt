@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="930" viewBox="0 0 1180 930" role="img" aria-labelledby="title desc"><title id="title">Camera-depth : volumes, skips et sorties</title><desc id="desc">RGB et cartes LiDAR entrent dans un stem 32 canaux. Deux encodeurs réduisent la résolution vers 64 puis 96 canaux. Deux décodeurs avec interpolation et concaténation rendent 32 canaux pleine résolution, puis une tête 1x1 prédit la profondeur.</desc><defs><marker id="arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1180" height="930" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="36" y="42" font-size="14" fill="#235ce0" font-weight="bold">CAMERA-DEPTH / LIRE LES VOLUMES</text>
+<text x="36" y="82" font-size="28" fill="#17283f" font-weight="bold">Réduire la résolution, conserver des features, reconstruire</text>
+<text x="36" y="114" font-size="17" fill="#17283f">Exemple : H=320, W=1024 ; batch B omis. Épaisseur = canaux, pas profondeur métrique.</text>
+<rect x="36" y="150" width="1108" height="88" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="52" y="180" font-size="20" fill="#235ce0" font-weight="bold">Entrées alignées dans le plan image</text>
+<text x="52" y="209" font-size="16" fill="#17283f">RGB [3,320,1024] + LiDAR enriched [8,320,1024] → concat [11,320,1024]</text>
+<path d="M180 246V275" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M65 292l22 -22h220v110l-22 22v-110h-220" fill="#235ce0" fill-opacity=".18" stroke="#235ce0"/>
+<rect x="65" y="292" width="220" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M120.0 292v110 M65 319.5h220" stroke="#235ce0" stroke-opacity=".25"/>
+<path d="M175.0 292v110 M65 347.0h220" stroke="#235ce0" stroke-opacity=".25"/>
+<path d="M230.0 292v110 M65 374.5h220" stroke="#235ce0" stroke-opacity=".25"/>
+<text x="65" y="444" font-size="19" fill="#235ce0" font-weight="bold">Stem : [32,320,1024]</text>
+<text x="65" y="470" font-size="16" fill="#17283f">Deux Conv 3×3 + ReLU</text>
+<path d="M320 350H410" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="340" y="323" font-size="15" fill="#17283f">stride 2</text>
+<path d="M443 316l30 -30h175v86l-30 30v-86h-175" fill="#127761" fill-opacity=".18" stroke="#127761"/>
+<rect x="443" y="316" width="175" height="86" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M486.75 316v86 M443 337.5h175" stroke="#127761" stroke-opacity=".25"/>
+<path d="M530.5 316v86 M443 359.0h175" stroke="#127761" stroke-opacity=".25"/>
+<path d="M574.25 316v86 M443 380.5h175" stroke="#127761" stroke-opacity=".25"/>
+<text x="420" y="444" font-size="19" fill="#127761" font-weight="bold">E1 : [64,160,512]</text>
+<text x="420" y="470" font-size="16" fill="#17283f">Conv stride 2 + bloc</text>
+<path d="M665 350H770" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="690" y="323" font-size="15" fill="#17283f">stride 2</text>
+<path d="M805 337l38 -38h130v65l-38 38v-65h-130" fill="#b96012" fill-opacity=".18" stroke="#b96012"/>
+<rect x="805" y="337" width="130" height="65" fill="white" stroke="#b96012" stroke-width="2"/>
+<path d="M837.5 337v65 M805 353.25h130" stroke="#b96012" stroke-opacity=".25"/>
+<path d="M870.0 337v65 M805 369.5h130" stroke="#b96012" stroke-opacity=".25"/>
+<path d="M902.5 337v65 M805 385.75h130" stroke="#b96012" stroke-opacity=".25"/>
+<text x="780" y="444" font-size="19" fill="#b96012" font-weight="bold">E2 : [96,80,256]</text>
+<text x="780" y="470" font-size="16" fill="#17283f">Conv stride 2 + bloc</text>
+<path d="M970 372H1100V555H1000" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="750" y="527" font-size="16" fill="#17283f">Interpolation → concat avec E1</text>
+<rect x="694" y="560" width="385" height="122" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="710" y="590" font-size="20" fill="#127761" font-weight="bold">Décodeur 1 : 160 → 64</text>
+<text x="710" y="619" font-size="16" fill="#17283f">96 interpolés + 64 conservés</text>
+<text x="710" y="644" font-size="16" fill="#17283f">Sortie [64,160,512]</text>
+<path d="M530 480V510H630V601H682" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="6 4"/>
+<path d="M680 624H565" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="302" y="537" font-size="16" fill="#17283f">Interpolation → concat avec stem</text>
+<rect x="130" y="560" width="423" height="122" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="146" y="590" font-size="20" fill="#235ce0" font-weight="bold">Décodeur 0 : 96 → 32</text>
+<text x="146" y="619" font-size="16" fill="#17283f">64 interpolés + 32 conservés</text>
+<text x="146" y="644" font-size="16" fill="#17283f">Features [32,320,1024]</text>
+<path d="M70 480V530H48V624H118" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="6 4"/>
+<path d="M340 692V730" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="36" y="742" width="530" height="128" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="52" y="772" font-size="20" fill="#235ce0" font-weight="bold">Features vers le lift géométrique</text>
+<text x="52" y="801" font-size="16" fill="#17283f">forward_features() : 32 canaux par pixel</text>
+<text x="52" y="826" font-size="16" fill="#17283f">+ source depth / support + calibration</text>
+<path d="M555 661H600V721H830V730" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="625" y="742" width="519" height="128" rx="10" fill="white" stroke="#b96012" stroke-width="2"/>
+<text x="641" y="772" font-size="20" fill="#b96012" font-weight="bold">Head depth : Conv 1×1, 32 → 1</text>
+<text x="641" y="801" font-size="16" fill="#17283f">Profondeur normalisée [1,320,1024]</text>
+<text x="641" y="826" font-size="16" fill="#17283f">Sortie linéaire ; sans sigmoid ni ReLU</text>
+<text x="36" y="905" font-size="16" fill="#53647b">Traits pointillés : features conservées puis concaténées. Tailles exactes des skips utilisées au retour.</text>
+</g></svg>

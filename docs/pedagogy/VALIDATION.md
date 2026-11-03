@@ -45,3 +45,16 @@ Les deux nouveaux SVG ont été rendus et inspectés. Le JavaScript a été exé
 ## Écriture matricielle et rendu GitHub
 
 Remplacement des macros `operatorname` signalées comme refusées par GitHub. Les opérateurs sont écrits avec des symboles définis dans le texte ; les produits Linear, BatchNorm, scatter conceptuel, convolution via patches et head 1×1 précisent leurs dimensions. ReLU et max restent décrits comme opérations non linéaires. Les petits exemples matriciels Linear, BatchNorm, scatter et patch ont été vérifiés avec NumPy. Délimiteurs mathématiques contrôlés et absence de `operatorname` vérifiée ; le rendu GitHub authentifié n'a pas été inspecté visuellement dans cet environnement.
+
+
+## Ensemble camera-depth et lift BEV
+
+Relecture des modules `camera_depth_model.py`, `camera_depth_support.py`, `camera_geometry.py`, `camera_bev.py` et du contrat technique au commit `26ad8ce2c354941fc828a052e66f184e5d48de1d`.
+
+- Tableau des couches vérifié contre le code : 11/9 canaux d'entrée, stem 32, encodeurs 64/96, raccords 160/96, décodeurs 64/32 et head linéaire 32→1. Biais présents, sans BatchNorm ni pooling.
+- Deux SVG rendus puis inspectés visuellement, dont les skips de concaténation et la séparation features/profondeur.
+- Explorateur exécuté sous Node avec un DOM minimal : 28 rendus (sept étapes, deux résolutions, deux modes LiDAR), calcul de 54 rétroprojections, rejet par support, masques holdout fictifs et activation de la pondération uniquement pour la source splattée.
+- Les 54 résultats géométriques comparés à des résolutions de systèmes NumPy indépendantes, avec P à quatrième colonne non nulle, changement de repère, reprojection et ROI. Moyenne pondérée et exemple central d'interpolation également vérifiés.
+- Liens relatifs et identifiants HTML/SVG vérifiés ; formules en blocs math, sans operatorname ni underbrace.
+
+Les activations du CNN et l'entraînement ne sont pas simulés. La grille holdout est illustrative, pas une reproduction du tirage du runner. L'exemple d'agrégation est distinct du pixel manipulé. La couverture visuelle/événementielle réelle de l'HTML en navigateur reste à vérifier ; aucune nouvelle exécution PyTorch, expérience d'entraînement ou validation GPU n'est revendiquée.

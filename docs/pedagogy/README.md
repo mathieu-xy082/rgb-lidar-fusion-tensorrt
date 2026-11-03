@@ -9,6 +9,18 @@ avec trois figures lisibles sur GitHub, puis ouvrir sa [version visuelle autonom
 pour naviguer entre les étapes et comparer le diagnostic LiDAR actuel à la cible multimodale.
 La head de centres Car ajoutée au dépôt y est distinguée des futures heads 3D.
 
+## Branche camera-depth : image, profondeur et BEV
+
+1. Lire la [fiche du backbone et du lift](camera/backbone-and-lift.md), avec les volumes,
+   les concaténations du décodeur, les deux sorties et le rôle du holdout.
+2. Ouvrir les [formules de la branche caméra](camera/operators-math.md) : convolution,
+   interpolation, head depth, loss masquée, calibration et moyenne par cellule.
+3. Manipuler l’[explorateur camera-depth](explorers/camera-depth.html) : tailles paires/impaires,
+   modes sparse/enriched, support explicite et rétroprojection synthétique.
+
+Pour l’exécuter, ouvrir `docs/pedagogy/explorers/camera-depth.html` localement dans un navigateur.
+Les volumes décrivent les dimensions du code ; les activations du CNN ne sont pas simulées.
+
 ## Comprendre les opérations
 
 Les [formules des opérateurs](operators-math.md) relient les blocs aux sommes,
@@ -42,7 +54,6 @@ Le scénario initial utilise trois piliers, quatre places par pilier et huit poi
 - Vue globale caméra/LiDAR et distinction entre architecture actuelle et cible.
 - Construction des piliers et sélection des points.
 - Explorateur dédié au scatter et au contexte résiduel dilaté.
-- Backbone camera-depth et lift géométrique caméra vers BEV.
 - Alignement des modalités et future fusion.
 
 Chaque ensemble associera une fiche, un schéma éditable et, lorsque cela aide, un outil interactif. Les justifications non établies ne seront pas présentées comme des résultats validés.

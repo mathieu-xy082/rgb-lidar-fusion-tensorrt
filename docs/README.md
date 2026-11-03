@@ -56,6 +56,12 @@ Le dossier [onboarding](onboarding/README.md) contient un parcours progressif :
 validation locale, géométrie caméra/LiDAR, splatting, KITTI, tenseurs, modèles,
 entraînement, ONNX et TensorRT.
 
+## Comprendre les architectures
+
+Le [parcours pédagogique](pedagogy/README.md) propose une première fiche PFN,
+une vue de la branche LiDAR et un explorateur HTML autonome. Il explique les
+dimensions, les masques, la BatchNorm et le max avec des données synthétiques.
+
 ## Recherche
 
 Le dossier [articles](articles/README.md) regroupe la bibliographie et le
@@ -82,3 +88,4 @@ les documents actuels.
 - Un workstream terminé est archivé après synthèse de ses décisions durables.
 - Toute mention de « prochain », « actuel » ou « non implémenté » doit être
   réévaluée lors de la clôture d'un workstream.
+

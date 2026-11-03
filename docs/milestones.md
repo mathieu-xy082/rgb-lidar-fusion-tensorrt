@@ -28,6 +28,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | PFN et scatter LiDAR | Linear/BatchNorm/ReLU/max masqué, features BEV stride 1, comptes pré-cap conservés ; tests et backward CPU |
 | Premier contexte LiDAR BEV | Deux blocs résiduels dilatés, support 19x19 vérifié, grille/mesures conservées ; comparaison multi-résolution CPU |
 | Inspection conjointe et diagnostic LiDAR | Caméra/LiDAR sur grille 20 cm, couverture hors FOV préservée ; premier forward/backward GPU batch 1 et pic mémoire mesurés |
+| Préparation du diagnostic centre LiDAR | Notebook `04`, head Car/offset XY, loss masquée et décodage testés ; 512 labels audités, pas encore d'entraînement |
 
 ## Bilan camera-depth v1
 
@@ -149,8 +150,24 @@ contrôle mesure 11,0 ms en forward, 35,3 ms en forward/backward et 180,5 MiB de
 pic PyTorch, sans caméra ni optimiseur. Le grouping CPU prend 95,7 ms séparément :
 ni temps réel global ni stabilité longue durée ne sont démontrés.
 
-Prochaine action : revue développeur des figures et du contrat, puis préparation
-du raccord/fusion des branches. L'encodeur LiDAR n'est pas entraîné en détection.
+### Diagnostic supervisé facultatif
+
+Le notebook `04_lidar_bev_analysis.ipynb` inspecte le LiDAR, ses features, les
+boîtes KITTI et les cibles. Il utilise un modèle CPU à poids aléatoires, sans
+réseau ni optimiseur automatique. Une head séparée prédit les centres Car et
+leurs offsets XY ; sa loss focal/L1 et le backward complet sont testés.
+
+Les 512 frames disposent maintenant de leurs labels officiels : 1 947 labels
+Car, dont 1 715 centres dans la ROI. L'audit ne relève pas d'erreur de format,
+de correspondance ou de construction des cibles ; cela ne garantit pas la
+perfection des annotations humaines. Le hors-champ, DontCare et les classes
+ignorées ne sont pas des négatifs implicites. Données et rapports restent hors Git.
+
+Prochaine action : revue des frames, puis runner train/validation reproductible,
+split explicite, checkpoints et métriques de localisation des centres. Aucun
+entraînement LiDAR n'a été lancé. Cette head est une validation optionnelle,
+pas un prérequis architectural du futur raccord/fusion.
+Suivi : [diagnostic centre LiDAR](workstreams/lidar-center-diagnostic.md).
 
 ### Ordre des incréments
 

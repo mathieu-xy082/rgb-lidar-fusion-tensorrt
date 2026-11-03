@@ -22,6 +22,9 @@ Le socle implémenté couvre :
 - une préparation des piliers LiDAR bruts et un PFN/scatter vers BEV, avec
   masques, compteurs et contexte dilaté résiduel testés, une inspection conjointe
   caméra/LiDAR et un premier diagnostic GPU borné, sans entraînement LiDAR ;
+- une tête LiDAR facultative de localisation des centres de voitures, avec
+  cibles KITTI, loss masquée et notebook d'inspection CPU ; aucun run supervisé
+  ni checkpoint LiDAR entraîné n'est encore produit ;
 - des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
@@ -150,7 +153,7 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G ml -G visualization -G notebook
 PDM_IGNORE_ACTIVE_VENV=1 pdm run notebooks
 ```
 
-Suivre les notebooks `01`, `02`, puis `03` décrits dans leur
+Suivre les notebooks `01` à `04` décrits dans leur
 [README](notebooks/README.md).
 
 ## Commandes principales

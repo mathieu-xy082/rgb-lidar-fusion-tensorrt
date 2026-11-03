@@ -7,6 +7,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- CPU-first `04_lidar_bev_analysis.ipynb` and reusable LiDAR frame inspection,
+  showing KITTI boxes, input/context features, supervision domains, targets and
+  explicitly untrained predictions without automatic download or training.
 - Optional LiDAR-only Car-center/XY-offset head, stable masked focal/L1 objective,
   and metric center decoding. Target construction preserves full calibration,
   converts bottom centers correctly, and excludes unknown/DontCare frustums from

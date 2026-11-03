@@ -11,6 +11,7 @@ NOTEBOOK_NAMES = (
     "01_project_lidar_on_image.ipynb",
     "02_visualize_hybrid_input.ipynb",
     "03_camera_depth_training_analysis.ipynb",
+    "04_lidar_bev_analysis.ipynb",
 )
 
 
@@ -68,3 +69,21 @@ def test_training_notebook_keeps_safe_defaults_and_gpu_cache_cleanup() -> None:
     )
     cleanup = next(keyword for keyword in preflight_call.keywords if keyword.arg == "release_cached_memory")
     assert ast.literal_eval(cleanup.value) is True
+
+
+def test_lidar_notebook_keeps_cpu_inspection_and_external_actions_opt_in():
+    path = Path(__file__).resolve().parents[1] / "notebooks/04_lidar_bev_analysis.ipynb"
+    notebook = json.loads(path.read_text())
+    cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
+    flags = {"RUN_ANNOTATION_AUDIT", "RUN_GPU_PROBE"}
+    defaults = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse(cells["parameters"]).body
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in flags
+    }
+    assert defaults == dict.fromkeys(flags, False)
+    code = "\n".join("".join(cell["source"]) for cell in notebook["cells"] if cell["cell_type"] == "code")
+    assert ".cpu().eval()" in code
+    assert ".step(" not in code and "--download" not in code
+    assert "manual_seed_all" not in code

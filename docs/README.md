@@ -39,6 +39,7 @@ Pour comprendre le projet dans son état actuel :
 | [Camera-depth BEV lift](workstreams/camera-depth-bev-lift.md) | Intégré dans main, release 1.2.0 | Raccord et backward testés ; trois variantes BEV inspectées sur 000000 |
 | [BEV LiDAR encoder](bev-lidar-encoder.md) | Premier encodeur fonctionnel, non entraîné | Contrats NumPy/Torch, contexte, inspection conjointe 20 cm et diagnostic GPU borné |
 | [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | Étapes 1 à 4 initialement validées ; revue développeur à faire | Résultats CPU/GPU, seuil LiDAR 2 Gio et limites avant fusion/détection |
+| [Diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) | Notebook, objectif et labels prêts ; pas d'entraînement | Tête facultative Car, supervision masquée, audit des 512 frames et prochains incréments |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 
 ## Guides techniques

@@ -4,6 +4,21 @@ Do not commit datasets to this repository.
 
 Recommended starting point: KITTI object detection dataset.
 
+For the optional LiDAR Car-center diagnostic, add annotations matching the
+images already downloaded, without fetching the other modalities again:
+
+```bash
+pdm run python scripts/prepare_kitti_labels.py --download
+```
+
+Only local image IDs are extracted into `data/kitti/training/label_2/` from the
+official small label archive. Different existing annotations are never silently
+overwritten. ZIP CRCs, label format, geometry and counterpart files are checked;
+the audit JSON is under `results/analysis/lidar_bev/annotation_audit.json`.
+Omit `--download` for a local-only audit. Structural checks do not prove every
+human annotation or establish an independent train/validation split. See the
+[center diagnostic workstream](../docs/workstreams/lidar-center-diagnostic.md).
+
 Expected local layout, once downloaded manually:
 
 ```text

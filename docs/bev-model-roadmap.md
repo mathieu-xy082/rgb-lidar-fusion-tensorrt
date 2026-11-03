@@ -264,6 +264,12 @@ d'objet : celle-ci demandera supervision et évaluation LiDAR seul ultérieures.
 Le [workstream LiDAR](workstreams/lidar-bev-encoder.md) sépare les tâches de
 construction des piliers, PFN/scatter, contexte et validation du raccord.
 
+Un [diagnostic centre LiDAR facultatif](workstreams/lidar-center-diagnostic.md)
+prépare également l'apprentissage de cette branche seule : heatmap Car et
+offset XY, annotations KITTI et notebook CPU. Ce n'est ni une tête obligatoire
+avant fusion ni encore un détecteur 3D entraîné. Les mêmes encodeurs pourront
+recevoir les gradients de la future tête finale, sans tête LiDAR séparée.
+
 ## Phase BEV 3 - Supervision image auxiliaire
 
 Ajouter une head image auxiliaire de type YOLO.
@@ -361,3 +367,8 @@ Relire ces résultats avant de préparer la fusion. Suivre les incréments du
 [workstream LiDAR BEV](workstreams/lidar-bev-encoder.md#progress), sur un
 repère et une grille compatibles avec camera BEV, avant la fusion et les
 heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.
+
+Le suivi facultatif actuellement choisi prépare d'abord le
+[diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) : notebook,
+labels et objectif sont disponibles ; son runner train/validation reste à
+ajouter. Cet entraînement autonome ne devient pas un prérequis de la fusion.

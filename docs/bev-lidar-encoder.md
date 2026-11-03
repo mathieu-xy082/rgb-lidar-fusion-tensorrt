@@ -56,8 +56,9 @@ qu'une voiture entière, notamment selon son orientation, tienne dans cette zone
   lignes suivant x, colonnes suivant y, même origine et mêmes centres de cellules.
 - Grille commune caméra/LiDAR à 20 cm pour la première connexion à stride 1.
 - Features LiDAR contextualisées avant fusion, puis backbone BEV commun.
-- Premier incrément limité à une représentation testable : ni head de détection,
-  ni nouvelle loss objet, ni promesse de précision ou de temps réel.
+- Socle encodeur limité à une représentation testable : aucune head ou loss
+  objet obligatoire, ni promesse de précision ou de temps réel. Le diagnostic
+  supervisé facultatif décrit ci-dessous reste séparé de ce contrat.
 
 ## Grille et raccord caméra
 
@@ -332,6 +333,20 @@ Le regroupement CPU a pris séparément 95,7 ms : aucune cadence temps réel
 globale ne doit être déduite du seul temps GPU. Plusieurs scènes, stabilité,
 latence p50/p95 et mémoire du futur modèle fusionné restent à mesurer.
 L'export ONNX/TensorRT reste à valider séparément.
+
+## Diagnostic Car Facultatif
+
+Le [workstream de diagnostic centre](workstreams/lidar-center-diagnostic.md)
+ajoute un objectif Car-centre/offset XY et le notebook
+`04_lidar_bev_analysis.ipynb`. Il sert à préparer l'entraînement et l'évaluation
+de la branche LiDAR seule ; il n'est pas requis pour la cible fusionnée, dont
+la loss finale pourra entraîner les deux branches.
+
+Le PFN/contexte existant ne change pas. Les cibles proviennent de `label_2`,
+avec conversion bottom-center caméra vers centre géométrique LiDAR et masques
+conservateurs pour le hors-champ/DontCare. Les 512 labels locaux sont préparés
+et audités ; les poids du notebook restent aléatoires. Le runner train/validation
+et le chargement de checkpoints LiDAR entraînés sont le prochain incrément.
 
 ## Références
 

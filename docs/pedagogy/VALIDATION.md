@@ -33,3 +33,10 @@ Ouvrir `explorers/pfn.html` localement :
 La page `architecture-lidar-bev-head.md` et sa version autonome `explorers/architecture.html` décrivent l'encodeur local, le contexte BEV et la head de centres Car. Relecture de `lidar_bev.py`, `lidar_center_model.py`, des jalons, de la roadmap BEV et du workstream de diagnostic sur le commit `c6e0d6da157b42fcd8991c96b039e7b8fb31d96e`.
 
 Les trois nouvelles figures SVG ont été rendues et inspectées. La logique de navigation entre les trois panneaux et de comparaison des deux parcours a été vérifiée sous Node avec un DOM minimal. Les identifiants des SVG embarqués sont uniques et la page ne charge aucune dépendance externe. Les liens relatifs sont vérifiés contre l'arbre de la branche. L'affichage HTML réel en navigateur reste à inspecter ; aucune nouvelle exécution PyTorch ou expérience d'entraînement n'est revendiquée.
+
+
+## Formalisme et volumes des features
+
+Ajout des formules des opérateurs et d'un laboratoire autonome 3×3/1×1, après lecture de `lidar_bev.py` et `lidar_center_model.py` au commit `a4a8017575bbdc314ac1cefed090df1930c433fc`. Le nombre de canaux est configuré, tandis que les paramètres sont apprenables. Les schémas de volumes sont explicitement non à l'échelle et ne représentent pas une hauteur physique.
+
+Les deux nouveaux SVG ont été rendus et inspectés. Le JavaScript a été exécuté sous Node avec un DOM minimal : 36 configurations (3×3/1×1, dilatations 1/2/4, deux sorties, centre et bords) vérifiées contre une référence Python indépendante ; toutes les sommes concordent, avec biais et padding. Le mode 1×1 désactive la dilation. Les identifiants des figures embarquées et les liens sont contrôlés. L'affichage HTML et les événements réels en navigateur restent à inspecter. Aucun test PyTorch ou entraînement supplémentaire n'est déclaré.

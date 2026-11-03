@@ -9,6 +9,13 @@ avec trois figures lisibles sur GitHub, puis ouvrir sa [version visuelle autonom
 pour naviguer entre les étapes et comparer le diagnostic LiDAR actuel à la cible multimodale.
 La head de centres Car ajoutée au dépôt y est distinguée des futures heads 3D.
 
+## Comprendre les opérations
+
+Les [formules des opérateurs](operators-math.md) relient les blocs aux sommes,
+normalisations et sélections réellement effectuées. Le [laboratoire de convolution](explorers/operators.html)
+permet de déplacer un noyau, suivre les produits sur plusieurs canaux et comparer
+les dilatations ainsi que les convolutions 3×3 et 1×1.
+
 ## Premier ensemble : des points LiDAR au vecteur de pilier
 
 1. Observer la [vue de la branche LiDAR](assets/lidar-pfn.svg).

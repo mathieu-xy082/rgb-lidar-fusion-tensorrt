@@ -6,7 +6,87 @@
 <p>COMPRENDRE L’ARCHITECTURE · DU NUAGE AUX PRÉDICTIONS</p><h1>Encodeur LiDAR / backbone BEV / head</h1><p class="intro">Trois responsabilités : organiser les mesures, comprendre leur voisinage, puis produire une prédiction précise. Les schémas suivent le code du dépôt ; les étapes futures sont signalées.</p>
 <label for="route">Parcours à situer</label> <select id="route"><option value="current">Diagnostic LiDAR actuel</option><option value="target">Détecteur multimodal cible</option></select>
 <div id="scope" aria-live="polite"></div><div class="path" id="path"></div>
-<h2>Ouvrir chaque étape</h2><nav aria-label="Étapes d’architecture"><button type="button" data-step="0" aria-pressed="true">1. Encodeur LiDAR</button><button type="button" data-step="1" aria-pressed="false">2. Backbone BEV</button><button type="button" data-step="2" aria-pressed="false">3. Head</button></nav>
+<section><h2>Les volumes de features</h2><figure><div class="figure-scroll"><svg xmlns="http://www.w3.org/2000/svg" width="1280" height="730" viewBox="0 0 1280 730" role="img" aria-labelledby="volumes-title volumes-desc"><title id="volumes-title">Volumes et dimensions du chemin LiDAR actuel</title><desc id="volumes-desc">Piliers P par M par 9, PFN P par 32, scatter puis deux blocs résiduels à 32 canaux et résolution 250 par 250 constante. La head produit une heatmap Car et deux offsets XY, sans couches fully connected.</desc><defs><marker id="volumes-arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1280" height="730" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="35" y="42" font-size="14" fill="#235ce0" font-weight="bold">LIRE LE RÉSEAU PAR SES VOLUMES</text>
+<text x="35" y="82" font-size="32" fill="#17283f" font-weight="bold">Des piliers aux cartes de prédiction</text>
+<text x="35" y="116" font-size="17" fill="#17283f">Dimensions nominales ; batch B omis sur les volumes. Profondeur dessinée = canaux, pas hauteur physique.</text>
+<path d="M35 168h515" stroke="#235ce0" stroke-width="3"/>
+<text x="35" y="155" font-size="21" fill="#235ce0" font-weight="bold">1. Encodeur LiDAR</text>
+<path d="M575 168h350" stroke="#127761" stroke-width="3"/>
+<text x="575" y="155" font-size="21" fill="#127761" font-weight="bold">2. Contexte BEV actuel</text>
+<path d="M950 168h295" stroke="#b96012" stroke-width="3"/>
+<text x="950" y="155" font-size="21" fill="#b96012" font-weight="bold">3. Head de centres</text>
+<path d="M50 280l20 -20h66l-20 20Z" fill="#235ce0" fill-opacity=".16" stroke="#235ce0"/>
+<path d="M116 280l20 -20v138l-20 20Z" fill="#235ce0" fill-opacity=".30" stroke="#235ce0"/>
+<rect x="50" y="280" width="66" height="138" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M66.5 280v138M50 314.5h66" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M83.0 280v138M50 349.0h66" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M99.5 280v138M50 383.5h66" stroke="#235ce0" stroke-opacity=".3"/>
+<text x="38" y="475" font-size="18" fill="#17283f" font-weight="bold">[P,M,9]</text>
+<text x="38" y="502" font-size="15" fill="#17283f">Piliers + masque</text>
+<path d="M145 350H185" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#volumes-arrow)"/>
+<path d="M200 310l24 -24h45l-24 24Z" fill="#235ce0" fill-opacity=".16" stroke="#235ce0"/>
+<path d="M245 310l24 -24v85l-24 24Z" fill="#235ce0" fill-opacity=".30" stroke="#235ce0"/>
+<rect x="200" y="310" width="45" height="85" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M211.25 310v85M200 331.25h45" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M222.5 310v85M200 352.5h45" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M233.75 310v85M200 373.75h45" stroke="#235ce0" stroke-opacity=".3"/>
+<text x="180" y="275" font-size="18" fill="#235ce0" font-weight="bold">PFN</text>
+<text x="180" y="475" font-size="18" fill="#17283f" font-weight="bold">[P,32]</text>
+<path d="M280 350H325" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#volumes-arrow)"/>
+<path d="M345 250l30 -30h145l-30 30Z" fill="#235ce0" fill-opacity=".16" stroke="#235ce0"/>
+<path d="M490 250l30 -30v190l-30 30Z" fill="#235ce0" fill-opacity=".30" stroke="#235ce0"/>
+<rect x="345" y="250" width="145" height="190" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M381.25 250v190M345 297.5h145" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M417.5 250v190M345 345.0h145" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M453.75 250v190M345 392.5h145" stroke="#235ce0" stroke-opacity=".3"/>
+<text x="340" y="215" font-size="18" fill="#235ce0" font-weight="bold">Scatter</text>
+<text x="322" y="475" font-size="18" fill="#17283f" font-weight="bold">[32,250,250]</text>
+<path d="M530 350H570" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#volumes-arrow)"/>
+<path d="M595 250l30 -30h110l-30 30Z" fill="#127761" fill-opacity=".16" stroke="#127761"/>
+<path d="M705 250l30 -30v190l-30 30Z" fill="#127761" fill-opacity=".30" stroke="#127761"/>
+<rect x="595" y="250" width="110" height="190" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M622.5 250v190M595 297.5h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M650.0 250v190M595 345.0h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M677.5 250v190M595 392.5h110" stroke="#127761" stroke-opacity=".3"/>
+<text x="580" y="215" font-size="16" fill="#127761" font-weight="bold">Bloc 1 : d=1,2</text>
+<text x="580" y="475" font-size="17" fill="#17283f" font-weight="bold">[32,250,250]</text>
+<path d="M743 350H775" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#volumes-arrow)"/>
+<path d="M790 250l30 -30h110l-30 30Z" fill="#127761" fill-opacity=".16" stroke="#127761"/>
+<path d="M900 250l30 -30v190l-30 30Z" fill="#127761" fill-opacity=".30" stroke="#127761"/>
+<rect x="790" y="250" width="110" height="190" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M817.5 250v190M790 297.5h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M845.0 250v190M790 345.0h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M872.5 250v190M790 392.5h110" stroke="#127761" stroke-opacity=".3"/>
+<text x="778" y="215" font-size="16" fill="#127761" font-weight="bold">Bloc 2 : d=2,4</text>
+<text x="775" y="475" font-size="17" fill="#17283f" font-weight="bold">[32,250,250]</text>
+<path d="M938 350H956V256H981" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#volumes-arrow)"/>
+<path d="M956 350V447H981" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#volumes-arrow)"/>
+<path d="M996 220l5 -5h85l-5 5Z" fill="#b96012" fill-opacity=".16" stroke="#b96012"/>
+<path d="M1081 220l5 -5v118l-5 5Z" fill="#b96012" fill-opacity=".30" stroke="#b96012"/>
+<rect x="996" y="220" width="85" height="118" fill="white" stroke="#b96012" stroke-width="2"/>
+<path d="M1017.25 220v118M996 249.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1038.5 220v118M996 279.0h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1059.75 220v118M996 308.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<text x="1100" y="250" font-size="16" fill="#17283f">Conv 1×1</text>
+<text x="1100" y="278" font-size="16" fill="#17283f">32 → 1</text>
+<text x="990" y="363" font-size="17" fill="#17283f" font-weight="bold">[1,250,250]</text>
+<path d="M996 416l12 -12h85l-12 12Z" fill="#b96012" fill-opacity=".16" stroke="#b96012"/>
+<path d="M1081 416l12 -12v118l-12 12Z" fill="#b96012" fill-opacity=".30" stroke="#b96012"/>
+<rect x="996" y="416" width="85" height="118" fill="white" stroke="#b96012" stroke-width="2"/>
+<path d="M1017.25 416v118M996 445.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1038.5 416v118M996 475.0h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1059.75 416v118M996 504.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<text x="1100" y="445" font-size="16" fill="#17283f">Conv 1×1</text>
+<text x="1100" y="473" font-size="16" fill="#17283f">32 → 2</text>
+<text x="990" y="561" font-size="17" fill="#17283f" font-weight="bold">[2,250,250]</text>
+<text x="1100" y="310" font-size="15" fill="#b96012">Logits Car</text>
+<text x="1100" y="505" font-size="15" fill="#b96012">Offsets XY</text>
+<text x="35" y="610" font-size="20" fill="#17283f" font-weight="bold">32 canaux fixés par configuration ; leurs valeurs dépendent des poids et des entrées.</text>
+<text x="35" y="646" font-size="17" fill="#17283f">Pas de pooling spatial ni de couches fully connected dans ce chemin. Les deux blocs sont résiduels.</text>
+<text x="35" y="676" font-size="17" fill="#53647b">À venir : fusion avec camera BEV → backbone commun → head 3D complète (architecture non figée).</text>
+<text x="35" y="708" font-size="15" fill="#53647b">Volumes schématiques non à l’échelle ; diagnostic LiDAR implémenté mais non entraîné.</text>
+</g></svg></div><figcaption>Schéma dimensionnel non à l’échelle : la grille reste 250×250 après le scatter. <a href="operators.html">Ouvrir le laboratoire des calculs</a> · <a href="../operators-math.md">Lire les formules</a></figcaption></figure></section><h2>Ouvrir chaque étape</h2><nav aria-label="Étapes d’architecture"><button type="button" data-step="0" aria-pressed="true">1. Encodeur LiDAR</button><button type="button" data-step="1" aria-pressed="false">2. Backbone BEV</button><button type="button" data-step="2" aria-pressed="false">3. Head</button></nav>
 <section id="panel-0" aria-labelledby="heading-0"><h2 id="heading-0">Organiser les mesures</h2><p class="detail">Le nuage a un nombre variable de points. Les piliers rassemblent les mesures d’une même cellule ; le PFN en construit une description de 32 valeurs, puis le scatter range chaque description dans la grille.</p><figure><div class="figure-scroll"><svg xmlns="http://www.w3.org/2000/svg" width="1100" height="650" viewBox="0 0 1100 650" role="img" aria-labelledby="s0-title s0-desc"><title id="s0-title">Encodeur LiDAR : des mesures à la grille</title><desc id="s0-desc">Nuage XYZI, piliers et neuf features, PFN puis scatter. Le contexte spatial vient ensuite.</desc><defs><marker id="s0-a" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1100" height="650" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
 <text x="36" y="45" font-size="14" fill="#235ce0" font-weight="bold">01 / ENCODEUR LIDAR</text>
 <text x="36" y="88" font-size="30" fill="#17283f" font-weight="bold">Organiser les mesures et décrire chaque pilier</text>

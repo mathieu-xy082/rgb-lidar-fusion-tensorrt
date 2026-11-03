@@ -4,6 +4,15 @@
 
 [Parcours pédagogique](README.md) · [Version visuelle autonome](explorers/architecture.html) · [Zoom sur le PFN](lidar/pfn.md)
 
+## Visualiser les tenseurs et les calculs
+
+![Volumes de features du chemin LiDAR actuel](assets/lidar-feature-volumes.svg)
+
+Pour ouvrir chaque bloc mathématiquement, lire les [opérateurs et leurs formules](operators-math.md),
+puis manipuler le [laboratoire de convolution](explorers/operators.html) : positions lues,
+produits, somme sur les canaux, dilation et comparaison 3×3 / 1×1.
+Les volumes représentent des features, pas des tranches de hauteur physique.
+
 ## Ce qui a changé avec le rebase
 
 Le dépôt contient maintenant `LidarCenterDiagnostic`, une composition du PFN, du scatter, du contexte dilaté et d’une **head facultative de centres Car**. Le notebook `04_lidar_bev_analysis.ipynb`, le parsing des labels KITTI, les cibles, la loss masquée et le décodage accompagnent ce diagnostic. Aucun entraînement LiDAR n’est déclaré réalisé dans les jalons consultés.

@@ -1,8 +1,14 @@
-# Vérification du premier ensemble PFN
+# Journal de validation pédagogique
+
+Ce journal conserve les vérifications par incrément, avec leurs limites au moment
+de leur réalisation. Le [parcours](README.md) présente l’organisation actuelle ;
+les sections historiques ci-dessous ne constituent pas un ordre de lecture.
+
+## Ensemble PFN : vérification initiale
 
 Référence de lecture : commit `3d9e786490ff655460ddc86f31cee64b5ae2ddea`, modules `lidar_pillars.py`, `lidar_bev.py` et tests `test_lidar_bev.py`.
 
-## Vérifications effectuées
+### Vérifications effectuées
 
 - Relecture du contrat : neuf features, Linear sans biais, BatchNorm eps=0,001, masque avant les couches, max par canal, sorties nulles pour les piliers entièrement masqués et fallback des statistiques pour moins de deux points valides.
 - Calcul JavaScript confronté à un calcul NumPy indépendant : les 96 sorties du scénario initial concordent à une tolérance de 1e-12. Il s’agit d’une référence numérique synthétique, pas d’une comparaison à un checkpoint PyTorch.
@@ -10,13 +16,13 @@ Référence de lecture : commit `3d9e786490ff655460ddc86f31cee64b5ae2ddea`, modu
 - SVG rendu en PNG puis inspecté visuellement.
 - Liens relatifs vérifiés contre les chemins de la branche.
 
-## Limites de cette vérification
+### Limites de cette vérification
 
 Le navigateur Chromium n’est pas installé dans l’environnement utilisé : le test Playwright n’a pas pu démarrer. Le DOM minimal ne vérifie ni la mise en page, ni les événements réels du navigateur, ni l’accessibilité complète. L’affichage HTML sur ordinateur et mobile reste à inspecter visuellement.
 
 Aucun code de modèle n’est modifié et aucune suite PyTorch, mesure GPU ou expérience d’entraînement n’a été exécutée pour ce changement documentaire.
 
-## Revue manuelle proposée
+### Revue manuelle proposée
 
 Ouvrir `explorers/pfn.html` localement :
 
@@ -58,3 +64,43 @@ Relecture des modules `camera_depth_model.py`, `camera_depth_support.py`, `camer
 - Liens relatifs et identifiants HTML/SVG vérifiés ; formules en blocs math, sans operatorname ni underbrace.
 
 Les activations du CNN et l'entraînement ne sont pas simulés. La grille holdout est illustrative, pas une reproduction du tirage du runner. L'exemple d'agrégation est distinct du pixel manipulé. La couverture visuelle/événementielle réelle de l'HTML en navigateur reste à vérifier ; aucune nouvelle exécution PyTorch, expérience d'entraînement ou validation GPU n'est revendiquée.
+
+## Réorganisation des parcours caméra et LiDAR - 2026-11-04
+
+Le README est désormais la vue globale : deux chemins de calcul parallèles,
+deux sections aux mêmes rubriques, puis convergence BEV et opérateurs transversaux.
+La fiche `architecture-lidar-bev-head.md` et son explorateur sont explicitement
+des vues LiDAR, pas le point d’entrée général. Les chemins sont étudiables
+séparément, mais la caméra utilise aussi les mesures LiDAR projetées/splattées.
+
+Vérifications réalisées :
+
+- 24 tests documentaires dans `tests/test_pedagogy.py` : destinations des liens
+  Markdown/HTML et ancres locales, rubriques symétriques, accès aux deux branches
+  depuis chaque explorateur, identifiants HTML uniques et syntaxe XML des SVG.
+- Les scripts des quatre explorateurs sont identiques à ceux d’avant la
+  réorganisation ; `node --check` valide leur syntaxe. Aucun calcul, poids
+  fictif, formule mathématique ou schéma SVG existant n’a été modifié.
+- Relecture du nouveau diagramme Mermaid contre les contrats du backbone,
+  du support de profondeur, du lift et du PFN/contexte. Il distingue le lift
+  utilisant les mesures, la head depth de supervision et la fusion future.
+- Captures Chrome headless des quatre explorateurs, inspectées à 1440×1000
+  et 390×844 : titres et navigation globale/caméra/LiDAR lisibles. Les captures
+  sont temporaires, hors Git ; les pages chargent leurs exemples synthétiques.
+- Suite complète : 584 tests réussis, un test CUDA ignoré. `git diff --check`
+  ne signale pas d’erreur d’espacement.
+
+Le rendu Mermaid sur GitHub n’a pas été inspecté. La revue visuelle porte sur
+le haut des pages et leur navigation, pas sur tous les états, les panneaux
+défilants ou l’accessibilité complète. Les simulations numériques historiques
+n’ont pas été revalidées dans un navigateur avec tous leurs événements.
+Aucun entraînement ni diagnostic GPU n’a été lancé pour cette réorganisation.
+
+### Compléments pédagogiques et travail ML
+
+Les compléments listés dans le README concernent les supports : construction
+des piliers, calculs du scatter/contexte et comparaison des couvertures BEV.
+Les modules correspondants existent déjà ; une fiche manquante n’est pas une
+fonctionnalité ML manquante. Les futurs supports sur la fusion attendront des
+choix d’architecture explicites. Le travail produit reste suivi dans les
+[jalons](../milestones.md), et non dans cette liste pédagogique.

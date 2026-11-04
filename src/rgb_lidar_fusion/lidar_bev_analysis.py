@@ -38,6 +38,7 @@ class LidarBEVSample:
 def analyze_lidar_bev_sample(
     root: str | Path, sample_id: str, *, grid: BEVGridConfig,
     model: LidarCenterDiagnostic, score_threshold: float = .3,
+    max_points_per_pillar: int = 64, pillar_seed: int = 13, top_k: int = 50,
 ) -> LidarBEVSample:
     """Inspect native-resolution RGB/calibration and full-ROI raw LiDAR on CPU.
 
@@ -64,7 +65,9 @@ def analyze_lidar_bev_sample(
     target = None if labels is None else build_lidar_center_targets(
         labels, calibration=calibration, image_shape=image.shape[:2], grid=grid,
     )
-    pillars = build_lidar_pillars([raw], grid=grid)
+    pillars = build_lidar_pillars(
+        [raw], grid=grid, max_points_per_pillar=max_points_per_pillar, seed=pillar_seed,
+    )
     was_training = model.training
     model.eval()
     try:
@@ -75,7 +78,9 @@ def analyze_lidar_bev_sample(
             )
             prediction = model.head(contextual.features)
             valid_mask = None if target is None else torch.from_numpy(target.supervision_mask[None])
-            decoded = decode_lidar_centers(prediction, grid=grid, score_threshold=score_threshold, valid_mask=valid_mask)[0]
+            decoded = decode_lidar_centers(
+                prediction, grid=grid, score_threshold=score_threshold, top_k=top_k, valid_mask=valid_mask,
+            )[0]
             loss = None
             if target is not None:
                 components = lidar_center_loss(

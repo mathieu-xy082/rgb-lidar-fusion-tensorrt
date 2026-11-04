@@ -12,6 +12,7 @@ NOTEBOOK_NAMES = (
     "02_visualize_hybrid_input.ipynb",
     "03_camera_depth_training_analysis.ipynb",
     "04_lidar_bev_analysis.ipynb",
+    "05_lidar_center_overfit.ipynb",
 )
 
 
@@ -87,3 +88,19 @@ def test_lidar_notebook_keeps_cpu_inspection_and_external_actions_opt_in():
     assert ".cpu().eval()" in code
     assert ".step(" not in code and "--download" not in code
     assert "manual_seed_all" not in code
+
+
+def test_lidar_overfit_notebook_keeps_training_opt_in_and_separate_process():
+    path = Path(__file__).resolve().parents[1] / "notebooks/05_lidar_center_overfit.ipynb"
+    notebook = json.loads(path.read_text())
+    cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
+    defaults = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse(cells["parameters"]).body
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in {"RUN_OVERFIT", "RESUME_EXISTING", "DEVICE", "EPOCHS"}
+    }
+    assert defaults == {"RUN_OVERFIT": False, "RESUME_EXISTING": False, "DEVICE": "cpu", "EPOCHS": 100}
+    assert "subprocess.Popen" in cells["train-overfit"]
+    assert "process.terminate()" in cells["train-overfit"]
+    assert "process.kill()" in cells["train-overfit"]

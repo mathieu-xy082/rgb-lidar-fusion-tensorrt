@@ -47,6 +47,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   GPU iteration per mode completed on real KITTI after warmup; this is not an
   end-to-end real-time, detection-quality, or long-run stability result.
 
+### Changed
+
+- Reorganized the learning documentation around peer camera-depth and LiDAR
+  branches, their planned BEV convergence and shared operators. Branch pages
+  and explorers now offer consistent navigation; documentation checks cover
+  local links, anchors, branch structure and SVG syntax. Model code and
+  interactive calculations are unchanged.
+
 ## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added
 

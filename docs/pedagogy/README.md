@@ -2,60 +2,127 @@
 
 Un parcours visuel en français pour comprendre le rôle des modules, leurs transformations et les compromis des choix retenus. Les exemples synthétiques ne représentent pas des performances de modèles entraînés.
 
-## Vue d’ensemble : les trois rôles du réseau
+## Vue globale : deux branches vers une grille BEV commune
 
-Commencer par la [page encodeur LiDAR / backbone BEV / head](architecture-lidar-bev-head.md),
-avec trois figures lisibles sur GitHub, puis ouvrir sa [version visuelle autonome](explorers/architecture.html)
-pour naviguer entre les étapes et comparer le diagnostic LiDAR actuel à la cible multimodale.
-La head de centres Car ajoutée au dépôt y est distinguée des futures heads 3D.
+La branche camera-depth et la branche LiDAR sont deux chemins de calcul distincts,
+étudiables et supervisables séparément. Aucune n’est une sous-partie de l’autre.
+Elles ne sont toutefois **pas indépendantes du point de vue des capteurs** : la
+branche caméra reçoit aussi la profondeur issue du LiDAR projeté et splatté.
 
-## Branche camera-depth : image, profondeur et BEV
+```mermaid
+flowchart TB
+    RGB["Image RGB"] --> C["Backbone camera-depth"]
+    P["Points LiDAR bruts"] --> S["Projection + splatting"]
+    K["Calibration"] --> S
+    S --> C
+    C -->|Features image| L["Lift géométrique"]
+    S -->|Profondeur sparse/splattée et support| L
+    K --> L
+    C -.-> D["Head depth : supervision holdout"]
+    P --> E["Piliers → PFN → scatter → contexte LiDAR"]
+    L --> CB["camera BEV"]
+    E --> LB["LiDAR BEV"]
+    CB --> F["CIBLE : fusion → backbone BEV commun → heads 3D"]
+    LB --> F
+```
 
-1. Lire la [fiche du backbone et du lift](camera/backbone-and-lift.md), avec les volumes,
-   les concaténations du décodeur, les deux sorties et le rôle du holdout.
-2. Ouvrir les [formules de la branche caméra](camera/operators-math.md) : convolution,
-   interpolation, head depth, loss masquée, calibration et moyenne par cellule.
-3. Manipuler l’[explorateur camera-depth](explorers/camera-depth.html) : tailles paires/impaires,
-   modes sparse/enriched, support explicite et rétroprojection synthétique.
+Les deux chemins jusqu’à BEV sont implémentés ; le bloc de convergence reste
+à développer. Le schéma montre le lift avec profondeur sparse ou splattée ;
+une profondeur prédite peut aussi être sélectionnée avec un support explicite.
+**La head depth n’est donc pas un passage imposé avant le lift.**
 
-Pour l’exécuter, ouvrir `docs/pedagogy/explorers/camera-depth.html` localement dans un navigateur.
-Les volumes décrivent les dimensions du code ; les activations du CNN ne sont pas simulées.
+Lire les deux branches dans l’ordre souhaité, puis leur convergence. Les fiches
+et explorateurs ci-dessous complètent les [contrats techniques](../README.md) ;
+les [jalons](../milestones.md) restent la référence pour l’avancement du projet.
 
-## Comprendre les opérations
+## Branche camera-depth
 
-Les [formules des opérateurs](operators-math.md) relient les blocs aux sommes,
-normalisations et sélections réellement effectuées. Le [laboratoire de convolution](explorers/operators.html)
-permet de déplacer un noyau, suivre les produits sur plusieurs canaux et comparer
-les dilatations ainsi que les convolutions 3×3 et 1×1.
+**Rôle.** Construire des features dans le plan image, puis les placer en BEV.
 
-## Premier ensemble : des points LiDAR au vecteur de pilier
+**Entrées.** RGB, six cartes LiDAR sparse ou huit cartes enrichies par splatting.
+La calibration, la profondeur sélectionnée et son support sont fournis au lift.
 
-1. Observer la [vue de la branche LiDAR](assets/lidar-pfn.svg).
-2. Lire la [fiche PFN](lidar/pfn.md) : intuition, dimensions, sept étapes, choix et limites.
-3. Manipuler l’[explorateur PFN](explorers/pfn.html) : 32 canaux, points valides, padding, BatchNorm et max, puis placement par scatter.
+**Transformations.** Encodeur-décodeur CNN → features image → lift géométrique.
+Une head depth attachée aux mêmes features sert à la supervision par holdout.
 
-![Vue pédagogique de la branche LiDAR](assets/lidar-pfn.svg)
+**Sorties.** `camera BEV: [B,32,Hbev,Wbev]` par défaut, avec compteurs et masques
+de contribution séparés. La prédiction de profondeur reste une sortie distincte.
 
-### Ouvrir l’explorateur
+**Ressources.** Lire la [fiche backbone et lift](camera/backbone-and-lift.md),
+ses [formules](camera/operators-math.md), puis manipuler
+l’[explorateur camera-depth](explorers/camera-depth.html).
+Les schémas détaillent les volumes, les concaténations et les deux sorties.
 
-GitHub affiche le code HTML sans exécuter l’outil. Après récupération de cette branche, ouvrir `docs/pedagogy/explorers/pfn.html` dans un navigateur. Le fichier fonctionne directement, sans installation, serveur, réseau, dataset ou GPU.
+**État et limites.** Backbone entraîné sur les pilotes KITTI et premier lift
+inspecté ; pas de validation dense sur les pixels sans vérité terrain LiDAR,
+ni de détection 3D. L’explorateur ne simule pas les activations du CNN.
 
-Le scénario initial utilise trois piliers, quatre places par pilier et huit points. Les poids sont déterministes et fictifs ; aucun apprentissage n’est effectué. La BatchNorm peut utiliser les statistiques du lot ou des statistiques mémorisées fictives. Les cas singleton et vide illustrent les garde-fous du code.
+## Branche LiDAR
 
-## Vos retours sur ce premier ensemble
+**Rôle.** Construire des features BEV directement depuis le nuage de points.
 
-- Les dimensions « points / canaux / piliers » sont-elles faciles à distinguer ?
-- À quelle étape l’explication devient-elle trop dense ?
-- Le calcul détaillé et le choix des canaux aident-ils à comprendre le max ?
-- Les liens entre PFN, scatter et grille BEV sont-ils clairs ?
+**Entrées.** Points bruts XYZI et configuration de la grille métrique, sans RGB.
+Les labels KITTI servent au diagnostic supervisé, jamais aux features d’entrée.
 
-## Suite du parcours prévue
+**Transformations.** Construction des piliers → PFN → scatter → contexte résiduel
+dilaté. Le PFN est un composant de cette branche, pas le réseau multimodal entier.
 
-- Vue globale caméra/LiDAR et distinction entre architecture actuelle et cible.
-- Construction des piliers et sélection des points.
-- Explorateur dédié au scatter et au contexte résiduel dilaté.
-- Alignement des modalités et future fusion.
+**Sorties.** `LiDAR BEV: [B,32,Hbev,Wbev]` par défaut, avec compteurs de mesures
+et masque d’observation séparés. La head facultative ajoute centres Car et offsets.
 
-Chaque ensemble associera une fiche, un schéma éditable et, lorsque cela aide, un outil interactif. Les justifications non établies ne seront pas présentées comme des résultats validés.
+**Ressources.** Lire la [fiche de la branche et de sa head](architecture-lidar-bev-head.md),
+le [zoom PFN](lidar/pfn.md), puis manipuler
+l’[explorateur LiDAR](explorers/architecture.html) et
+l’[explorateur PFN](explorers/pfn.html). Les schémas détaillent les volumes,
+le scatter et le contexte spatial.
 
-Voir le [contrat LiDAR](../bev-lidar-encoder.md), les [jalons](../milestones.md) et l’[index technique](../README.md).
+**État et limites.** Encodeur et head diagnostique testés, mais non entraînés
+en détection. Les poids des explorateurs sont fictifs ; les features ne sont
+pas des scores d’objets et les centres ne sont pas des boîtes 3D.
+
+## Convergence : fusion et détection 3D
+
+Les deux sorties BEV doivent partager le même repère véhicule, la même origine,
+la même résolution et la même convention d’axes : lignes suivant x, colonnes
+suivant y. Leurs canaux décrivent des features, pas des classes, et leur nombre
+n’a pas besoin d’être identique pour envisager une fusion.
+
+Le lift caméra agrège les features de pixels ; le scatter LiDAR place un vecteur
+par pilier. Leurs couvertures et leurs compteurs ne sont donc pas interchangeables.
+Une cellule sans mesure ne prouve pas l’absence d’objet ou l’espace libre.
+
+La fusion, le backbone BEV commun et les heads 3D de type CenterPoint restent
+à développer. Le contexte LiDAR actuel n’est pas ce futur backbone commun.
+La head Car de diagnostic LiDAR est facultative ; elle n’est ni la head finale
+ni un prérequis architectural de la fusion. Voir l’[architecture cible](../bev-model-roadmap.md).
+
+## Outils et opérateurs transversaux
+
+Les [formules des opérateurs](operators-math.md) expliquent Linear, BatchNorm,
+max, scatter, convolutions et résiduel à partir du chemin LiDAR. Les convolutions
+et le mélange des canaux concernent aussi le backbone caméra, mais celui-ci
+n’utilise ni le PFN ni la BatchNorm. Ses opérations propres sont détaillées dans
+les [formules camera-depth](camera/operators-math.md).
+
+Le [laboratoire de convolution](explorers/operators.html) calcule les produits
+sur plusieurs canaux et compare dilatations, convolutions 3×3 et 1×1.
+Ces ressources aident à comprendre les calculs ; elles ne comparent pas la
+qualité des deux branches.
+
+### Ouvrir les explorateurs
+
+GitHub affiche le code HTML sans exécuter les outils. Ouvrir les fichiers sous
+`docs/pedagogy/explorers/` localement dans un navigateur. Ils fonctionnent sans
+installation, serveur, réseau, dataset ou GPU. Aucun n’effectue d’apprentissage.
+
+## Compléments pédagogiques à prévoir
+
+- Détailler la construction des piliers et la sélection des points, avant le PFN.
+- Compléter l’exploration numérique du scatter et du contexte résiduel dilaté,
+  aujourd’hui présentés surtout par les schémas et les formules.
+- Approfondir la comparaison des couvertures et l’alignement des deux BEV.
+- Décrire la fusion et les heads finales lorsque leurs choix seront arrêtés.
+
+Cette liste concerne les supports pédagogiques, pas des tâches ML manquantes
+dans les blocs déjà implémentés. Les vérifications et leurs limites sont
+consignées dans le [journal de validation documentaire](VALIDATION.md).

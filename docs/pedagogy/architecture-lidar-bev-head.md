@@ -1,8 +1,10 @@
-# Trois rôles : encodeur LiDAR, backbone BEV, head
+# Branche LiDAR : encodeur, contexte BEV et head
 
-**Mesurer et organiser → mettre en contexte → prédire.** Ces trois rôles permettent de lire le réseau sans confondre une carte de caractéristiques avec une détection.
+**Mesurer et organiser → mettre en contexte → prédire.** Ces trois rôles permettent de lire la branche LiDAR sans confondre une carte de caractéristiques avec une détection. Cette fiche n’est pas la vue générale du réseau multimodal : la branche camera-depth est un chemin parallèle, décrit séparément.
 
-[Parcours pédagogique](README.md) · [Version visuelle autonome](explorers/architecture.html) · [Zoom sur le PFN](lidar/pfn.md)
+[Vue globale](README.md) · [Branche caméra](camera/backbone-and-lift.md) · [Branche LiDAR](architecture-lidar-bev-head.md)
+
+[Explorateur LiDAR](explorers/architecture.html) · [Zoom sur le PFN](lidar/pfn.md)
 
 ## Visualiser les tenseurs et les calculs
 
@@ -13,7 +15,7 @@ puis manipuler le [laboratoire de convolution](explorers/operators.html) : posit
 produits, somme sur les canaux, dilation et comparaison 3×3 / 1×1.
 Les volumes représentent des features, pas des tranches de hauteur physique.
 
-## Ce qui a changé avec le rebase
+## Diagnostic actuel et architecture cible
 
 Le dépôt contient maintenant `LidarCenterDiagnostic`, une composition du PFN, du scatter, du contexte dilaté et d’une **head facultative de centres Car**. Le notebook `04_lidar_bev_analysis.ipynb`, le parsing des labels KITTI, les cibles, la loss masquée et le décodage accompagnent ce diagnostic. Aucun entraînement LiDAR n’est déclaré réalisé dans les jalons consultés.
 

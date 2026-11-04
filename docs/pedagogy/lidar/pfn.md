@@ -2,7 +2,9 @@
 
 **Lecture : environ 10 minutes.** Prérequis : un point LiDAR est une mesure de position et d’intensité. Une feature est un nombre qui décrit une donnée ; un canal est une composante de cette description.
 
-[Retour au parcours](../README.md) · [Explorateur PFN](../explorers/pfn.html)
+[Vue globale](../README.md) · [Branche caméra](../camera/backbone-and-lift.md) · [Branche LiDAR](../architecture-lidar-bev-head.md)
+
+[Explorateur PFN](../explorers/pfn.html)
 
 ## Où se trouve le PFN ?
 

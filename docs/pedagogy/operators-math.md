@@ -1,8 +1,15 @@
 # Des blocs aux opérations mathématiques
 
-[Vue des trois étapes](architecture-lidar-bev-head.md) · [Laboratoire visuel des convolutions](explorers/operators.html) · [Parcours](README.md)
+[Vue globale](README.md) · [Branche caméra](camera/backbone-and-lift.md) · [Branche LiDAR](architecture-lidar-bev-head.md)
+
+[Laboratoire visuel des convolutions](explorers/operators.html) · [Formules camera-depth](camera/operators-math.md)
 
 Chaque opérateur répond à une question différente : **combiner des canaux, normaliser, sélectionner, placer ou regarder les voisins**. Les formules ci-dessous correspondent aux opérateurs du code relu ; les petits exemples numériques sont fictifs.
+
+Les exemples suivent le chemin LiDAR. Les convolutions et le mélange des canaux
+servent aussi à la branche caméra, mais Linear/BatchNorm/max dans le PFN et le
+scatter ne constituent pas des étapes de son backbone. Interpolation,
+concaténation, supervision depth et lift ont leur [fiche dédiée](camera/operators-math.md).
 
 ![Cartes de features, noyaux 3×3, addition résiduelle et branches de la head](assets/tensor-operators.svg)
 

@@ -1,6 +1,8 @@
 # Camera-depth : les opérations, puis la géométrie
 
-[Architecture](backbone-and-lift.md) · [Explorateur](../explorers/camera-depth.html) · [Convolutions : rappel commun](../operators-math.md)
+[Vue globale](../README.md) · [Branche caméra](backbone-and-lift.md) · [Branche LiDAR](../architecture-lidar-bev-head.md)
+
+[Explorateur camera-depth](../explorers/camera-depth.html) · [Convolutions : rappel commun](../operators-math.md)
 
 **Convention : vecteurs colonnes à droite des matrices.** Les sommes servent à montrer les voisinages et les moyennes ; les produits matriciels servent aux projections et aux transformations de repères. Les formes `[B,C,H,W]` décrivent le stockage du code, pas l’orientation d’un vecteur mathématique.
 

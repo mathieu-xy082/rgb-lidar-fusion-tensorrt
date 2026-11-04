@@ -58,9 +58,10 @@ entraînement, ONNX et TensorRT.
 
 ## Comprendre les architectures
 
-Le [parcours pédagogique](pedagogy/README.md) propose une première fiche PFN,
-une vue de la branche LiDAR et un explorateur HTML autonome. Il explique les
-dimensions, les masques, la BatchNorm et le max avec des données synthétiques.
+Le [parcours pédagogique](pedagogy/README.md) part des deux branches parallèles,
+camera-depth et LiDAR, puis situe leur future convergence en BEV. Chacune dispose
+de fiches, de schémas et d’explorateurs HTML autonomes. Les opérateurs communs et
+les objectifs diagnostiques sont distingués de la fusion et des heads 3D à venir.
 
 ## Recherche
 

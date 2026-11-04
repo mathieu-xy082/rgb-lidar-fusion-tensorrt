@@ -1,8 +1,14 @@
 # Branche camera-depth : de l’image aux features BEV
 
-[Parcours](../README.md) · [Formules](operators-math.md) · [Explorateur](../explorers/camera-depth.html) · [Branche LiDAR](../architecture-lidar-bev-head.md)
+[Vue globale](../README.md) · [Branche caméra](backbone-and-lift.md) · [Branche LiDAR](../architecture-lidar-bev-head.md)
+
+[Formules](operators-math.md) · [Explorateur camera-depth](../explorers/camera-depth.html)
 
 La branche caméra suit trois responsabilités : **extraire une représentation dans l’image, estimer une profondeur, puis placer les features dans une grille métrique**. Le backbone et sa head depth sont appris ; le lift actuel est un calcul géométrique sans nouveaux poids.
+
+Ce chemin se lit indépendamment du PFN/scatter LiDAR. Il exploite néanmoins
+les mesures LiDAR projetées, contrairement à une branche purement monoculaire.
+Les deux représentations BEV ont vocation à se rejoindre dans une future fusion.
 
 ## 1. Voir les volumes de l’encodeur-décodeur
 

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="890" viewBox="0 0 1180 890" role="img" aria-labelledby="title desc"><title id="title">Supervision holdout et lift caméra vers BEV</title><desc id="desc">Mesures cachées pour la loss, features et support pour la rétroprojection complète puis moyenne par cellule. Les cibles cachées ne sont pas des entrées.</desc><defs><marker id="arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1180" height="890" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="36" y="42" font-size="14" fill="#235ce0" font-weight="bold">DE L’APPRENTISSAGE AU PLACEMENT GÉOMÉTRIQUE</text>
+<text x="36" y="82" font-size="30" fill="#17283f" font-weight="bold">La head prédit ; le lift place les features</text>
+<rect x="36" y="125" width="510" height="170" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="52" y="155" font-size="20" fill="#235ce0" font-weight="bold">Entraîner sur des mesures cachées</text>
+<text x="52" y="184" font-size="16" fill="#17283f">Mesures LiDAR → conservées / retirées</text>
+<text x="52" y="209" font-size="16" fill="#17283f">Entrée : RGB + cartes reconstruites des conservées</text>
+<text x="52" y="234" font-size="16" fill="#17283f">Cible : profondeur des mesures retirées</text>
+<text x="52" y="259" font-size="16" fill="#17283f">Smooth L1 uniquement sur le masque holdout</text>
+<rect x="610" y="125" width="534" height="170" rx="10" fill="white" stroke="#b96012" stroke-width="2"/>
+<text x="626" y="155" font-size="20" fill="#b96012" font-weight="bold">Choisir le support du lift</text>
+<text x="626" y="184" font-size="16" fill="#17283f">Sparse : mesures conservées</text>
+<text x="626" y="209" font-size="16" fill="#17283f">Splatted : profondeur étendue + confiance</text>
+<text x="626" y="234" font-size="16" fill="#17283f">Predicted : head + masque booléen explicite</text>
+<text x="626" y="259" font-size="16" fill="#17283f">Conversion en mètres, validité et bornes</text>
+<path d="M880 305V345" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="36" y="357" width="1108" height="135" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="52" y="387" font-size="20" fill="#127761" font-weight="bold">Rétroprojeter vers le repère véhicule / Velodyne</text>
+<text x="52" y="416" font-size="16" fill="#17283f">Pixel (u,v) + z caméra → résoudre A X_cam = (z + t_z) q − t pour P = [A | t]</text>
+<text x="52" y="441" font-size="16" fill="#17283f">Puis résoudre T_v→c [X_vehicle ; 1] = [X_cam ; 1]</text>
+<text x="52" y="466" font-size="16" fill="#17283f">Features image [B,32,H,W] alignées ; matrices de calibration complètes</text>
+<path d="M590 502V537" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="36" y="549" width="1108" height="112" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="52" y="579" font-size="20" fill="#127761" font-weight="bold">Indexer la grille et agréger</text>
+<text x="52" y="608" font-size="16" fill="#17283f">ROI XYZ → floor en ligne x / colonne y → somme des features pondérées / somme des poids</text>
+<text x="52" y="633" font-size="16" fill="#17283f">Plusieurs pixels peuvent contribuer à une cellule ; cellules vides laissées à zéro</text>
+<path d="M590 671V706" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="36" y="718" width="1108" height="120" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="52" y="748" font-size="20" fill="#235ce0" font-weight="bold">camera_bev [B,32,250,250] pour la grille 20 cm proposée</text>
+<text x="52" y="777" font-size="16" fill="#17283f">Compteurs de pixels + somme des poids + masque des pixels acceptés</text>
+<text x="52" y="802" font-size="16" fill="#17283f">Étape suivante visée : alignement / fusion avec lidar_bev, puis détection 3D</text>
+<text x="36" y="872" font-size="16" fill="#53647b">Le lift n’ajoute aucun poids appris. Les indices discrets ne donnent pas de gradient de placement vers la profondeur.</text>
+</g></svg>

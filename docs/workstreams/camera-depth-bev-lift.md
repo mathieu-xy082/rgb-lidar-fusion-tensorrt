@@ -7,8 +7,8 @@ Parent branch: `main` (camera-depth v1 / release 1.1.0).
 Updated: 2026-11-02.
 
 Status: the first functional camera-depth BEV lift is closed for its prototype
-scope after developer review and qualitative inspection. The branch is ready
-for integration into main; no merge is recorded here. There is no LiDAR BEV
+scope after developer review and qualitative inspection. The branch was merged
+into main in `8290530` and included in release 1.2.0. There is no LiDAR BEV
 encoder, fusion, or detector yet. No new training was required.
 
 References:

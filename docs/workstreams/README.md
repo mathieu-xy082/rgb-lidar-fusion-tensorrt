@@ -4,19 +4,34 @@ Un workstream est un journal d'implémentation : périmètre, décisions, résul
 et risques d'un chantier. Il complète les documents d'architecture sans
 devenir une source de vérité générale.
 
-## Prochain chantier à préparer
+## En cours
 
-L'encodeur du point cloud brut vers LiDAR BEV, avec des conventions de repère
-et de grille compatibles avec la branche caméra, précédera la fusion et les
-heads 3D. Voir les [milestones](../milestones.md).
+- [LiDAR BEV encoder](lidar-bev-encoder.md) : construction des piliers de 20 cm
+  et PFN/scatter/contexte dilaté implémentés et testés sur CPU, avec masques,
+  compteurs, backward et champ réceptif de 19 cellules vérifié. Une référence
+  multi-résolution est comparée sur CPU. Inspection conjointe 20 cm et premier
+  diagnostic GPU borné terminés ; revue visuelle développeur, plusieurs scènes
+  et benchmarking de déploiement restent à faire. Les choix durables
+  et les variantes proposées sont distingués dans le [design](../bev-lidar-encoder.md).
 
-## Clôturés - intégration BEV en attente
+Ce chantier précède la fusion et les heads 3D. Voir les
+[milestones](../milestones.md).
+
+## Clôturés - sur la branche LiDAR
+
+- [Diagnostic LiDAR centre facultatif](lidar-center-diagnostic.md) : inspection
+  `04`, mémorisation quatre frames avec `05`, pilote disjoint 410/102 avec `06`
+  terminé sur CUDA à 20 epochs. Incrément prototype clôturé après revue des
+  courbes et de cas TP/FN/FP ; retenir l'epoch 9 selon la loss de validation.
+  Cette head ne bloque pas la future fusion BEV ; intégration dans main à venir.
+
+## Clôturés - intégrés dans main
 
 - [Camera-depth BEV lift](camera-depth-bev-lift.md) : accès aux features
   implémenté sans modification du contrat de profondeur ni des checkpoints ;
   géométrie métrique, sélection du support, raccord à la grille BEV et backward
   testés. Trois variantes inspectées sur la frame 000000 et relecture terminée
-  le 2026-11-02 ; prototype prêt pour intégration dans main.
+  le 2026-11-02 ; prototype intégré dans main pour la release 1.2.0.
 - [Camera-depth backbone](camera-depth-backbone.md) : v1 implémentée et évaluée,
   pilotes random/blocs sur 512 frames et comparaison croisée terminés ;
   inspection held out de la frame 000366 consignée et clôture du prototype
@@ -29,7 +44,6 @@ validité/confiance sont raccordés à un premier lift BEV fonctionnel PyTorch.
 Les études supplémentaires
 d'entraînement ne sont pas des prérequis pour ce prototype géométrique.
 
-Les journaux restent à leur emplacement actuel pendant la préparation de
-l'intégration, pour conserver les liens de relecture. Leur archivage sous
-`docs/archive/workstreams/` après intégration devra préserver ou mettre à
-jour ces liens ; aucun déplacement n'est effectué ici.
+Les journaux clôturés restent à leur emplacement actuel pour conserver les
+liens de relecture. Leur futur archivage sous `docs/archive/workstreams/`
+devra préserver ou mettre à jour ces liens ; aucun déplacement n'est effectué ici.

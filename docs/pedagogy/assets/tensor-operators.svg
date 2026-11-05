@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="870" viewBox="0 0 1120 870" role="img" aria-labelledby="title desc"><title id="title">Convolutions sur les tenseurs BEV</title><desc id="desc">Un noyau par canal d’entrée et de sortie calcule une somme sur les canaux et l’espace. L’addition résiduelle conserve les dimensions. Deux têtes 1x1 prédisent centres et offsets.</desc><defs><marker id="a" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1120" height="870" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="36" y="42" font-size="14" fill="#235ce0" font-weight="bold">DES OPÉRATEURS AUX CALCULS</text>
+<text x="36" y="82" font-size="30" fill="#17283f" font-weight="bold">Une convolution mélange espace et canaux</text>
+<rect x="90" y="133" width="125" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M115 133v110 M90 155h125" stroke="#cbd5e2"/>
+<path d="M140 133v110 M90 177h125" stroke="#cbd5e2"/>
+<path d="M165 133v110 M90 199h125" stroke="#cbd5e2"/>
+<path d="M190 133v110 M90 221h125" stroke="#cbd5e2"/>
+<rect x="75" y="149" width="125" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M100 149v110 M75 171h125" stroke="#cbd5e2"/>
+<path d="M125 149v110 M75 193h125" stroke="#cbd5e2"/>
+<path d="M150 149v110 M75 215h125" stroke="#cbd5e2"/>
+<path d="M175 149v110 M75 237h125" stroke="#cbd5e2"/>
+<rect x="60" y="165" width="125" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M85 165v110 M60 187h125" stroke="#cbd5e2"/>
+<path d="M110 165v110 M60 209h125" stroke="#cbd5e2"/>
+<path d="M135 165v110 M60 231h125" stroke="#cbd5e2"/>
+<path d="M160 165v110 M60 253h125" stroke="#cbd5e2"/>
+<text x="60" y="305" font-size="17" fill="#235ce0" font-weight="bold">X : [B, Cin, H, W]</text>
+<text x="60" y="337" font-size="16" fill="#17283f">Canaux de features</text>
+<text x="60" y="361" font-size="16" fill="#17283f">≠ hauteur physique</text>
+<path d="M225 214H298" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="315" y="148" width="460" height="160" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="329" y="176" font-size="20" fill="#127761" font-weight="bold">Noyaux K : [Cout, Cin, 3, 3]</text>
+<text x="329" y="205" font-size="16" fill="#17283f">Un noyau 3×3 pour chaque paire (sortie, entrée)</text>
+<text x="330" y="244" font-size="15" fill="#17283f">Y[o,i,j] = somme des K[o,c,u,v] × X[c,i+du,j+dv]</text>
+<text x="330" y="279" font-size="15" fill="#17283f">Sommer sur c, u, v ; poids partagés dans l’espace.</text>
+<path d="M787 214H849" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="905" y="133" width="125" height="110" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M930 133v110 M905 155h125" stroke="#cbd5e2"/>
+<path d="M955 133v110 M905 177h125" stroke="#cbd5e2"/>
+<path d="M980 133v110 M905 199h125" stroke="#cbd5e2"/>
+<path d="M1005 133v110 M905 221h125" stroke="#cbd5e2"/>
+<rect x="890" y="149" width="125" height="110" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M915 149v110 M890 171h125" stroke="#cbd5e2"/>
+<path d="M940 149v110 M890 193h125" stroke="#cbd5e2"/>
+<path d="M965 149v110 M890 215h125" stroke="#cbd5e2"/>
+<path d="M990 149v110 M890 237h125" stroke="#cbd5e2"/>
+<rect x="875" y="165" width="125" height="110" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M900 165v110 M875 187h125" stroke="#cbd5e2"/>
+<path d="M925 165v110 M875 209h125" stroke="#cbd5e2"/>
+<path d="M950 165v110 M875 231h125" stroke="#cbd5e2"/>
+<path d="M975 165v110 M875 253h125" stroke="#cbd5e2"/>
+<text x="875" y="305" font-size="17" fill="#127761" font-weight="bold">Y : [B, Cout, H, W]</text>
+<text x="875" y="337" font-size="16" fill="#17283f">32 → 32 ici</text>
+<text x="875" y="361" font-size="16" fill="#17283f">Stride 1 ; padding d</text>
+<text x="36" y="410" font-size="18" fill="#17283f">Dilation d=1 : 9 positions dans 3×3. Dilation d=2 : 9 positions dans 5×5.</text>
+<text x="36" y="440" font-size="17" fill="#53647b">Même nombre de coefficients ; l’étendue spatiale change.</text>
+<rect x="36" y="478" width="1048" height="166" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="50" y="506" font-size="20" fill="#127761" font-weight="bold">Bloc résiduel : deux chemins, une addition</text>
+<text x="50" y="535" font-size="16" fill="#17283f">X → Conv 3×3 → ReLU → Conv 3×3 → F(X)</text>
+<path d="M358 569H700" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<text x="710" y="574" font-size="22" fill="#127761" font-weight="bold">X + F(X) → ReLU → Y</text>
+<text x="56" y="614" font-size="17" fill="#17283f">Même forme sur les deux chemins. Addition élément par élément, sans empiler les canaux.</text>
+<path d="M160 550V584H690V574" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="36" y="683" width="370" height="133" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="50" y="711" font-size="20" fill="#235ce0" font-weight="bold">Features après contexte</text>
+<text x="50" y="740" font-size="16" fill="#17283f">[B,32,H,W]</text>
+<path d="M418 748H492" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="510" y="683" width="574" height="133" rx="10" fill="white" stroke="#b96012" stroke-width="2"/>
+<text x="524" y="711" font-size="20" fill="#b96012" font-weight="bold">Deux lectures 1×1, avec biais</text>
+<text x="524" y="740" font-size="16" fill="#17283f">32 → 1 logit Car ; 32 → 2 offsets XY</text>
+<text x="526" y="782" font-size="16" fill="#17283f">Pas de voisin spatial ajouté par le noyau 1×1.</text>
+<text x="36" y="850" font-size="15" fill="#53647b">Vue pédagogique du code actuel ; poids et activations ne représentent pas un modèle entraîné.</text>
+</g></svg>

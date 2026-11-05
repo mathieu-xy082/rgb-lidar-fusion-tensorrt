@@ -2,18 +2,21 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-11-02.
+Mise à jour : 2026-11-03.
 
 Statut : **design de référence**. Le backbone camera-depth préalable est
 implémenté, évalué sur les pilotes random/blocs 512 frames et clôturé après
 inspection qualitative. Le premier lift BEV géométrique est implémenté, relu
-et inspecté ; sa branche attend l'intégration dans main. La branche LiDAR BEV,
-la fusion et les heads 3D restent à développer.
+et inspecté ; il est intégré dans main depuis la release 1.2.0. La branche
+LiDAR dispose des piliers, du PFN, du scatter et d'un premier contexte spatial,
+avec inspection conjointe à 20 cm et diagnostic GPU borné. La fusion et les
+heads 3D restent à développer ; aucune détection LiDAR n'est encore apprise.
 
 Documents liés :
 
 - [milestones du projet](milestones.md) ;
 - [design du backbone camera-depth](bev-cam-depth-backbone.md) ;
+- [design de l'encodeur LiDAR BEV](bev-lidar-encoder.md) ;
 - [workstream camera-depth](workstreams/camera-depth-backbone.md).
 
 ## Question
@@ -144,7 +147,10 @@ camera_bev: [B, C1, Hbev, Wbev]
 point cloud
     |
     v
-PointPillars/VoxelNet-like encoder
+PointPillars-like encoder (piliers XY de 20 cm)
+    |
+    v
+Contexte LiDAR avant fusion (cible : environ 3,8 m)
     |
     v
 lidar_bev: [B, C2, Hbev, Wbev]
@@ -220,7 +226,7 @@ pas un prérequis.
 Point cloud
         |
         v
-LiDAR encoder PointPillars/VoxelNet simplifié
+Piliers XY de 20 cm -> PFN -> scatter -> contexte LiDAR
         |
         v
 BEV LiDAR features
@@ -240,6 +246,29 @@ une carte BEV cohérente et exploitable par une head 3D.
 
 La branche LiDAR doit rester une source géométrique autonome. La fusion ne doit
 pas dépendre d'une détection 2D préalable.
+
+Le [design de l'encodeur LiDAR](bev-lidar-encoder.md) retient des piliers de
+0,20 x 0,20 m et une grille commune avec le lift caméra. Pour la ROI initiale
+proposée de 50 x 50 m, les sorties auront 250 x 250 cellules. Le lift caméra
+sera recalculé à cette résolution, sans interpoler les anciennes cartes à 0,50 m.
+
+Avant fusion, le bloc LiDAR vise un champ réceptif théorique d'environ
+3,8 x 3,8 m. Quatre convolutions de dilatations `(1, 2, 2, 4)`, en deux blocs
+résiduels à 32 canaux, sont implémentées et vérifiées sur CPU. Une variante
+multi-résolution est comparée, sans validation de précision ou performance GPU.
+Le PFN implémenté utilise BatchNorm sur les seuls points valides plutôt que la
+variante LayerNorm initialement évoquée, avec une sortie à 32 canaux et un
+scatter à stride 1. Le backbone BEV commun apportera ensuite le contexte
+plus large. Un champ réceptif théorique ne prouve pas une reconnaissance
+d'objet : celle-ci demandera supervision et évaluation LiDAR seul ultérieures.
+Le [workstream LiDAR](workstreams/lidar-bev-encoder.md) sépare les tâches de
+construction des piliers, PFN/scatter, contexte et validation du raccord.
+
+Un [diagnostic centre LiDAR facultatif](workstreams/lidar-center-diagnostic.md)
+prépare également l'apprentissage de cette branche seule : heatmap Car et
+offset XY, annotations KITTI et notebook CPU. Ce n'est ni une tête obligatoire
+avant fusion ni encore un détecteur 3D entraîné. Les mêmes encodeurs pourront
+recevoir les gradients de la future tête finale, sans tête LiDAR séparée.
 
 ## Phase BEV 3 - Supervision image auxiliaire
 
@@ -290,15 +319,15 @@ pas comme filtre obligatoire avant la détection 3D.
 - pénalisation des prédictions 3D qui contredisent fortement les pixels à forte
   `confidence`.
 
-## Décisions à prendre avant implémentation
+## Décisions encore ouvertes pour le détecteur complet
 
 - dataset cible initial : KITTI object, nuScenes mini, ou dataset synthétique ;
 - classes initiales : voiture seule, puis piéton/cycliste ;
-- repère BEV : limites x/y/z, résolution en mètres par cellule ;
-- convention d'axes : véhicule/KITTI/caméra ;
-- représentation LiDAR BEV : pillars simples, voxels, ou histogrammes manuels ;
-- méthode de lift image-depth -> BEV : scatter dur, pooling, ou features
-  pondérées par `confidence` ;
+- limites x/y/z adaptées au dataset et à la plateforme ; la première ROI
+  proposée réutilise l'inspection KITTI, avec des piliers de 20 cm ;
+- largeur PFN et bloc de contexte LiDAR, puis architecture du backbone BEV commun ;
+- politique de profondeur/support pour la détection : le lift actuel fournit
+  déjà un scatter dur par moyenne, éventuellement pondérée par `confidence` ;
 - première cible de training : heatmap BEV synthétique, pseudo-target KITTI, ou
   vraies annotations 3D.
 
@@ -325,13 +354,25 @@ Le positionnement plus juste est :
 
 ## Prochain incrément concret
 
-Intégrer `ec/camera-depth-bev-lift` dans main après la clôture documentée du
-backbone v1 et du premier raccord géométrique. Les
+Le backbone v1 et le premier raccord géométrique sont intégrés dans main
+(release 1.2.0). Les
 [prérequis de raccord](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) sont
 implémentés ; le critère synthétique RGB + enriched LiDAR + calibration vers
 `camera_bev`, avec grille explicite et backward fonctionnel, est atteint.
 
-Préparer ensuite la [phase BEV 2](#phase-bev-2---branche-lidar-et-fusion) :
-définir le contrat du point cloud et de son encodeur LiDAR BEV, en conservant
-un repère et une grille compatibles avec camera BEV, avant la fusion et les
+La [phase BEV 2](#phase-bev-2---branche-lidar-et-fusion) dispose maintenant de la
+construction des piliers, du PFN, du scatter et du contexte spatial testés,
+inspectés sur une même grille de 20 cm, avec un premier contrôle GPU LiDAR.
+Relire ces résultats avant de préparer la fusion. Suivre les incréments du
+[workstream LiDAR BEV](workstreams/lidar-bev-encoder.md#progress), sur un
+repère et une grille compatibles avec camera BEV, avant la fusion et les
 heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.
+
+Le suivi facultatif actuellement choisi prépare d'abord le
+[diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) : notebook,
+labels, mémorisation sur quatre frames et runner train/validation sont disponibles.
+Le pilote 410/102 a terminé 20 epochs CUDA ; l'epoch 9 est retenue selon la loss
+de validation, avec revue qualitative de cas correct/manqué/faux positif.
+Cet incrément prototype est clôturé ; revenir au raccord caméra/LiDAR BEV,
+sans confondre cette validation avec une qualité de détection finale.
+Cet entraînement autonome ne devient pas un prérequis de la fusion.

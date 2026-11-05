@@ -19,14 +19,21 @@ Le socle implémenté couvre :
 - un backbone camera-depth dense entraîné par holdout de mesures LiDAR ;
 - un premier lift géométrique des features caméra vers BEV, avec masques,
   agrégation par cellule, tests de backward et inspection KITTI sur CPU ;
+- une préparation des piliers LiDAR bruts et un PFN/scatter vers BEV, avec
+  masques, compteurs et contexte dilaté résiduel testés, une inspection conjointe
+  caméra/LiDAR et un premier diagnostic GPU borné ;
+- une tête LiDAR facultative de localisation des centres de voitures, avec
+  cibles KITTI, loss masquée, mémorisation sur quatre frames puis pilote CUDA
+  de 20 epochs avec split disjoint 410 train / 102 validation ; bilan et
+  limites dans le [workstream LiDAR centre](docs/workstreams/lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure) ;
 - des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
 
 Le lift BEV est un prototype PyTorch fonctionnel, relu et inspecté, clôturé pour
 ce premier périmètre ; ce n'est pas une détection 3D ni un module validé temps réel.
-Le point cloud brut conservera ensuite sa propre branche BEV avant la fusion
-et les têtes de détection 3D. Voir le
+Le point cloud brut dispose aussi d'un premier PFN/scatter et contexte BEV ;
+la fusion et les têtes de détection 3D restent à développer. Voir le
 [workstream du lift](docs/workstreams/camera-depth-bev-lift.md).
 
 L'état détaillé et les critères de sortie sont suivis dans
@@ -89,6 +96,12 @@ La conception complète est décrite dans
 [docs/bev-model-roadmap.md](docs/bev-model-roadmap.md). Le sous-système
 camera-depth qui prépare le lift est détaillé dans
 [docs/bev-cam-depth-backbone.md](docs/bev-cam-depth-backbone.md).
+La [conception de l'encodeur LiDAR](docs/bev-lidar-encoder.md) précise le
+chantier en cours : piliers de 20 cm, PFN/scatter et premier contexte spatial
+avant fusion sont implémentés, inspectés sur une grille commune de 20 cm et
+testés dans un premier diagnostic GPU. Cela ne valide ni la détection ni le
+temps réel de la chaîne complète. Commandes et limites dans le
+[workstream LiDAR](docs/workstreams/lidar-bev-encoder.md#4-scope-inspection-compatibility-and-resources).
 
 ## Contrat LiDAR image-space
 
@@ -141,7 +154,7 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G ml -G visualization -G notebook
 PDM_IGNORE_ACTIVE_VENV=1 pdm run notebooks
 ```
 
-Suivre les notebooks `01`, `02`, puis `03` décrits dans leur
+Suivre les notebooks `01` à `06` décrits dans leur
 [README](notebooks/README.md).
 
 ## Commandes principales

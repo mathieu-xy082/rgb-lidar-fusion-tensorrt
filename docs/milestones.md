@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-11-02.
+Mise à jour : 2026-11-03.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -24,6 +24,11 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Accès aux features camera-depth | `forward_features()` expose `[B, 32, H, W]`, sans changer la sortie profondeur ni les checkpoints v1 |
 | Clôture du backbone v1 | Inspection held out de la frame `000366` et limites consignées ; prototype sparse-supervisé accepté |
 | Premier raccord caméra BEV | Grille, masques, agrégation et gradients testés ; trois variantes inspectées sur `000000`, relecture terminée |
+| Construction des piliers LiDAR | Entrée XYZI brute, grille 20 cm, neuf features, masques et sélection reproductible ; tests CPU et contrôle KITTI |
+| PFN et scatter LiDAR | Linear/BatchNorm/ReLU/max masqué, features BEV stride 1, comptes pré-cap conservés ; tests et backward CPU |
+| Premier contexte LiDAR BEV | Deux blocs résiduels dilatés, support 19x19 vérifié, grille/mesures conservées ; comparaison multi-résolution CPU |
+| Inspection conjointe et diagnostic LiDAR | Caméra/LiDAR sur grille 20 cm, couverture hors FOV préservée ; premier forward/backward GPU batch 1 et pic mémoire mesurés |
+| Diagnostic centre LiDAR | Incrément prototype clôturé : mémorisation quatre frames, pilote 410/102 de 20 epochs CUDA, best epoch 9 et revue TP/FN/FP |
 
 ## Bilan camera-depth v1
 
@@ -70,9 +75,9 @@ bords, collisions et gradients vers le backbone sont testés. Une frame KITTI a
 sans nouvel entraînement. Les variantes sparse, splattée non pondérée et
 splattée pondérée sur `000000` ont été jugées visuellement cohérentes. La
 relecture du 2026-11-02 n'a trouvé aucun défaut bloquant : 357 tests réussis,
-un test CUDA ignoré. La branche `ec/camera-depth-bev-lift` est prête à intégrer
-dans `main` ; cette fusion n'est pas encore effectuée. La checklist technique
-de référence est dans les
+un test CUDA ignoré. La branche `ec/camera-depth-bev-lift` a été intégrée dans
+`main` par le merge `8290530`, puis publiée dans la release `1.2.0`. La checklist
+technique de référence est dans les
 [prérequis du raccord BEV](bev-cam-depth-backbone.md#prerequis-du-raccord-bev).
 
 Implémentation incrémentale :
@@ -108,8 +113,82 @@ Architecture de référence :
 
 ## Prochaines étapes
 
-1. Ajouter un encodeur du point cloud de type PointPillars/VoxelNet vers
-   `lidar_bev`.
+### Chantier en cours : encodeur LiDAR BEV
+
+Le [design LiDAR](bev-lidar-encoder.md) retient des piliers de 20 cm et un
+contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra sera recalculé
+sur la même grille ; pour la ROI initiale proposée, elle passe de 100 x 100
+à 250 x 250 cellules. Le PFN, le scatter et le premier bloc de contexte dilaté
+sont implémentés et testés sur CPU, sans détection apprise à ce stade.
+
+La construction déterministe des piliers est implémentée sans réseau neuronal :
+les compteurs avant sélection, masques, indices source et features des points
+retenus sont explicites. Validation du 2026-11-03 : 415 tests réussis et un test
+CUDA ignoré, plus un contrôle CPU de la frame KITTI `000000`. Aucun entraînement
+LiDAR ni nouveau checkpoint n'a été produit.
+
+Le PFN à 32 canaux et le scatter sont maintenant testés : 472 tests réussis,
+un test CUDA ignoré. Padding exclu de BatchNorm/max, politique explicite pour
+zéro/un point valide, cartes BEV et gradients finis, compteurs bruts conservés.
+Le contrôle KITTI `000000` utilise des poids aléatoires, sans optimizer step ;
+il ne constitue pas un résultat de détection ni une mesure de performance GPU.
+
+Le contexte résiduel à dilatations `(1, 2, 2, 4)` est aussi implémenté : support
+19x19 vérifié, sortie à stride 1 et mesures brutes conservées. La suite complète
+atteint 517 tests réussis et un test CUDA ignoré. Une variante multi-résolution
+est plus rapide dans le contrôle CPU local, mais le bloc dilaté reste la première
+référence fonctionnelle pour son champ uniforme et son alignement direct ;
+aucun optimum latence/précision ni déploiement GPU n'est démontré.
+
+Le [workstream LiDAR](workstreams/lidar-bev-encoder.md#progress) regroupe les
+tâches par périmètre : piliers/contrat, PFN/scatter, contexte, inspection et
+mesures de ressources. L'inspection conjointe sur la grille de 20 cm et le
+diagnostic GPU LiDAR sont maintenant disponibles : 528 tests réussis et un test
+CUDA ignoré localement, plus un contrôle matériel distinct. Le garde-fou LiDAR
+est de 2 048 MiB libres ; celui de la caméra reste à 2 500 MiB. Le premier
+contrôle mesure 11,0 ms en forward, 35,3 ms en forward/backward et 180,5 MiB de
+pic PyTorch, sans caméra ni optimiseur. Le grouping CPU prend 95,7 ms séparément :
+ni temps réel global ni stabilité longue durée ne sont démontrés.
+
+### Diagnostic supervisé facultatif
+
+Le notebook `04_lidar_bev_analysis.ipynb` inspecte le LiDAR, ses features, les
+boîtes KITTI et les cibles. Il utilise un modèle CPU à poids aléatoires, sans
+réseau ni optimiseur automatique. Une head séparée prédit les centres Car et
+leurs offsets XY ; sa loss focal/L1 et le backward complet sont testés.
+
+Les 512 frames disposent maintenant de leurs labels officiels : 1 947 labels
+Car, dont 1 715 centres dans la ROI. L'audit ne relève pas d'erreur de format,
+de correspondance ou de construction des cibles ; cela ne garantit pas la
+perfection des annotations humaines. Le hors-champ, DontCare et les classes
+ignorées ne sont pas des négatifs implicites. Données et rapports restent hors Git.
+
+La mémorisation sur `000006`, `000036`, `000123`, `000366` est validée :
+200 epochs sur CUDA, 800 updates, 13 centres appariés, aucun faux positif au
+seuil 0,3 dans le domaine annoté. Ce résultat porte sur les frames apprises.
+
+Le notebook `06` a terminé 20 epochs CUDA, soit 8 200 updates, sur 410 frames
+train / 102 validation disjointes, en partant de poids neufs. Le minimum de loss
+validation est à l'epoch 9 : 2,01414, précision 71,66%, rappel 63,77%,
+220 TP / 87 FP / 125 FN au seuil 0,3 et rayon d'appariement de 1 m. L'écart XY
+moyen de 0,18851 m ne concerne que les centres appariés. À l'epoch 20, la loss
+train diminue encore mais la loss validation remonte à 3,49954 : surapprentissage.
+
+Les frames de validation `000009` (centre retrouvé), `000148` (centre manqué)
+et `000388` (faux positif) ont été inspectées. Retenir `best.pt` à l'epoch 9,
+pas `latest.pt` à l'epoch 20, pour l'inspection et la future réutilisation.
+Le pic d'allocation PyTorch rapporté est 212,40 MiB ; ce n'est pas la mémoire
+totale GPU ni une preuve de temps réel. L'indépendance des scènes reste à établir.
+
+Décision : incrément prototype accepté pour la chaîne entraînement/validation,
+sans revendication de détecteur final. Prochaine action : revenir au raccord
+caméra/LiDAR BEV. Optimiser davantage cette head reste facultatif.
+Suivi : [diagnostic centre LiDAR](workstreams/lidar-center-diagnostic.md).
+
+### Ordre des incréments
+
+1. Relire et stabiliser le premier encodeur du point cloud de type PointPillars
+   vers `lidar_bev`, son contexte spatial et ses diagnostics.
 2. Fusionner `camera_bev` et `lidar_bev` dans un backbone BEV commun.
 3. Ajouter des heads CenterPoint-like : centre, offset, hauteur, dimensions,
    orientation, classe et éventuellement vitesse.

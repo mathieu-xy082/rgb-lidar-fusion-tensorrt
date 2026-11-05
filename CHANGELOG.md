@@ -4,6 +4,81 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+
+- LiDAR center training on a saved disjoint KITTI frame split (410/102 for the
+  local 512-frame pilot), streaming preparation, negative/unknown frame policy,
+  independent eval-mode train/validation metrics, latest/best checkpoints and
+  checked resume. Notebook `06` defaults to no training. Existing four-frame
+  overfit checkpoints remain readable.
+- Four-frame LiDAR memorization runner and notebook `05`, validated locally
+  on CUDA for 200 epochs/800 steps with 13 matched centers. These are training
+  frames only, not a generalization or full-3D-detection result.
+- CPU-first `04_lidar_bev_analysis.ipynb` and reusable LiDAR frame inspection,
+  showing KITTI boxes, input/context features, supervision domains, targets and
+  explicitly untrained predictions without automatic download or training.
+- Optional LiDAR-only Car-center/XY-offset head, stable masked focal/L1 objective,
+  and metric center decoding. Target construction preserves full calibration,
+  converts bottom centers correctly, and excludes unknown/DontCare frustums from
+  negative supervision. This is not a mandatory fused-model head or full 3D AP.
+- Official label-only preparation for existing KITTI frame IDs, protected
+  extraction, provenance and local annotation/geometry/target audit. Labels and
+  generated reports remain ignored; annotation preparation itself starts no training.
+- NumPy-first raw XYZI pillar construction on the shared configurable BEV grid,
+  targeting 20 cm cells. Returns nine point features, explicit padding/source
+  indices, pre-cap measurement counts, and reproducible per-pillar overflow
+  sampling (64 retained points by default). Empty samples/batches, finite-input
+  policy, camera-grid alignment, and input/RNG preservation are tested. This
+  grouping step has no learned parameters.
+- Mask-aware `PillarFeatureNet` (Linear/BatchNorm/ReLU/max, 32 channels by
+  default) and differentiable stride-1 LiDAR BEV scatter preserving raw
+  pre-cap measurement evidence. Padding is excluded from normalization and
+  pooling; empty/singleton training calls use unchanged BN running statistics.
+  CPU tests and a randomly initialized KITTI forward/backward check cover this
+  first trainable representation; no LiDAR training runner, detection head,
+  or GPU/export validation is introduced.
+- Residual LiDAR BEV context with four bias-free stride-1 convolutions at
+  dilations `(1, 2, 2, 4)`, preserving the grid and raw measurement evidence.
+  Controlled impulse/gradient tests verify a complete 19x19 receptive field.
+  Empty/odd/non-square grids and full PFN-to-context backward are CPU-tested.
+  A reproducible CPU comparison against a small multi-resolution reference
+  records parameter/timing trade-offs, without detection or GPU claims.
+- Opt-in joint camera/LiDAR BEV inspection on a shared configurable grid,
+  keeping historical camera-only defaults/artifacts and native LiDAR outside
+  camera coverage. Figures and NPZ/JSON separate measurements, splat support,
+  and random-weight LiDAR features rather than claiming semantic scores.
+- Bounded, incremental-log LiDAR-only CPU/CUDA diagnostics for batch-1 FP32
+  PFN/scatter/context forward/backward and peak PyTorch allocation, without
+  optimizer/checkpoint writes or retries after failure. The local default
+  memory guard is 2048 MiB; camera preflight remains at 2500 MiB. One measured
+  GPU iteration per mode completed on real KITTI after warmup; this is not an
+  end-to-end real-time, detection-quality, or long-run stability result.
+
+### Changed
+
+- Clear notebook execution outputs/counters and restore opt-in action flags,
+  retaining reviewed block-holdout and CUDA presets. Executed sessions are kept
+  locally under ignored results; no dataset or trained checkpoint is committed.
+- Reorganized the learning documentation around peer camera-depth and LiDAR
+  branches, their planned BEV convergence and shared operators. Branch pages
+  and explorers now offer consistent navigation; documentation checks cover
+  local links, anchors, branch structure and SVG syntax. Model code and
+  interactive calculations are unchanged.
+
+### Validated
+
+- Close the optional LiDAR center prototype after 20 CUDA epochs/8,200 updates
+  on 410 train / 102 validation frames. Best validation-loss epoch is 9
+  (2.01414): 220 TP / 87 FP / 125 FN, precision 71.66%, recall 63.77% under
+  the configured masked-domain score/radius policy. Later epochs overfit;
+  this is not scene-independent generalization, full 3D AP or real-time validation.
+- Review validation cases `000009` (found), `000148` (missed), `000388` (FP).
+  Retain local `best.pt` for prototype reuse; further auxiliary-head optimization
+  is not a prerequisite for camera/LiDAR BEV integration.
+- Closure regression: 633 tests passed, one CUDA-only test skipped, no notebook
+  checks excluded. Versioned notebooks have no execution outputs/counters.
+
 ## [1.2.0] - 2026-11-02 - Merge branch 'ec/camera-depth-bev-lift' into main
 ### Added
 

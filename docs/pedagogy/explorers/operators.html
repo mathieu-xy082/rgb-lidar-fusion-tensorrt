@@ -1,0 +1,171 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Calculer une convolution BEV</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#17283f;font:16px/1.6 system-ui,sans-serif}main{max-width:1150px;margin:auto;padding:30px 20px}h1{font-size:clamp(28px,4vw,42px);line-height:1.2}.controls{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin:22px 0}label{max-width:100%}select,button{font:inherit;padding:8px 12px;border:1px solid #bdcadd;border-radius:7px;background:white;color:#17283f;max-width:100%}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #e5a020;outline-offset:3px}.panel{background:white;border:1px solid #dce3ed;border-radius:12px;padding:20px;margin:20px 0}.maps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.grid{display:grid;gap:3px;font-variant-numeric:tabular-nums}.input{grid-template-columns:repeat(7,minmax(0,1fr))}.kernel{grid-template-columns:repeat(3,minmax(0,1fr))}.cell{padding:7px 0;text-align:center;border:1px solid #d5dfec;font-size:14px;background:#f3f6fa}.cell.sample{background:#e5efff;border-color:#235ce0;font-weight:700}.cell.center{outline:2px solid #b96012;outline-offset:-2px}.cell.output{background:#e4f4ed;border-color:#127761;font-weight:700}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}th,td{padding:7px 10px;border-bottom:1px solid #e2e8ef;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}.equation{font-family:ui-monospace,monospace;background:#edf2fa;padding:16px;overflow-wrap:anywhere}.muted{color:#53647b}.sum{font-size:22px;font-weight:700;color:#127761}summary{cursor:pointer;font-weight:650}svg{display:block;max-width:100%;height:auto}footer{font-size:14px;margin:25px 0}a{color:#1848b0}@media(max-width:760px){.maps{grid-template-columns:1fr}.cell{min-height:38px}.controls{gap:12px}main{padding:20px 12px}.panel{padding:14px}}
+</style></head><body><main>
+<nav aria-label="Parcours pédagogique"><a href="../README.md">Vue globale</a> · <a href="camera-depth.html">Branche caméra</a> · <a href="architecture.html">Branche LiDAR</a></nav>
+<p>FORMALISME ET INTUITION · CONVOLUTIONS ET CANAUX</p><h1>Une cellule de sortie, tous ses produits</h1><p>Une convolution ne fait pas seulement glisser un petit carré : pour chaque canal de sortie, elle additionne aussi les contributions de <strong>tous les canaux d’entrée</strong>. Cet exemple calcule réellement les produits sur deux cartes 7×7, avec deux canaux de sortie fictifs. Aucun modèle entraîné n’est utilisé.</p>
+<p>Les exemples de contexte et de head ci-dessous viennent de la branche LiDAR. Le principe de convolution sert aussi à la branche caméra ; ses couches, ses biais et ses tailles sont détaillés dans sa fiche propre.</p>
+<div class="controls"><label>Opérateur <select id="operator"><option value="3">Conv 3×3 sans biais · contexte</option><option value="1">Conv 1×1 avec biais · lecture de head</option></select></label><label>Dilation <select id="dilation"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select></label><label>Canal de sortie <select id="out"><option value="0">0</option><option value="1">1</option></select></label></div>
+<p class="muted">Cliquez une cellule de la carte de droite pour déplacer le noyau. Les cellules bleues à gauche sont lues par le calcul ; l’orange repère la position centrale. Les positions hors grille valent zéro.</p>
+<section class="panel"><h2 id="shape"></h2><div class="maps"><div><h3>Entrée · canal 0</h3><div class="grid input" id="input0"></div><h3>Noyau pour ce canal</h3><div class="grid kernel" id="kernel0"></div></div><div><h3>Entrée · canal 1</h3><div class="grid input" id="input1"></div><h3>Noyau pour ce canal</h3><div class="grid kernel" id="kernel1"></div></div><div><h3>Sortie · canal sélectionné</h3><div class="grid input" id="output"></div><p>Somme avant activation : <span class="sum" id="total"></span></p><p id="relu"></p></div></div></section>
+<section class="panel" aria-live="polite"><h2>Déplier la somme</h2><p class="equation" id="formula"></p><p id="subtotals"></p><details><summary>Voir chaque multiplication</summary><div class="scroll" id="products"></div></details></section>
+<section class="panel"><h2>Ce qui change dans le vrai réseau</h2><p>Le contexte utilise 32 canaux d’entrée et 32 de sortie, soit 9 216 poids par convolution 3×3 sans biais. Ici nous en utilisons deux pour pouvoir suivre tous les produits. Dilation 1, 2 ou 4 change les positions lues, jamais le nombre de coefficients. Le stride reste 1 et le padding vaut la dilation.</p><p>La head actuelle possède deux convolutions 1×1 distinctes : 32→1 pour les logits de centre Car et 32→2 pour les offsets XY. Notre mode 1×1 est un exemple réduit de mélange de canaux ; il ne remplace pas les deux branches de cette head. La sigmoid affichée est une transformation numérique, pas une probabilité calibrée.</p><p>ReLU est montrée séparément : elle n’est pas automatiquement intégrée à chaque convolution du contexte. Le dernier résultat de chaque bloc est ajouté à son entrée, puis passé dans ReLU.</p></section>
+<section class="panel"><h2>Lire les volumes de features</h2><svg xmlns="http://www.w3.org/2000/svg" width="1280" height="730" viewBox="0 0 1280 730" role="img" aria-labelledby="volume-title volume-desc"><title id="volume-title">Volumes et dimensions du chemin LiDAR actuel</title><desc id="volume-desc">Piliers P par M par 9, PFN P par 32, scatter puis deux blocs résiduels à 32 canaux et résolution 250 par 250 constante. La head produit une heatmap Car et deux offsets XY, sans couches fully connected.</desc><defs><marker id="arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1280" height="730" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="35" y="42" font-size="14" fill="#235ce0" font-weight="bold">LIRE LE RÉSEAU PAR SES VOLUMES</text>
+<text x="35" y="82" font-size="32" fill="#17283f" font-weight="bold">Des piliers aux cartes de prédiction</text>
+<text x="35" y="116" font-size="17" fill="#17283f">Dimensions nominales ; batch B omis sur les volumes. Profondeur dessinée = canaux, pas hauteur physique.</text>
+<path d="M35 168h515" stroke="#235ce0" stroke-width="3"/>
+<text x="35" y="155" font-size="21" fill="#235ce0" font-weight="bold">1. Encodeur LiDAR</text>
+<path d="M575 168h350" stroke="#127761" stroke-width="3"/>
+<text x="575" y="155" font-size="21" fill="#127761" font-weight="bold">2. Contexte BEV actuel</text>
+<path d="M950 168h295" stroke="#b96012" stroke-width="3"/>
+<text x="950" y="155" font-size="21" fill="#b96012" font-weight="bold">3. Head de centres</text>
+<path d="M50 280l20 -20h66l-20 20Z" fill="#235ce0" fill-opacity=".16" stroke="#235ce0"/>
+<path d="M116 280l20 -20v138l-20 20Z" fill="#235ce0" fill-opacity=".30" stroke="#235ce0"/>
+<rect x="50" y="280" width="66" height="138" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M66.5 280v138M50 314.5h66" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M83.0 280v138M50 349.0h66" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M99.5 280v138M50 383.5h66" stroke="#235ce0" stroke-opacity=".3"/>
+<text x="38" y="475" font-size="18" fill="#17283f" font-weight="bold">[P,M,9]</text>
+<text x="38" y="502" font-size="15" fill="#17283f">Piliers + masque</text>
+<path d="M145 350H185" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M200 310l24 -24h45l-24 24Z" fill="#235ce0" fill-opacity=".16" stroke="#235ce0"/>
+<path d="M245 310l24 -24v85l-24 24Z" fill="#235ce0" fill-opacity=".30" stroke="#235ce0"/>
+<rect x="200" y="310" width="45" height="85" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M211.25 310v85M200 331.25h45" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M222.5 310v85M200 352.5h45" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M233.75 310v85M200 373.75h45" stroke="#235ce0" stroke-opacity=".3"/>
+<text x="180" y="275" font-size="18" fill="#235ce0" font-weight="bold">PFN</text>
+<text x="180" y="475" font-size="18" fill="#17283f" font-weight="bold">[P,32]</text>
+<path d="M280 350H325" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M345 250l30 -30h145l-30 30Z" fill="#235ce0" fill-opacity=".16" stroke="#235ce0"/>
+<path d="M490 250l30 -30v190l-30 30Z" fill="#235ce0" fill-opacity=".30" stroke="#235ce0"/>
+<rect x="345" y="250" width="145" height="190" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M381.25 250v190M345 297.5h145" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M417.5 250v190M345 345.0h145" stroke="#235ce0" stroke-opacity=".3"/>
+<path d="M453.75 250v190M345 392.5h145" stroke="#235ce0" stroke-opacity=".3"/>
+<text x="340" y="215" font-size="18" fill="#235ce0" font-weight="bold">Scatter</text>
+<text x="322" y="475" font-size="18" fill="#17283f" font-weight="bold">[32,250,250]</text>
+<path d="M530 350H570" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M595 250l30 -30h110l-30 30Z" fill="#127761" fill-opacity=".16" stroke="#127761"/>
+<path d="M705 250l30 -30v190l-30 30Z" fill="#127761" fill-opacity=".30" stroke="#127761"/>
+<rect x="595" y="250" width="110" height="190" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M622.5 250v190M595 297.5h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M650.0 250v190M595 345.0h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M677.5 250v190M595 392.5h110" stroke="#127761" stroke-opacity=".3"/>
+<text x="580" y="215" font-size="16" fill="#127761" font-weight="bold">Bloc 1 : d=1,2</text>
+<text x="580" y="475" font-size="17" fill="#17283f" font-weight="bold">[32,250,250]</text>
+<path d="M743 350H775" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M790 250l30 -30h110l-30 30Z" fill="#127761" fill-opacity=".16" stroke="#127761"/>
+<path d="M900 250l30 -30v190l-30 30Z" fill="#127761" fill-opacity=".30" stroke="#127761"/>
+<rect x="790" y="250" width="110" height="190" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M817.5 250v190M790 297.5h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M845.0 250v190M790 345.0h110" stroke="#127761" stroke-opacity=".3"/>
+<path d="M872.5 250v190M790 392.5h110" stroke="#127761" stroke-opacity=".3"/>
+<text x="778" y="215" font-size="16" fill="#127761" font-weight="bold">Bloc 2 : d=2,4</text>
+<text x="775" y="475" font-size="17" fill="#17283f" font-weight="bold">[32,250,250]</text>
+<path d="M938 350H956V256H981" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M956 350V447H981" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M996 220l5 -5h85l-5 5Z" fill="#b96012" fill-opacity=".16" stroke="#b96012"/>
+<path d="M1081 220l5 -5v118l-5 5Z" fill="#b96012" fill-opacity=".30" stroke="#b96012"/>
+<rect x="996" y="220" width="85" height="118" fill="white" stroke="#b96012" stroke-width="2"/>
+<path d="M1017.25 220v118M996 249.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1038.5 220v118M996 279.0h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1059.75 220v118M996 308.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<text x="1100" y="250" font-size="16" fill="#17283f">Conv 1×1</text>
+<text x="1100" y="278" font-size="16" fill="#17283f">32 → 1</text>
+<text x="990" y="363" font-size="17" fill="#17283f" font-weight="bold">[1,250,250]</text>
+<path d="M996 416l12 -12h85l-12 12Z" fill="#b96012" fill-opacity=".16" stroke="#b96012"/>
+<path d="M1081 416l12 -12v118l-12 12Z" fill="#b96012" fill-opacity=".30" stroke="#b96012"/>
+<rect x="996" y="416" width="85" height="118" fill="white" stroke="#b96012" stroke-width="2"/>
+<path d="M1017.25 416v118M996 445.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1038.5 416v118M996 475.0h85" stroke="#b96012" stroke-opacity=".3"/>
+<path d="M1059.75 416v118M996 504.5h85" stroke="#b96012" stroke-opacity=".3"/>
+<text x="1100" y="445" font-size="16" fill="#17283f">Conv 1×1</text>
+<text x="1100" y="473" font-size="16" fill="#17283f">32 → 2</text>
+<text x="990" y="561" font-size="17" fill="#17283f" font-weight="bold">[2,250,250]</text>
+<text x="1100" y="310" font-size="15" fill="#b96012">Logits Car</text>
+<text x="1100" y="505" font-size="15" fill="#b96012">Offsets XY</text>
+<text x="35" y="610" font-size="20" fill="#17283f" font-weight="bold">32 canaux fixés par configuration ; leurs valeurs dépendent des poids et des entrées.</text>
+<text x="35" y="646" font-size="17" fill="#17283f">Pas de pooling spatial ni de couches fully connected dans ce chemin. Les deux blocs sont résiduels.</text>
+<text x="35" y="676" font-size="17" fill="#53647b">À venir : fusion avec camera BEV → backbone commun → head 3D complète (architecture non figée).</text>
+<text x="35" y="708" font-size="15" fill="#53647b">Volumes schématiques non à l’échelle ; aucun checkpoint illustré.</text>
+</g></svg><p>La grille 250×250 reste constante ; les volumes sont schématiques et non à l’échelle. Chaque carte porte une feature, pas une tranche verticale de la scène.</p></section>
+<section class="panel"><h2>Relier les opérateurs dans le réseau</h2><div id="tensorFigure"><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="870" viewBox="0 0 1120 870" role="img" aria-labelledby="title desc"><title id="title">Convolutions sur les tenseurs BEV</title><desc id="desc">Un noyau par canal d’entrée et de sortie calcule une somme sur les canaux et l’espace. L’addition résiduelle conserve les dimensions. Deux têtes 1x1 prédisent centres et offsets.</desc><defs><marker id="a" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1120" height="870" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
+<text x="36" y="42" font-size="14" fill="#235ce0" font-weight="bold">DES OPÉRATEURS AUX CALCULS</text>
+<text x="36" y="82" font-size="30" fill="#17283f" font-weight="bold">Une convolution mélange espace et canaux</text>
+<rect x="90" y="133" width="125" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M115 133v110 M90 155h125" stroke="#cbd5e2"/>
+<path d="M140 133v110 M90 177h125" stroke="#cbd5e2"/>
+<path d="M165 133v110 M90 199h125" stroke="#cbd5e2"/>
+<path d="M190 133v110 M90 221h125" stroke="#cbd5e2"/>
+<rect x="75" y="149" width="125" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M100 149v110 M75 171h125" stroke="#cbd5e2"/>
+<path d="M125 149v110 M75 193h125" stroke="#cbd5e2"/>
+<path d="M150 149v110 M75 215h125" stroke="#cbd5e2"/>
+<path d="M175 149v110 M75 237h125" stroke="#cbd5e2"/>
+<rect x="60" y="165" width="125" height="110" fill="white" stroke="#235ce0" stroke-width="2"/>
+<path d="M85 165v110 M60 187h125" stroke="#cbd5e2"/>
+<path d="M110 165v110 M60 209h125" stroke="#cbd5e2"/>
+<path d="M135 165v110 M60 231h125" stroke="#cbd5e2"/>
+<path d="M160 165v110 M60 253h125" stroke="#cbd5e2"/>
+<text x="60" y="305" font-size="17" fill="#235ce0" font-weight="bold">X : [B, Cin, H, W]</text>
+<text x="60" y="337" font-size="16" fill="#17283f">Canaux de features</text>
+<text x="60" y="361" font-size="16" fill="#17283f">≠ hauteur physique</text>
+<path d="M225 214H298" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="315" y="148" width="460" height="160" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="329" y="176" font-size="20" fill="#127761" font-weight="bold">Noyaux K : [Cout, Cin, 3, 3]</text>
+<text x="329" y="205" font-size="16" fill="#17283f">Un noyau 3×3 pour chaque paire (sortie, entrée)</text>
+<text x="330" y="244" font-size="15" fill="#17283f">Y[o,i,j] = somme des K[o,c,u,v] × X[c,i+du,j+dv]</text>
+<text x="330" y="279" font-size="15" fill="#17283f">Sommer sur c, u, v ; poids partagés dans l’espace.</text>
+<path d="M787 214H849" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="905" y="133" width="125" height="110" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M930 133v110 M905 155h125" stroke="#cbd5e2"/>
+<path d="M955 133v110 M905 177h125" stroke="#cbd5e2"/>
+<path d="M980 133v110 M905 199h125" stroke="#cbd5e2"/>
+<path d="M1005 133v110 M905 221h125" stroke="#cbd5e2"/>
+<rect x="890" y="149" width="125" height="110" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M915 149v110 M890 171h125" stroke="#cbd5e2"/>
+<path d="M940 149v110 M890 193h125" stroke="#cbd5e2"/>
+<path d="M965 149v110 M890 215h125" stroke="#cbd5e2"/>
+<path d="M990 149v110 M890 237h125" stroke="#cbd5e2"/>
+<rect x="875" y="165" width="125" height="110" fill="white" stroke="#127761" stroke-width="2"/>
+<path d="M900 165v110 M875 187h125" stroke="#cbd5e2"/>
+<path d="M925 165v110 M875 209h125" stroke="#cbd5e2"/>
+<path d="M950 165v110 M875 231h125" stroke="#cbd5e2"/>
+<path d="M975 165v110 M875 253h125" stroke="#cbd5e2"/>
+<text x="875" y="305" font-size="17" fill="#127761" font-weight="bold">Y : [B, Cout, H, W]</text>
+<text x="875" y="337" font-size="16" fill="#17283f">32 → 32 ici</text>
+<text x="875" y="361" font-size="16" fill="#17283f">Stride 1 ; padding d</text>
+<text x="36" y="410" font-size="18" fill="#17283f">Dilation d=1 : 9 positions dans 3×3. Dilation d=2 : 9 positions dans 5×5.</text>
+<text x="36" y="440" font-size="17" fill="#53647b">Même nombre de coefficients ; l’étendue spatiale change.</text>
+<rect x="36" y="478" width="1048" height="166" rx="10" fill="white" stroke="#127761" stroke-width="2"/>
+<text x="50" y="506" font-size="20" fill="#127761" font-weight="bold">Bloc résiduel : deux chemins, une addition</text>
+<text x="50" y="535" font-size="16" fill="#17283f">X → Conv 3×3 → ReLU → Conv 3×3 → F(X)</text>
+<path d="M358 569H700" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<text x="710" y="574" font-size="22" fill="#127761" font-weight="bold">X + F(X) → ReLU → Y</text>
+<text x="56" y="614" font-size="17" fill="#17283f">Même forme sur les deux chemins. Addition élément par élément, sans empiler les canaux.</text>
+<path d="M160 550V584H690V574" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="36" y="683" width="370" height="133" rx="10" fill="white" stroke="#235ce0" stroke-width="2"/>
+<text x="50" y="711" font-size="20" fill="#235ce0" font-weight="bold">Features après contexte</text>
+<text x="50" y="740" font-size="16" fill="#17283f">[B,32,H,W]</text>
+<path d="M418 748H492" fill="none" stroke="#53647b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="510" y="683" width="574" height="133" rx="10" fill="white" stroke="#b96012" stroke-width="2"/>
+<text x="524" y="711" font-size="20" fill="#b96012" font-weight="bold">Deux lectures 1×1, avec biais</text>
+<text x="524" y="740" font-size="16" fill="#17283f">32 → 1 logit Car ; 32 → 2 offsets XY</text>
+<text x="526" y="782" font-size="16" fill="#17283f">Pas de voisin spatial ajouté par le noyau 1×1.</text>
+<text x="36" y="850" font-size="15" fill="#53647b">Vue pédagogique du code actuel ; poids et activations ne représentent pas un modèle entraîné.</text>
+</g></svg></div><p><a href="../operators-math.md">Toutes les formules : Linear, BatchNorm, max, scatter, convolution, résiduel et décodage</a></p></section>
+<footer><a href="../README.md">Vue globale</a> · <a href="../camera/operators-math.md">Opérateurs caméra</a> · <a href="../operators-math.md">Opérateurs du chemin LiDAR</a><p>Exemple déterministe en JavaScript, sans réseau ni dépendance. Les nombres sont synthétiques. Indices i/j et canaux commencent à zéro ; chaque valeur est arrondie uniquement pour l’affichage.</p></footer></main><script>
+'use strict';
+const $=id=>document.getElementById(id);const input=Array.from({length:2},(_,c)=>Array.from({length:7},(_,i)=>Array.from({length:7},(_,j)=>((i*3+j*2+c*5)%9)-4)));let row=3,col=3;
+function weights(o,c,u,v,k){return k===1?[[.5,-1],[-.25,.75]][o][c]:((o+1)*3+(c+1)*2+u*3+v+12)%5-2;}
+function calc(i,j,o,k,d){const terms=[];for(let c=0;c<2;c++){const h=k===1?0:1;for(let u=-h;u<=h;u++)for(let v=-h;v<=h;v++){const ii=i+d*u,jj=j+d*v;const pad=ii<0||ii>=7||jj<0||jj>=7;const x=pad?0:input[c][ii][jj];const w=weights(o,c,u,v,k);terms.push({c,u,v,ii,jj,pad,x,w,product:x*w});}}const bias=k===1?[.25,-.5][o]:0;return {terms,bias,total:terms.reduce((s,t)=>s+t.product,bias)};}
+const f=n=>Number.isInteger(n)?String(n):n.toFixed(3);
+function render(){const k=+$('operator').value,d=k===1?1:+$('dilation').value,o=+$('out').value;$('dilation').disabled=k===1;const result=calc(row,col,o,k,d);$('shape').textContent=`[1, 2, 7, 7] → Conv ${k}×${k} → [1, 2, 7, 7]`;
+for(let c=0;c<2;c++){const sampled=new Set(result.terms.filter(t=>t.c===c&&!t.pad).map(t=>t.ii+','+t.jj));$('input'+c).innerHTML=input[c].map((r,i)=>r.map((x,j)=>`<div class="cell ${sampled.has(i+','+j)?'sample':''} ${i===row&&j===col?'center':''}" aria-label="Canal ${c}, ligne ${i}, colonne ${j}, valeur ${x}">${x}</div>`).join('')).join('');$('kernel'+c).style.gridTemplateColumns=`repeat(${k},minmax(0,1fr))`;$('kernel'+c).innerHTML=result.terms.filter(t=>t.c===c).map(t=>`<div class="cell">${f(t.w)}</div>`).join('');}
+$('output').innerHTML=Array.from({length:7},(_,i)=>Array.from({length:7},(_,j)=>`<button type="button" class="cell ${i===row&&j===col?'output':''}" data-row="${i}" data-col="${j}" aria-pressed="${i===row&&j===col}" aria-label="Sélectionner la sortie ligne ${i}, colonne ${j}, valeur ${f(calc(i,j,o,k,d).total)}">${f(calc(i,j,o,k,d).total)}</button>`).join('')).join('');$('total').textContent=f(result.total);$('relu').textContent=k===3?`ReLU appliquée séparément : max(0, ${f(result.total)}) = ${f(Math.max(0,result.total))}`:`Sigmoid appliquée séparément : 1 / (1 + exp(−${f(result.total)})) = ${(1/(1+Math.exp(-result.total))).toFixed(4)}`;
+$('formula').textContent=`Y[0,${o},${row},${col}] = ${k===1?'biais + ':''}Σ canaux c, positions u/v : K[${o},c,u,v] × X[0,c,${row}+${d}u,${col}+${d}v]`;
+const sums=[0,1].map(c=>result.terms.filter(t=>t.c===c).reduce((s,t)=>s+t.product,0));$('subtotals').textContent=`Contribution canal 0 : ${f(sums[0])} ; canal 1 : ${f(sums[1])} ; biais : ${f(result.bias)}. Total : ${f(sums[0])} + ${f(sums[1])} + ${f(result.bias)} = ${f(result.total)}. ${result.terms.filter(t=>t.pad).length} position(s) hors grille lues comme zéro.`;
+$('products').innerHTML='<table><thead><tr><th>Canal</th><th>Position lue (i,j)</th><th>Entrée</th><th>Poids</th><th>Produit</th></tr></thead><tbody>'+result.terms.map(t=>`<tr><td>${t.c}</td><td>(${t.ii},${t.jj})${t.pad?' · padding':''}</td><td>${f(t.x)}</td><td>${f(t.w)}</td><td>${f(t.product)}</td></tr>`).join('')+'</tbody></table>';window.operatorState={input,row,col,k,d,o,...result};}
+['operator','dilation','out'].forEach(id=>$(id).addEventListener('change',render));$('output').addEventListener('click',e=>{const b=e.target.closest('[data-row]');if(b){row=+b.dataset.row;col=+b.dataset.col;render();}});render();
+</script></body></html>

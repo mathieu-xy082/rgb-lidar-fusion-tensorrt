@@ -1,0 +1,19 @@
+{
+  "grid": {
+    "x_range_m": [0.0, 50.0],
+    "y_range_m": [-25.0, 25.0],
+    "z_range_m": [-3.0, 3.0],
+    "resolution_m": 0.2
+  },
+  "image_shape": [320, 1024],
+  "max_depth_m": 80.0,
+  "splat_radius_px": 2,
+  "splat_sigma_px": 1.0,
+  "min_splat_confidence": 0.0,
+  "max_points_per_pillar": 64,
+  "pillar_seed": 13,
+  "lidar_channels": 32,
+  "backbone_channels": [32, 64, 96],
+  "freeze_encoders": true,
+  "camera_enabled": true
+}

@@ -11,8 +11,9 @@ devenir une source de vérité générale.
   cellule par cellule implémentée/testée sur CPU : concaténation des features
   et supports, projection 1x1, compteurs préservés et backward. Backbone commun
   résiduel à trois échelles implémenté : alignement et champ 39/43 cellules
-  contrôlés, mesure CPU reproductible. Assemblage et entraînement restent à implémenter ;
-  la head centre existante servira de diagnostic facultatif.
+  contrôlés, mesure CPU reproductible. Diagnostic multimodal assemblé avec
+  adaptateur CPU, head centre existante et checkpoints/audit distincts.
+  Le runner, le notebook et les expériences d'entraînement restent à faire.
 
 Ce chantier raccorde les deux branches avant les heads 3D finales. Voir les
 [milestones](../milestones.md).

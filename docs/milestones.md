@@ -31,6 +31,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Diagnostic centre LiDAR | Incrément prototype clôturé : mémorisation quatre frames, pilote 410/102 de 20 epochs CUDA, best epoch 9 et revue TP/FN/FP |
 | Premier bloc de fusion BEV | Grilles explicites, concaténation features/supports, projection 1x1, compteurs conservés et backward CPU ; sans backbone spatial commun ni assemblage multimodal |
 | Premier backbone BEV commun | Pyramide résiduelle 32/64/96, sortie stride 1 alignée, champ théorique 39/43 cellules, backward et mesure CPU ; sans assemblage aux encodeurs ni entraînement |
+| Assemblage multimodal BEV | Adaptateur CPU, encodeurs/lift/fusion/backbone/head centre raccordés, backward synthétique, audit des sources et checkpoints distincts ; sans entraînement KITTI multimodal |
 
 ## Bilan camera-depth v1
 
@@ -208,13 +209,18 @@ maintenant implémenté : `BEVFeatureFusion` et sa sortie `FusedBEVFeatures`, av
 32/64/96, des skips résiduels et une sortie alignée à la grille de départ.
 Ses 77 tests contrôlent notamment les dimensions impaires, le champ théorique
 39/43 cellules et les gradients ; un contrôle CPU du module seul est disponible.
-Les deux encodeurs ne sont pas encore assemblés en modèle multimodal.
+Les deux encodeurs sont maintenant assemblés dans `BEVFusionDiagnostic`, avec
+adaptateur CPU, encodeurs gelés par défaut, audit des poids et nouveau format
+de checkpoint. Les tests vérifient le backward et une reprise Adam synthétique ;
+ils ne constituent pas un entraînement multimodal KITTI.
 
-Incréments suivants : assemblage préservant les anciens checkpoints, notebook et
-mémorisation quatre frames, puis pilote 410/102 avec comparaison LiDAR seul.
+Incréments suivants : runner/notebook et mémorisation quatre frames, puis
+pilote 410/102 avec comparaison LiDAR seul.
 La head centre/offset existante sert de diagnostic, pas de head 3D finale.
-La provenance des checkpoints et l'absence de fuite train/validation devront
-être vérifiées avant tout préentraînement réutilisé.
+Le premier audit CPU des sources locales passe avec le split 410/102. Le
+checkpoint caméra historique n'ayant pas enregistré d'IDs/empreintes, sa
+correspondance d'IDs doit être déclarée et cette limite reste consignée ;
+ne pas présenter cet audit comme une preuve indépendante du contenu historique.
 
 ### Ordre des incréments
 

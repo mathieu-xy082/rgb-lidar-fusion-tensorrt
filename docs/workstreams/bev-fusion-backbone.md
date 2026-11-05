@@ -6,10 +6,11 @@ Parent branch: `main` after release 1.3.0.
 
 Updated: 2026-11-05.
 
-Status: increments 1 to 3 are complete: the contract, cell-local feature fusion
-and shared three-scale spatial backbone are implemented and CPU-tested.
-The assembled multimodal model/runner and its notebook are **not implemented
-yet**. Existing camera and LiDAR encoders/checkpoints remain unchanged.
+Status: increments 1 to 4 are complete: contract, feature fusion, shared
+three-scale backbone, assembled center diagnostic and checkpoint helpers are
+implemented and CPU-tested. The multimodal training runner/notebook and the
+four-frame/512-frame experiments are **not implemented/run yet**. Existing
+standalone encoders, checkpoints and runners remain unchanged.
 
 References:
 
@@ -36,8 +37,8 @@ real-time deployment claim stay outside this increment.
 ## Fusion contract
 
 This section specifies the first implementation. `BEVFeatureFusion` implements
-the cell-local part; `SharedBEVBackbone` adds spatial context. Encoder assembly
-remains planned. Existing `CameraBEVFeatures`, `LidarBEVFeatures`,
+the cell-local part; `SharedBEVBackbone` adds spatial context and
+`BEVFusionDiagnostic` assembles both encoders. Existing `CameraBEVFeatures`, `LidarBEVFeatures`,
 `BEVGridConfig` and encoder APIs remain the integration points.
 
 ### Geometry and sample identity
@@ -356,18 +357,133 @@ checks. Existing encoder APIs, checkpoints and notebook execution state are unch
 
 ### 4. Scope: assemble the multimodal model
 
-- [ ] Compose existing camera features/lift and LiDAR encoding with the new modules.
-- [ ] Preserve old standalone state dictionaries; explicitly load camera and
+- [x] Compose existing camera features/lift and LiDAR encoding with the new modules.
+- [x] Preserve old standalone state dictionaries; explicitly load camera and
   PFN/context weights without requiring the old auxiliary head.
-- [ ] Audit checkpoint provenance, preprocessing, sample IDs and train/validation
-  membership for **both** encoders before reusing pretrained weights.
-- [ ] Add the existing center head/loss/decoder as a diagnostic consumer, keeping
+- [x] Audit checkpoint provenance, preprocessing, sample IDs and train/validation
+  membership for **both** encoders before reusing pretrained weights, recording
+  the legacy camera provenance limitation below rather than claiming proof.
+- [x] Add the existing center head/loss/decoder as a diagnostic consumer, keeping
   KITTI labels and supervision masks out of feature construction.
-- [ ] Define a new multimodal checkpoint kind, configuration, resume/optimizer
+- [x] Define a new multimodal checkpoint kind, configuration, resume/optimizer
   policy and a synthetic end-to-end backward test without changing old runners.
 
 Exit criterion: RGB + enriched maps + calibration + raw cloud -> shared BEV ->
 diagnostic centers, with explicit evidence and reproducible weight loading.
+
+#### Model and preprocessing API
+
+`bev_model.BEVFusionConfig` holds architecture/preprocessing settings. Its
+reviewable default JSON is `configs/bev_fusion.json`: 320x1024, the common
+20 cm grid, 80 m depth normalization, splat radius 2/sigma 1, 64 points per
+pillar, seed 13, LiDAR width 32 and backbone widths 32/64/96. This is **not**
+an executable training configuration: no epochs, paths, device or automatic run.
+
+`bev_batch.prepare_bev_fusion_batch(items, raw_clouds, config=...)` reuses the
+dataset/model adapters and raw pillar builder, producing CPU tensors plus
+ordered sample IDs. Items must be resized/calibrated sparse dataset items;
+raw XYZI arrays are looked up by the same ID, not an unchecked sequence zip.
+Splatting is rebuilt from the configuration, with no holdout by default.
+Targets/annotations are excluded from model kwargs. The adapter does not prove
+that caller-provided arrays actually originate from the declared scan or
+calibration; that remains the dataset producer's responsibility. Non-camera
+LiDAR coverage is retained. Device transfer remains explicit.
+
+```python
+from rgb_lidar_fusion.bev_batch import prepare_bev_fusion_batch
+from rgb_lidar_fusion.bev_model import BEVFusionConfig, BEVFusionDiagnostic
+
+config = BEVFusionConfig()
+batch = prepare_bev_fusion_batch(items, raw_clouds_by_id, config=config)
+model = BEVFusionDiagnostic(config)
+# Fresh random weights until the explicitly audited encoder warm start.
+prediction = model(**batch.inputs)  # existing CenterPrediction
+representations = model.encode(**batch.inputs)  # separate inspection pass
+```
+
+Forward uses `camera.forward_features`, splatted/weighted lift,
+PFN/scatter/context, fusion, shared backbone and the existing `LidarCenterHead`.
+`encode()` returns `BEVFusionRepresentations` with `camera_bev`, `lidar_bev`,
+`fused_bev` and `shared_bev`, without evaluating the diagnostic head. Existing
+`lidar_center_loss` and `decode_lidar_centers` consume the forward output; labels
+and supervision masks remain outside the model. No camera depth prediction is
+computed. Its old depth-head keys remain loadable, but its parameters are
+excluded from optimization because the center loss does not traverse that head.
+
+`freeze_encoders=True` is the default: camera/PFN/context parameters are frozen,
+and `train()` keeps these modules in eval mode, including PFN BatchNorm buffers.
+Fusion, shared backbone and center head remain trainable. An explicitly
+unfrozen configuration permits backward through both encoders. With
+`camera_enabled=False`, the camera computation is skipped and camera BEV
+features/counts/mass are zero; the raw LiDAR branch and common architecture
+remain intact for the later matched control. This is not sensor-failure recovery.
+
+#### Weight provenance and checkpoint policy
+
+`bev_checkpoint.initialize_bev_fusion_encoders(...)` is an FP32 CPU-only warm
+start. Before changing any destination module, it validates preprocessing,
+strict state keys/shapes/dtypes/finite values, the target split, all current
+dataset hashes and absence of source training IDs in target validation. It
+loads **only camera, PFN and context**; the old LiDAR center head need not be
+present and neither old head nor Adam state is reused. Overfit-source LiDAR
+checkpoints are rejected. Move the model to the desired device only afterwards.
+
+For the legacy camera checkpoint, original sorted `camera_source_ids` must be
+declared explicitly. Its config/seed/fraction reconstruct the split, but the
+checkpoint did not save IDs or file hashes. A correct declared mapping is a
+caller prerequisite; historical camera membership/content cannot be independently
+proven. Do not fabricate a mapping from a seed alone. The audit report retains
+this limitation along with source checkpoint SHA-256, paths, epochs and IDs.
+LiDAR's saved fingerprints are checked against the current target manifest.
+These checks do not establish scene independence or prevent model-selection bias.
+
+Use `make_bev_fusion_optimizer(model)` **after device placement**. It creates
+single-group Adam with `foreach=False` and only the ordered trainable parameters;
+frozen encoders and the unused depth head are excluded. The first schedule is
+therefore fusion/backbone/diagnostic-head training, not silent full fine-tuning.
+
+`save_bev_fusion_checkpoint` writes an atomic, separate `bev_fusion_center_v1`
+payload containing config, full model weights, split/hashes, counters, audit
+report, metrics and trainable parameter names. Supplying Adam creates a
+`purpose="resume"` checkpoint; omitting it creates `purpose="inference"`.
+The future runner will manage latest/best selection; these helpers do not
+select an epoch or implement a training loop.
+
+`load_bev_fusion_checkpoint` returns a CPU/eval model and payload using
+`weights_only=True`, without requiring the original encoder checkpoint files
+or dataset for inference. `restore_bev_fusion_training` requires the new resume
+format, identical model configuration, split and verified current files, plus
+the matching optimizer created after model placement. It restores the saved
+Adam settings/state rather than importing an old encoder optimizer. Changing
+the freeze/ablation policy requires an explicit new training stage, not resume.
+No CUDA selection, retry or allocation is performed automatically by these APIs.
+
+#### Validation and local audit
+
+The 59 assembly/checkpoint tests cover JSON settings, target-independent batch
+preparation, empty support, raw LiDAR outside camera FOV, frozen encoder/BN
+state, feature-only inspection, explicit LiDAR-only control, finite end-to-end
+backward to both unfrozen encoders and all new blocks, and absence of depth-head
+execution. Checkpoint tests cover strict warm starts without the old head,
+pre-mutation refusals, leakage/hash/config failures, CPU inference round-trip
+and an exact two-step CPU Adam save/resume control. These are synthetic unit
+optimizations, not KITTI training or validation-quality results.
+
+A read-only CPU audit loaded the existing local camera and LiDAR encoders:
+
+| Source | Epoch / step | Train / validation IDs | Checkpoint SHA-256 |
+| --- | --- | --- | --- |
+| Camera block-holdout `latest.pt` | 5 / 2050 | 410 / 102, declared sorted-ID mapping | `3561742ce6de01bf71e6ae290b8e5f707011cb16434e06f9bf3cee59d7d13ece` |
+| LiDAR center `best.pt` | 9 / 3690 | 410 / 102, saved IDs and file hashes | `eac8f0d39edce3b1b44706936cc8aaf2d88c2dc5d040245c93994455fb5daf5f` |
+
+The current 512-frame manifest passed file-hash checks and both source train
+sets were disjoint from target validation under the declared camera mapping.
+This audit performed no real-frame forward, GPU execution, optimizer update,
+checkpoint write or new detection-quality measurement. Legacy camera provenance
+remains limited as stated above. The four-frame/notebook experiment is next.
+Full regression: **850 tests passed, one CUDA-only skip**, no exclusions;
+81 links/anchors checked across the seven updated Markdown files. Existing
+notebooks, data, source checkpoint files and standalone APIs were not modified.
 
 ### 5. Scope: inspect and memorize four frames
 

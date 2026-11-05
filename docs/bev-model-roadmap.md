@@ -11,8 +11,9 @@ et inspecté ; il est intégré dans main depuis la release 1.2.0. La branche
 LiDAR est intégrée dans main depuis la release 1.3.0 : piliers, PFN, scatter,
 contexte spatial, inspection conjointe à 20 cm, diagnostic GPU et pilote centre
 Car 410/102 avec revue TP/FN/FP. Le contrat, le bloc de fusion cellule par
-cellule et le backbone spatial commun à trois échelles sont implémentés et
-testés sur CPU ; l'assemblage multimodal et les heads 3D complètes restent à développer.
+cellule et le backbone spatial commun à trois échelles sont assemblés aux
+encodeurs et à la head centre de diagnostic, avec backward et checkpoints
+testés sur CPU. L'entraînement multimodal et les heads 3D complètes restent à développer.
 
 Documents liés :
 
@@ -284,8 +285,10 @@ centre existante permettront de valider le raccord avant les heads 3D finales.
 Le bloc `BEVFeatureFusion` implémente cette projection, avec conservation des
 compteurs et gradients testés. `SharedBEVBackbone` apporte maintenant une
 pyramide résiduelle 32/64/96, avec retour aligné à la grille initiale et un champ
-théorique de 39/43 cellules par axe selon la phase. L'assemblage avec les encodeurs
-reste à développer ; il n'y a pas encore de modèle fusionné entraîné.
+théorique de 39/43 cellules par axe selon la phase. `BEVFusionDiagnostic`
+raccorde les encodeurs et la head centre existante, avec supports séparés,
+encodeurs gelés par défaut et chargement de poids audité ; il n'y a pas encore
+de modèle fusionné entraîné sur KITTI.
 
 ## Phase BEV 3 - Supervision image auxiliaire
 
@@ -383,7 +386,7 @@ clôturent ce prototype, sans valider une qualité de détection finale.
 
 La branche active est `ec/bev-fusion-backbone`. Suivre son
 [workstream](workstreams/bev-fusion-backbone.md#progress) : contrat et bloc de
-fusion et backbone commun terminés sur CPU, puis assemblage, mémorisation quatre frames
+fusion, backbone commun et assemblage terminés sur CPU, puis mémorisation quatre frames
 et comparaison LiDAR seul/fusion sur le split sauvegardé. Préserver les
 checkpoints existants et vérifier leurs IDs d'entraînement avant réutilisation.
 Aucun nouveau cycle d'optimisation de la profondeur ni head YOLO n'est requis.

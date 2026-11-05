@@ -33,9 +33,11 @@ Le socle implémenté couvre :
 Le lift BEV est un prototype PyTorch fonctionnel, relu et inspecté, clôturé pour
 ce premier périmètre ; ce n'est pas une détection 3D ni un module validé temps réel.
 Le point cloud brut dispose aussi d'un premier PFN/scatter et contexte BEV.
-Le bloc de fusion cellule par cellule et un backbone spatial commun
-multi-échelle sont implémentés et testés sur CPU ; leur assemblage aux
-encodeurs et les têtes 3D restent à développer. Le
+Le bloc de fusion et le backbone commun multi-échelle sont raccordés aux deux
+encodeurs dans `BEVFusionDiagnostic`, avec une head centre/offset de diagnostic,
+des contrôles de provenance et un format de checkpoint distinct. Les tests CPU
+valident le chemin complet ; aucun entraînement multimodal KITTI n'a encore
+été lancé et les heads 3D complètes restent à développer. Le
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
 
@@ -72,6 +74,11 @@ Le baseline historique prouve la chaîne d'intégration et de déploiement, mais
 sortie `[B, D]` n'est pas une détection ni une profondeur exploitable. Le
 `CameraDepthModel` constitue la première représentation apprise directement
 utile à la future branche caméra BEV.
+
+Le diagnostic multimodal dispose maintenant d'un adaptateur CPU pour les
+entrées RGB/enriched et les piliers, et expose quatre représentations BEV. Sa
+configuration de modèle est `configs/bev_fusion.json` ; le runner et le notebook
+d'entraînement seront ajoutés dans l'incrément suivant.
 
 ### Architecture cible
 

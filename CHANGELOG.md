@@ -7,19 +7,26 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Assemble `BEVFusionDiagnostic` with existing camera/lift and LiDAR encoders,
+  fusion/shared backbone and the optional-by-use center head. Add target-free
+  CPU batch preparation, explicit frozen encoder/BN policy and a model JSON.
+  Add audited encoder-only warm starts and distinct `bev_fusion_center_v1`
+  inference/resume helpers, including strict split/hash/config checks. Synthetic
+  CPU backward/Adam resume and a read-only local weight audit pass; legacy
+  camera ID/hash provenance remains explicitly limited. No KITTI multimodal run.
 - Add `SharedBEVBackbone`: three-scale residual context at widths 32/64/96,
   aligned stride-1 output through explicit transposed-convolution sizes and
   unchanged evidence snapshots. Controlled CPU tests verify the phase-dependent
   39/43-cell receptive field; a bounded synthetic CPU probe records parameter
-  storage and forward/backward timing. No encoder assembly, GPU validation or
-  multimodal training is introduced.
+  storage and forward/backward timing. This block's validation is CPU-only,
+  not an end-to-end latency, GPU or training-quality result.
 - Add cell-local `BEVFeatureFusion`: explicit metric-grid checks, ordered
   camera/contextual-LiDAR/support concatenation and a configurable bias-free
   1x1 projection (66 to 32 by default). `FusedBEVFeatures` preserves separate
   count/mass snapshots and support masks; 81 CPU tests cover contracts,
   branch-absence controls and gradients, including existing lift/PFN/context.
-  The spatial backbone is a separate component; no assembled multimodal model
-  or new training yet.
+  The spatial backbone and model assembly are separate components; no new
+  multimodal training-quality result is claimed.
 - Document the first shared BEV fusion contract and six implementation
   increments: aligned 20 cm grids, camera/LiDAR feature and evidence policies,
   ordered 66-to-32 fusion, checkpoint/split safeguards and diagnostic validation.

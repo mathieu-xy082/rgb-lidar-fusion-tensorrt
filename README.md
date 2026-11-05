@@ -33,9 +33,9 @@ Le socle implémenté couvre :
 Le lift BEV est un prototype PyTorch fonctionnel, relu et inspecté, clôturé pour
 ce premier périmètre ; ce n'est pas une détection 3D ni un module validé temps réel.
 Le point cloud brut dispose aussi d'un premier PFN/scatter et contexte BEV.
-Un bloc de fusion cellule par cellule est implémenté et testé sur CPU ; le
-backbone spatial commun, son assemblage aux encodeurs et les têtes 3D restent
-à développer. Le
+Le bloc de fusion cellule par cellule et un backbone spatial commun
+multi-échelle sont implémentés et testés sur CPU ; leur assemblage aux
+encodeurs et les têtes 3D restent à développer. Le
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
 

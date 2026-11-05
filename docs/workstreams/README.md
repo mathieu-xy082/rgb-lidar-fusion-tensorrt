@@ -9,8 +9,9 @@ devenir une source de vérité générale.
 - [BEV fusion backbone](bev-fusion-backbone.md) : branche
   `ec/bev-fusion-backbone`, après la release 1.3.0. Contrat défini et fusion
   cellule par cellule implémentée/testée sur CPU : concaténation des features
-  et supports, projection 1x1, compteurs préservés et backward.
-  Backbone spatial commun, assemblage et entraînement restent à implémenter ;
+  et supports, projection 1x1, compteurs préservés et backward. Backbone commun
+  résiduel à trois échelles implémenté : alignement et champ 39/43 cellules
+  contrôlés, mesure CPU reproductible. Assemblage et entraînement restent à implémenter ;
   la head centre existante servira de diagnostic facultatif.
 
 Ce chantier raccorde les deux branches avant les heads 3D finales. Voir les

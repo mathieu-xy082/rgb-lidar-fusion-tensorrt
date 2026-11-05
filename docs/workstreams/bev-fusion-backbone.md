@@ -6,10 +6,10 @@ Parent branch: `main` after release 1.3.0.
 
 Updated: 2026-11-05.
 
-Status: increments 1 and 2 are complete: the contract is documented and the
-cell-local feature fusion is implemented and CPU-tested. The shared spatial
-backbone, multimodal model/runner and its notebook are **not implemented yet**.
-Existing camera and LiDAR encoders/checkpoints remain unchanged.
+Status: increments 1 to 3 are complete: the contract, cell-local feature fusion
+and shared three-scale spatial backbone are implemented and CPU-tested.
+The assembled multimodal model/runner and its notebook are **not implemented
+yet**. Existing camera and LiDAR encoders/checkpoints remain unchanged.
 
 References:
 
@@ -35,9 +35,9 @@ real-time deployment claim stay outside this increment.
 
 ## Fusion contract
 
-This section specifies the first implementation. `BEVFeatureFusion` now
-implements the cell-local part; the shared spatial backbone and encoder
-assembly remain planned. Existing `CameraBEVFeatures`, `LidarBEVFeatures`,
+This section specifies the first implementation. `BEVFeatureFusion` implements
+the cell-local part; `SharedBEVBackbone` adds spatial context. Encoder assembly
+remains planned. Existing `CameraBEVFeatures`, `LidarBEVFeatures`,
 `BEVGridConfig` and encoder APIs remain the integration points.
 
 ### Geometry and sample identity
@@ -168,7 +168,7 @@ Fcat = concat(Fcamera, Flidar_context,
 
 default: [B, 32 + 32 + 1 + 1, Hbev, Wbev] = [B, 66, 250, 250]
 Ffusion = Conv1x1(Fcat)  # default 66 -> 32, stride 1, bias=False
-Fshared = SharedBEVBackbone(Ffusion)  # default [B, 32, 250, 250]
+Fshared = spatial_backbone(Ffusion)  # default [B, 32, 250, 250]
 ```
 
 The first projection is linear, with no normalization, activation, attention,
@@ -256,17 +256,103 @@ increment. Existing notebook execution state and checkpoint schemas are unchange
 
 ### 3. Scope: implement shared spatial context
 
-- [ ] Specify a small three-scale residual backbone; widths 32/64/96 are a
-  starting candidate, not a finalized or benchmarked architecture.
-- [ ] Define down/up sampling, cell-center alignment, normalization and padding
+- [x] Specify a small three-scale residual backbone at widths 32/64/96,
+  as a first functional reference, not a demonstrated latency/accuracy optimum.
+- [x] Define down/up sampling, cell-center alignment, normalization and padding
   before implementation; restoring tensor shape alone does not prove alignment.
-- [ ] Preserve stride-1 output on odd/non-square grids; inspect controlled
+- [x] Preserve stride-1 output on odd/non-square grids; inspect controlled
   impulse/gradient support and account for ROI borders without wraparound.
-- [ ] Preserve evidence and test forward/backward, resource use and a wider
+- [x] Preserve evidence and test forward/backward, resource use and a wider
   theoretical context than the existing 19-cell LiDAR block.
 
 Exit criterion: aligned shared features with tested spatial dependencies, not
 a claim that larger receptive fields automatically improve object detection.
+
+Implemented as `rgb_lidar_fusion.bev_backbone.SharedBEVBackbone`:
+
+```python
+from rgb_lidar_fusion.bev_backbone import SharedBEVBackbone
+
+backbone = SharedBEVBackbone(channels=(32, 64, 96))
+shared = backbone(fused)  # FusedBEVFeatures in/out, not a bare tensor
+# shared.features: [B, 32, Hbev, Wbev]
+```
+
+#### Architecture and alignment
+
+| Stage | Operation | Default shape (B=1) |
+| --- | --- | --- |
+| Fine | Two-convolution residual block | `[1,32,250,250]` |
+| Middle | Stride-2 convolution, ReLU, residual block | `[1,64,125,125]` |
+| Deep | Stride-2 convolution, ReLU, residual block | `[1,96,63,63]` |
+| Middle decoder | Transposed convolution + middle skip, ReLU | `[1,64,125,125]` |
+| Fine decoder | Transposed convolution + fine skip, ReLU, residual block | `[1,32,250,250]` |
+
+Each residual block is `ReLU(x + Conv3x3(ReLU(Conv3x3(x))))`. All 12
+convolutions use 3x3 kernels, padding 1 and no bias. There is no normalization:
+zero features stay zero, and normalization statistics do not add non-local
+dependencies or batch coupling. Widths are configurable as three positive
+integers; input/output width is the first value and must match fusion's output.
+
+The stride-2 encoders retain the index-zero center. For fine-grid cell-center
+coordinate `x0 = x_min + resolution/2`, internal indices are anchored at
+`x0 + 2*i*resolution`, then `x0 + 4*i*resolution` (likewise y). These internal
+lattices are not coarse `BEVGridConfig` instances with the same minimum bound:
+that would introduce a half-cell origin change. Paired 3x3/stride-2/padding-1
+transposed convolutions use the actual skip tensor's `output_size`, selecting
+output padding 0 or 1 on the high-index side. No fractional interpolation,
+cropping or metric-grid modification occurs; center-tap tests verify indices,
+not just matching tensor dimensions.
+
+The controlled gradient support relative to the **fused input grid** depends
+on each output index modulo four:
+
+| Index phase | Input offsets per axis | Cells | At 20 cm |
+| --- | --- | --- | --- |
+| 0 | `[-21,21]` | 43 | 8.6 m |
+| 1 | `[-22,20]` | 43 | 8.6 m |
+| 2 | `[-19,19]` | 39 | 7.8 m |
+| 3 | `[-20,22]` | 43 | 8.6 m |
+
+Rows/columns can have different phases; borders clip these dependencies.
+This is wider than the LiDAR context's 19 cells but is not translation
+invariance, the effective learned field, or a bound on upstream camera/raw-point
+dependencies. Stride-phase sensitivity and learned transposed-convolution
+artifacts remain quality risks to inspect after training.
+
+Camera pixel counts/mass, LiDAR pre-cap counts and the metric grid stay at the
+original resolution. Evidence tensors are cloned and are not pooled, inferred
+from activation magnitude or reapplied as masks. Shared features can spread
+into cells with neither camera contributions nor direct LiDAR observations.
+
+#### CPU validation and resources
+
+The 77 backbone/probe tests include default intermediate sizes, singleton and
+odd/non-square grids, center-tap alignment, positive-weight receptive fields
+in train/eval modes, ROI clipping, zero-input/skip paths, evidence snapshots,
+invalid input rejection, double-precision gradcheck and fusion-to-backbone
+gradients to both feature branches. No full encoder assembly is claimed.
+
+Reproduce the bounded CPU-only resource control with:
+
+```bash
+pdm run python scripts/probe_bev_backbone.py
+```
+
+The local FP32 `[1,32,250,250]` control uses random weights, one CPU thread,
+one warmup and median of three iterations. The backbone has **423,936
+parameters**, occupying **1.617 MiB** in FP32; this is not peak activation or
+training memory. A local run measured **142.97 ms forward** and **400.17 ms
+forward/backward**, including validation/evidence copying and a scalar loss
+for backward. Timing varies with host/load. The ignored JSON report is
+`results/analysis/bev_fusion/backbone_cpu.json`.
+
+No dataset, checkpoint, optimizer, encoders, lift, fusion or detection head
+is involved in that probe; no GPU, end-to-end latency or peak-memory result
+is claimed. New training is deferred until assembly and the guarded notebook.
+The full regression suite passed with **791 tests and one CUDA-only skip**,
+without exclusions. The seven updated Markdown files passed 81 link/anchor
+checks. Existing encoder APIs, checkpoints and notebook execution state are unchanged.
 
 ### 4. Scope: assemble the multimodal model
 

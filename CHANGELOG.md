@@ -7,12 +7,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Add `SharedBEVBackbone`: three-scale residual context at widths 32/64/96,
+  aligned stride-1 output through explicit transposed-convolution sizes and
+  unchanged evidence snapshots. Controlled CPU tests verify the phase-dependent
+  39/43-cell receptive field; a bounded synthetic CPU probe records parameter
+  storage and forward/backward timing. No encoder assembly, GPU validation or
+  multimodal training is introduced.
 - Add cell-local `BEVFeatureFusion`: explicit metric-grid checks, ordered
   camera/contextual-LiDAR/support concatenation and a configurable bias-free
   1x1 projection (66 to 32 by default). `FusedBEVFeatures` preserves separate
   count/mass snapshots and support masks; 81 CPU tests cover contracts,
   branch-absence controls and gradients, including existing lift/PFN/context.
-  No shared spatial backbone, assembled multimodal model or new training yet.
+  The spatial backbone is a separate component; no assembled multimodal model
+  or new training yet.
 - Document the first shared BEV fusion contract and six implementation
   increments: aligned 20 cm grids, camera/LiDAR feature and evidence policies,
   ordered 66-to-32 fusion, checkpoint/split safeguards and diagnostic validation.

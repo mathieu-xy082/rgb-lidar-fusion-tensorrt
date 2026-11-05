@@ -4,7 +4,7 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-11-05 - Merge branch 'ec/lidar-bev-encoder' into main
 ### Added
 
 - LiDAR center training on a saved disjoint KITTI frame split (410/102 for the

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,9 @@ from typing import Any
 import numpy as np
 
 from .camera_depth_model import CameraDepthModel
+from .camera_depth_manifest import (
+    CAMERA_DEPTH_CHECKPOINT_KIND, validate_camera_depth_manifest, verify_camera_depth_dataset,
+)
 from .dataset import KittiObjectDepthDataset
 from .lidar_splatting import SplattingConfig
 from .training import (
@@ -58,6 +62,11 @@ class LoadedCameraDepthCheckpoint:
     epoch: int
     step: int
     device: Any
+    data_manifest: dict[str, Any] | None = None
+
+    @property
+    def provenance_status(self) -> str:
+        return "recorded_at_training" if self.data_manifest is not None else "legacy_unverified"
 
 
 @dataclass(frozen=True)
@@ -387,6 +396,9 @@ def load_camera_depth_checkpoint(
     )
     if "model_state_dict" not in payload:
         raise ValueError("checkpoint does not contain model_state_dict.")
+    manifest = None
+    if payload.get("kind") == CAMERA_DEPTH_CHECKPOINT_KIND:
+        manifest = validate_camera_depth_manifest(payload.get("data_manifest"))
 
     config = dict(payload.get("config", {}))
     model = CameraDepthModel(lidar_mode=str(config.get("lidar_mode", "enriched")))
@@ -399,7 +411,23 @@ def load_camera_depth_checkpoint(
         epoch=int(payload.get("epoch", 0)),
         step=int(payload.get("step", 0)),
         device=selected_device,
+        data_manifest=manifest,
     )
+
+
+def camera_depth_validation_indices(checkpoint: LoadedCameraDepthCheckpoint, dataset) -> list[int]:
+    """Use verified saved membership; legacy reconstruction is explicitly warned."""
+
+    if checkpoint.data_manifest is not None:
+        verify_camera_depth_dataset(dataset, checkpoint.data_manifest)
+        return list(checkpoint.data_manifest["validation_indices"])
+    warnings.warn("Legacy camera checkpoint: validation IDs are reconstructed from config/current files, "
+                  "not verified historical membership/content.", RuntimeWarning, stacklevel=2)
+    _, indices = split_dataset_indices(
+        len(dataset), validation_fraction=float(checkpoint.config.get("validation_fraction", .2)),
+        seed=int(checkpoint.config.get("split_seed", checkpoint.config.get("seed", 0))),
+    )
+    return indices
 
 
 def analyze_camera_depth_sample(
@@ -556,10 +584,10 @@ def compare_camera_depth_holdout_checkpoints(
         max_depth_m=float(expected["max_depth_m"]),
         sample_limit=int(expected["sample_count"]),
     )
-    _, indices = split_dataset_indices(
-        len(dataset), validation_fraction=float(expected["validation_fraction"]),
-        seed=int(expected["split_seed"]),
-    )
+    indices = camera_depth_validation_indices(loaded[modes[0]], dataset)
+    other_indices = camera_depth_validation_indices(loaded[modes[1]], dataset)
+    if indices != other_indices:
+        raise ValueError("comparison checkpoints have different saved validation membership.")
     spatial_options = camera_depth_holdout_options(loaded["spatial_blocks"].config)
     selected_device = select_device(device)
     rows = []

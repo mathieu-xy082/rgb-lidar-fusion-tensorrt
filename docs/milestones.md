@@ -221,6 +221,10 @@ Le premier audit CPU des sources locales passe avec le split 410/102. Le
 checkpoint caméra historique n'ayant pas enregistré d'IDs/empreintes, sa
 correspondance d'IDs doit être déclarée et cette limite reste consignée ;
 ne pas présenter cet audit comme une preuve indépendante du contenu historique.
+Le [correctif de provenance caméra](workstreams/camera-depth-provenance.md)
+enregistre ces informations pour les nouveaux runs et impose une reprise
+vérifiée. La réutilisation legacy est désormais refusée par défaut et requiert
+une exception explicite ; les anciens checkpoints ne sont pas réécrits.
 
 ### Ordre des incréments
 

@@ -10,7 +10,8 @@ Status: increments 1 to 4 are complete: contract, feature fusion, shared
 three-scale backbone, assembled center diagnostic and checkpoint helpers are
 implemented and CPU-tested. The multimodal training runner/notebook and the
 four-frame/512-frame experiments are **not implemented/run yet**. Existing
-standalone encoders, checkpoints and runners remain unchanged.
+standalone encoder architectures/weight keys remain unchanged; the subsequent
+[camera provenance fix](camera-depth-provenance.md) strengthens its runner and analysis.
 
 References:
 
@@ -428,14 +429,19 @@ loads **only camera, PFN and context**; the old LiDAR center head need not be
 present and neither old head nor Adam state is reused. Overfit-source LiDAR
 checkpoints are rejected. Move the model to the desired device only afterwards.
 
-For the legacy camera checkpoint, original sorted `camera_source_ids` must be
-declared explicitly. Its config/seed/fraction reconstruct the split, but the
+New `camera_depth_v2` source checkpoints use their recorded IDs/hashes, checked
+against the target manifest. Legacy camera checkpoints are refused by default;
+their deliberate exception requires `allow_legacy_camera=True` and explicitly
+declared original sorted `camera_source_ids`. Config/seed/fraction reconstruct the split, but the
 checkpoint did not save IDs or file hashes. A correct declared mapping is a
 caller prerequisite; historical camera membership/content cannot be independently
 proven. Do not fabricate a mapping from a seed alone. The audit report retains
 this limitation along with source checkpoint SHA-256, paths, epochs and IDs.
 LiDAR's saved fingerprints are checked against the current target manifest.
 These checks do not establish scene independence or prevent model-selection bias.
+The [camera-depth provenance follow-up](camera-depth-provenance.md) fixes new
+camera runs/resumes and prevents silent promotion of old weights to verified
+provenance; it does not rewrite the historical local audit below.
 
 Use `make_bev_fusion_optimizer(model)` **after device placement**. It creates
 single-group Adam with `foreach=False` and only the ordered trainable parameters;
@@ -481,7 +487,7 @@ sets were disjoint from target validation under the declared camera mapping.
 This audit performed no real-frame forward, GPU execution, optimizer update,
 checkpoint write or new detection-quality measurement. Legacy camera provenance
 remains limited as stated above. The four-frame/notebook experiment is next.
-Full regression: **850 tests passed, one CUDA-only skip**, no exclusions;
+Initial assembly delivery: **850 tests passed, one CUDA-only skip**, no exclusions;
 81 links/anchors checked across the seven updated Markdown files. Existing
 notebooks, data, source checkpoint files and standalone APIs were not modified.
 

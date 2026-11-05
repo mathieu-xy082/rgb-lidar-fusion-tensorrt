@@ -18,6 +18,7 @@ from rgb_lidar_fusion.bev_checkpoint import (
 from rgb_lidar_fusion.bev_model import BEVFusionConfig, BEVFusionDiagnostic
 from rgb_lidar_fusion.camera_bev import BEVGridConfig
 from rgb_lidar_fusion.camera_depth_model import CameraDepthModel
+from rgb_lidar_fusion.camera_depth_manifest import CAMERA_DEPTH_CHECKPOINT_KIND, build_camera_depth_manifest
 from rgb_lidar_fusion.dataset import KittiObjectDepthDataset
 from rgb_lidar_fusion.lidar_center_model import LidarCenterDiagnostic, lidar_center_loss
 from rgb_lidar_fusion.lidar_center_training import LidarCenterTrainConfig
@@ -88,7 +89,7 @@ def _sources(case, tmp_path):
 
 def _initialize(model, paths, split):
     return initialize_bev_fusion_encoders(model, camera_checkpoint=paths[0], lidar_checkpoint=paths[1],
-                                          split=split, camera_source_ids=split["source_ids"])
+                                          split=split, camera_source_ids=split["source_ids"], allow_legacy_camera=True)
 
 
 def test_default_configuration_file_and_mapping_roundtrip():
@@ -344,7 +345,40 @@ def test_wrong_or_unstated_legacy_camera_id_mapping_is_rejected(case, tmp_path):
     paths = _sources(case, tmp_path)
     with pytest.raises(ValueError, match="camera_source_ids"):
         initialize_bev_fusion_encoders(BEVFusionDiagnostic(case[0]), camera_checkpoint=paths[0],
-                                       lidar_checkpoint=paths[1], split=case[3], camera_source_ids=[])
+                                       lidar_checkpoint=paths[1], split=case[3], camera_source_ids=[], allow_legacy_camera=True)
+
+
+def test_legacy_camera_warm_start_requires_explicit_exception(case, tmp_path):
+    paths = _sources(case, tmp_path)
+    with pytest.raises(ValueError, match="allow_legacy_camera=True"):
+        initialize_bev_fusion_encoders(BEVFusionDiagnostic(case[0]), camera_checkpoint=paths[0],
+                                       lidar_checkpoint=paths[1], split=case[3], camera_source_ids=case[3]["source_ids"])
+
+
+@pytest.mark.parametrize("corrupt_hash", [False, True])
+def test_recorded_camera_warm_start_uses_manifest_without_declared_id_mapping(case, tmp_path, corrupt_hash):
+    config, _, _, split, _ = case
+    paths = _sources(case, tmp_path)
+    payload = torch.load(paths[0], weights_only=True)
+    dataset = KittiObjectDepthDataset(split["data_root"], image_shape=config.image_shape)
+    ids = split["source_ids"]
+    payload["kind"] = CAMERA_DEPTH_CHECKPOINT_KIND
+    payload["data_manifest"] = build_camera_depth_manifest(
+        dataset, train_indices=[ids.index(s) for s in split["train_ids"]],
+        validation_indices=[ids.index(s) for s in split["validation_ids"]], protocol=payload["config"],
+    )
+    if corrupt_hash:
+        payload["data_manifest"]["fingerprints"][ids[0]]["image_2"] = "0" * 64
+    torch.save(payload, paths[0])
+    if corrupt_hash:
+        with pytest.raises(ValueError, match="camera checkpoint source IDs or file hashes"):
+            initialize_bev_fusion_encoders(BEVFusionDiagnostic(config), camera_checkpoint=paths[0],
+                                           lidar_checkpoint=paths[1], split=split)
+    else:
+        report = initialize_bev_fusion_encoders(BEVFusionDiagnostic(config), camera_checkpoint=paths[0],
+                                               lidar_checkpoint=paths[1], split=split)
+        assert report["camera"]["provenance"] == "recorded_at_training"
+        assert "recorded" in report["camera"]["id_mapping"]
 
 
 def test_new_checkpoint_cpu_roundtrip_does_not_require_dataset_files_for_inference(case, tmp_path):

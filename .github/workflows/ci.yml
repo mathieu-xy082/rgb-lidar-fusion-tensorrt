@@ -6,6 +6,7 @@ on:
       - main
       - ec/**
       - feature/**
+      - fix/**
       - ci/**
     tags:
       - "v*"

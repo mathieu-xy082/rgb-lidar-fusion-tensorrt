@@ -11,6 +11,7 @@ import torch
 
 from .bev_model import BEVFusionConfig, BEVFusionDiagnostic
 from .camera_bev import BEVGridConfig
+from .camera_depth_manifest import CAMERA_DEPTH_CHECKPOINT_KIND, validate_camera_depth_manifest
 from .training import split_dataset_indices
 
 
@@ -82,13 +83,15 @@ def _validate_state(module, state):
 
 def initialize_bev_fusion_encoders(
     model: BEVFusionDiagnostic, *, camera_checkpoint: str | Path,
-    lidar_checkpoint: str | Path, split: dict, camera_source_ids: list[str] | tuple[str, ...],
+    lidar_checkpoint: str | Path, split: dict,
+    camera_source_ids: list[str] | tuple[str, ...] | None = None,
+    allow_legacy_camera: bool = False,
 ) -> dict:
     """Warm-start encoders on CPU, never source heads or optimizer states.
 
     Legacy camera checkpoints omit source IDs/file hashes. Their ID mapping
-    must be supplied explicitly in original sorted dataset order; the report
-    records this limitation rather than claiming historical file verification.
+    requires allow_legacy_camera=True and an explicit original sorted ID list.
+    New checkpoints use recorded IDs and hashes, without a caller-declared map.
     All checks complete before any destination module is changed.
     """
 
@@ -98,21 +101,47 @@ def initialize_bev_fusion_encoders(
     camera, camera_sha = _read(camera_checkpoint)
     lidar, lidar_sha = _read(lidar_checkpoint)
     config = model.config
-    old = camera.get("config", {})
     expected = {"dataset": "kitti_camera_depth", "lidar_mode": "enriched",
                 "height": config.image_shape[0], "width": config.image_shape[1],
                 "max_depth_m": config.max_depth_m, "splat_radius_px": config.splat_radius_px,
                 "splat_sigma_px": config.splat_sigma_px}
-    if any(old.get(k) != v for k, v in expected.items()):
+    if camera.get("kind") == CAMERA_DEPTH_CHECKPOINT_KIND:
+        recorded = validate_camera_depth_manifest(camera.get("data_manifest"))
+        source = recorded["source_ids"]
+        if source != split["source_ids"] or any(
+            digest != split["fingerprints"][sample_id][name]
+            for sample_id, row in recorded["fingerprints"].items() for name, digest in row.items()
+        ):
+            raise ValueError("camera checkpoint source IDs or file hashes differ from the fusion dataset.")
+        if camera_source_ids is not None and list(camera_source_ids) != source:
+            raise ValueError("camera_source_ids conflict with the recorded camera manifest.")
+        actual = recorded["protocol"]
+        camera_train, camera_validation = recorded["train_ids"], recorded["validation_ids"]
+        id_mapping = "recorded camera-depth training manifest"
+        provenance = "recorded_at_training"
+        limitation = "Recorded frame membership/content, not independent scenes or an unbiased test set."
+    else:
+        if camera.get("kind") is not None or "data_manifest" in camera:
+            raise ValueError("unsupported camera checkpoint kind/manifest combination.")
+        if allow_legacy_camera is not True:
+            raise ValueError("legacy camera provenance is unverified; explicit allow_legacy_camera=True "
+                             "and camera_source_ids are required for this exception.")
+        actual = camera.get("config", {})
+        source = _ids(camera_source_ids, "camera_source_ids")
+        if source != split["source_ids"] or actual.get("sample_count") != len(source) or source != sorted(source):
+            raise ValueError("camera_source_ids must match the saved sorted source_ids and sample_count.")
+        train_indices, validation_indices = split_dataset_indices(
+            len(source), validation_fraction=actual.get("validation_fraction", .2),
+            seed=actual.get("split_seed", actual.get("seed", 0)),
+        )
+        camera_train = [source[i] for i in train_indices]
+        camera_validation = [source[i] for i in validation_indices]
+        id_mapping = "caller-declared original sorted source IDs"
+        provenance = "legacy_unverified"
+        limitation = "Legacy camera checkpoint has no saved source IDs/file hashes; " \
+                     "historical membership/content cannot be independently proven."
+    if any(actual.get(k) != v for k, v in expected.items()):
         raise ValueError("camera checkpoint preprocessing differs from the fusion configuration.")
-    source = _ids(camera_source_ids, "camera_source_ids")
-    if source != split["source_ids"] or old.get("sample_count") != len(source) or source != sorted(source):
-        raise ValueError("camera_source_ids must match the saved sorted source_ids and sample_count.")
-    train_indices, validation_indices = split_dataset_indices(
-        len(source), validation_fraction=old.get("validation_fraction", .2),
-        seed=old.get("split_seed", old.get("seed", 0)),
-    )
-    camera_train = [source[i] for i in train_indices]
     if set(camera_train) & set(split["validation_ids"]):
         raise ValueError("camera pretraining includes fusion validation IDs.")
     if lidar.get("kind") != "lidar_center_trainval_v1":
@@ -145,10 +174,9 @@ def initialize_bev_fusion_encoders(
     return {
         "camera": {"path": str(Path(camera_checkpoint).resolve()), "sha256": camera_sha,
                    "epoch": camera.get("epoch"), "step": camera.get("step"),
-                   "train_ids": camera_train, "validation_ids": [source[i] for i in validation_indices],
-                   "source_ids": source, "id_mapping": "caller-declared original sorted source IDs",
-                   "limitation": "Legacy camera checkpoint has no saved source IDs/file hashes; "
-                                 "historical membership/content cannot be independently proven."},
+                   "train_ids": camera_train, "validation_ids": camera_validation,
+                   "source_ids": source, "id_mapping": id_mapping,
+                   "provenance": provenance, "limitation": limitation},
         "lidar": {"path": str(Path(lidar_checkpoint).resolve()), "sha256": lidar_sha,
                   "epoch": lidar.get("epoch"), "step": lidar.get("step"),
                   "train_ids": lidar_split["train_ids"], "validation_ids": lidar_split["validation_ids"]},

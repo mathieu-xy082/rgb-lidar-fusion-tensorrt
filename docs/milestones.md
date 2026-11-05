@@ -28,7 +28,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | PFN et scatter LiDAR | Linear/BatchNorm/ReLU/max masqué, features BEV stride 1, comptes pré-cap conservés ; tests et backward CPU |
 | Premier contexte LiDAR BEV | Deux blocs résiduels dilatés, support 19x19 vérifié, grille/mesures conservées ; comparaison multi-résolution CPU |
 | Inspection conjointe et diagnostic LiDAR | Caméra/LiDAR sur grille 20 cm, couverture hors FOV préservée ; premier forward/backward GPU batch 1 et pic mémoire mesurés |
-| Préparation du diagnostic centre LiDAR | Notebook `04`, head Car/offset XY, loss masquée et décodage testés ; 512 labels audités, pas encore d'entraînement |
+| Diagnostic centre LiDAR | Incrément prototype clôturé : mémorisation quatre frames, pilote 410/102 de 20 epochs CUDA, best epoch 9 et revue TP/FN/FP |
 
 ## Bilan camera-depth v1
 
@@ -163,10 +163,26 @@ de correspondance ou de construction des cibles ; cela ne garantit pas la
 perfection des annotations humaines. Le hors-champ, DontCare et les classes
 ignorées ne sont pas des négatifs implicites. Données et rapports restent hors Git.
 
-Prochaine action : revue des frames, puis runner train/validation reproductible,
-split explicite, checkpoints et métriques de localisation des centres. Aucun
-entraînement LiDAR n'a été lancé. Cette head est une validation optionnelle,
-pas un prérequis architectural du futur raccord/fusion.
+La mémorisation sur `000006`, `000036`, `000123`, `000366` est validée :
+200 epochs sur CUDA, 800 updates, 13 centres appariés, aucun faux positif au
+seuil 0,3 dans le domaine annoté. Ce résultat porte sur les frames apprises.
+
+Le notebook `06` a terminé 20 epochs CUDA, soit 8 200 updates, sur 410 frames
+train / 102 validation disjointes, en partant de poids neufs. Le minimum de loss
+validation est à l'epoch 9 : 2,01414, précision 71,66%, rappel 63,77%,
+220 TP / 87 FP / 125 FN au seuil 0,3 et rayon d'appariement de 1 m. L'écart XY
+moyen de 0,18851 m ne concerne que les centres appariés. À l'epoch 20, la loss
+train diminue encore mais la loss validation remonte à 3,49954 : surapprentissage.
+
+Les frames de validation `000009` (centre retrouvé), `000148` (centre manqué)
+et `000388` (faux positif) ont été inspectées. Retenir `best.pt` à l'epoch 9,
+pas `latest.pt` à l'epoch 20, pour l'inspection et la future réutilisation.
+Le pic d'allocation PyTorch rapporté est 212,40 MiB ; ce n'est pas la mémoire
+totale GPU ni une preuve de temps réel. L'indépendance des scènes reste à établir.
+
+Décision : incrément prototype accepté pour la chaîne entraînement/validation,
+sans revendication de détecteur final. Prochaine action : revenir au raccord
+caméra/LiDAR BEV. Optimiser davantage cette head reste facultatif.
 Suivi : [diagnostic centre LiDAR](workstreams/lidar-center-diagnostic.md).
 
 ### Ordre des incréments

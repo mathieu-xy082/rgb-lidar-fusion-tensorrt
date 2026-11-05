@@ -21,10 +21,11 @@ Le socle implémenté couvre :
   agrégation par cellule, tests de backward et inspection KITTI sur CPU ;
 - une préparation des piliers LiDAR bruts et un PFN/scatter vers BEV, avec
   masques, compteurs et contexte dilaté résiduel testés, une inspection conjointe
-  caméra/LiDAR et un premier diagnostic GPU borné, sans entraînement LiDAR ;
+  caméra/LiDAR et un premier diagnostic GPU borné ;
 - une tête LiDAR facultative de localisation des centres de voitures, avec
-  cibles KITTI, loss masquée et notebook d'inspection CPU ; aucun run supervisé
-  ni checkpoint LiDAR entraîné n'est encore produit ;
+  cibles KITTI, loss masquée, mémorisation sur quatre frames puis pilote CUDA
+  de 20 epochs avec split disjoint 410 train / 102 validation ; bilan et
+  limites dans le [workstream LiDAR centre](docs/workstreams/lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure) ;
 - des smoke tests CPU, un runner KITTI avec split train/validation, métriques de
   profondeur et checkpointing ;
 - un générateur déterministe d'artefacts de démonstration.
@@ -153,7 +154,7 @@ PDM_IGNORE_ACTIVE_VENV=1 pdm install -G ml -G visualization -G notebook
 PDM_IGNORE_ACTIVE_VENV=1 pdm run notebooks
 ```
 
-Suivre les notebooks `01` à `04` décrits dans leur
+Suivre les notebooks `01` à `06` décrits dans leur
 [README](notebooks/README.md).
 
 ## Commandes principales

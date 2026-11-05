@@ -76,9 +76,10 @@ l’[explorateur LiDAR](explorers/architecture.html) et
 l’[explorateur PFN](explorers/pfn.html). Les schémas détaillent les volumes,
 le scatter et le contexte spatial.
 
-**État et limites.** Encodeur et head diagnostique testés, mais non entraînés
-en détection. Les poids des explorateurs sont fictifs ; les features ne sont
-pas des scores d’objets et les centres ne sont pas des boîtes 3D.
+**État et limites.** Encodeur et head diagnostique entraînés et évalués sur le
+[pilote 410/102](../workstreams/lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure),
+sans validation de détecteur final. Les poids des explorateurs restent fictifs ;
+les features ne sont pas des scores d’objets et les centres ne sont pas des boîtes 3D.
 
 ## Convergence : fusion et détection 3D
 

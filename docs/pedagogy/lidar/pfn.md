@@ -12,7 +12,7 @@
 
 Un nuage LiDAR contient un nombre variable de points, répartis irrégulièrement dans l’espace. Une convolution 2D attend une grille régulière. La branche LiDAR construit le passage entre les deux : elle rassemble les points dans des colonnes verticales, les **piliers**, résume chaque pilier, puis range ces résumés dans une grille vue de dessus, la **BEV** (*Bird’s Eye View*).
 
-Le PFN (*Pillar Feature Network*) fabrique le résumé. Il ne reconnaît pas encore des objets et ne consulte pas les piliers voisins. Dans ce dépôt, cet encodeur est fonctionnel mais n’est pas entraîné à la détection.
+Le PFN (*Pillar Feature Network*) fabrique le résumé, sans prédire lui-même des objets ni consulter les piliers voisins. Il a été entraîné avec le contexte et la head de centres dans le [pilote LiDAR](../../workstreams/lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure). L’explorateur de cette fiche reste un calcul à poids fictifs, pas une lecture du checkpoint appris.
 
 ## Lire les dimensions
 

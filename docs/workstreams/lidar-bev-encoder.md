@@ -12,7 +12,10 @@ measurement evidence. A small multi-resolution reference was compared on CPU.
 Joint camera/LiDAR inspection at 20 cm and a bounded LiDAR-only GPU diagnostic
 are recorded below. Developer review of the artifacts remains separate from
 this technical validation; no deployment/stability claim is made.
-No fusion, detector, or LiDAR training integration is implemented.
+No fusion or full 3D detector is implemented. The subsequent optional
+[center diagnostic](lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure)
+now records trained weights and a completed 410/102 pilot; the encoder-only
+experiments below remain historical random-weight measurements.
 
 References:
 

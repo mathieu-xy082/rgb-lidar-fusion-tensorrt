@@ -77,5 +77,5 @@
 <text x="35" y="610" font-size="20" fill="#17283f" font-weight="bold">32 canaux fixés par configuration ; leurs valeurs dépendent des poids et des entrées.</text>
 <text x="35" y="646" font-size="17" fill="#17283f">Pas de pooling spatial ni de couches fully connected dans ce chemin. Les deux blocs sont résiduels.</text>
 <text x="35" y="676" font-size="17" fill="#53647b">À venir : fusion avec camera BEV → backbone commun → head 3D complète (architecture non figée).</text>
-<text x="35" y="708" font-size="15" fill="#53647b">Volumes schématiques non à l’échelle ; diagnostic LiDAR implémenté mais non entraîné.</text>
+<text x="35" y="708" font-size="15" fill="#53647b">Volumes schématiques non à l’échelle ; aucun checkpoint illustré.</text>
 </g></svg>

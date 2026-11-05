@@ -6,10 +6,6 @@ devenir une source de vérité générale.
 
 ## En cours
 
-- [Diagnostic LiDAR centre facultatif](lidar-center-diagnostic.md) : notebook
-  `04`, head Car/offset XY, loss masquée, annotations des 512 frames téléchargées
-  et auditées. Le runner supervisé et ses courbes restent à développer ; cette
-  head n'est pas un prérequis de la future fusion BEV.
 - [LiDAR BEV encoder](lidar-bev-encoder.md) : construction des piliers de 20 cm
   et PFN/scatter/contexte dilaté implémentés et testés sur CPU, avec masques,
   compteurs, backward et champ réceptif de 19 cellules vérifié. Une référence
@@ -20,6 +16,14 @@ devenir une source de vérité générale.
 
 Ce chantier précède la fusion et les heads 3D. Voir les
 [milestones](../milestones.md).
+
+## Clôturés - sur la branche LiDAR
+
+- [Diagnostic LiDAR centre facultatif](lidar-center-diagnostic.md) : inspection
+  `04`, mémorisation quatre frames avec `05`, pilote disjoint 410/102 avec `06`
+  terminé sur CUDA à 20 epochs. Incrément prototype clôturé après revue des
+  courbes et de cas TP/FN/FP ; retenir l'epoch 9 selon la loss de validation.
+  Cette head ne bloque pas la future fusion BEV ; intégration dans main à venir.
 
 ## Clôturés - intégrés dans main
 

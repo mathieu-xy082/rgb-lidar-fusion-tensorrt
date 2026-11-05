@@ -1,7 +1,8 @@
-"""Bounded memorization diagnostic for one to four explicitly selected KITTI frames.
+"""Shared LiDAR center utilities and a bounded one-to-four-frame diagnostic.
 
-Training and evaluation deliberately use the same IDs. This is neither a
-validation split nor an estimate of generalization or 3D detection AP.
+The overfit runner below deliberately evaluates its training IDs. Disjoint
+train/validation execution lives in lidar_center_trainval; neither task
+constitutes a full 3D detection AP evaluation.
 """
 
 from __future__ import annotations
@@ -27,10 +28,11 @@ from .project_lidar import load_velodyne_bin
 
 
 @dataclass(frozen=True)
-class LidarCenterOverfitConfig:
+class LidarCenterConfig:
+    """Shared architecture, optimizer, decoding and device settings."""
+
     data_root: str = "data/kitti/training"
     output_dir: str = "results/training/kitti_lidar_center_overfit_4"
-    sample_ids: tuple[str, ...] = ("000006", "000036", "000123", "000366")
     grid: BEVGridConfig = BEVGridConfig((0., 50.), (-25., 25.), (-3., 3.), .2)
     epochs: int = 100
     eval_every: int = 5
@@ -59,13 +61,6 @@ class LidarCenterOverfitConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < (0 if name == "seed" else 1):
                 raise ValueError(f"{name} must be an integer in its valid range.")
-        if not isinstance(self.sample_ids, (list, tuple)) or not 1 <= len(self.sample_ids) <= 4:
-            raise ValueError("this overfit diagnostic requires one to four explicit sample_ids.")
-        if any(not isinstance(s, str) or len(s) != 6 or not s.isascii() or not s.isdigit() for s in self.sample_ids):
-            raise ValueError("sample_ids must contain six-digit KITTI IDs.")
-        if len(set(self.sample_ids)) != len(self.sample_ids):
-            raise ValueError("sample_ids must be unique.")
-        object.__setattr__(self, "sample_ids", tuple(self.sample_ids))
         for name in ("learning_rate", "match_radius_m", "max_grad_norm"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
@@ -83,7 +78,7 @@ class LidarCenterOverfitConfig:
                 values["grid"] = BEVGridConfig(**values["grid"])
             return cls(**values)
         except TypeError as exc:
-            raise ValueError(f"invalid overfit configuration: {exc}") from exc
+            raise ValueError(f"invalid LiDAR center configuration: {exc}") from exc
 
     def serialized(self):
         values = asdict(self)
@@ -91,6 +86,48 @@ class LidarCenterOverfitConfig:
         values["output_dir"] = str(Path(self.output_dir).resolve())
         # Normalize tuple/list differences before comparing resumed configurations.
         return json.loads(json.dumps(values))
+
+
+@dataclass(frozen=True)
+class LidarCenterOverfitConfig(LidarCenterConfig):
+    sample_ids: tuple[str, ...] = ("000006", "000036", "000123", "000366")
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.sample_ids, (list, tuple)) or not 1 <= len(self.sample_ids) <= 4:
+            raise ValueError("this overfit diagnostic requires one to four explicit sample_ids.")
+        if any(not isinstance(s, str) or len(s) != 6 or not s.isascii() or not s.isdigit() for s in self.sample_ids):
+            raise ValueError("sample_ids must contain six-digit KITTI IDs.")
+        if len(set(self.sample_ids)) != len(self.sample_ids):
+            raise ValueError("sample_ids must be unique.")
+        object.__setattr__(self, "sample_ids", tuple(self.sample_ids))
+
+
+@dataclass(frozen=True)
+class LidarCenterTrainConfig(LidarCenterConfig):
+    """Fresh-model pilot with a fixed saved train/validation frame split."""
+
+    output_dir: str = "results/training/kitti_lidar_center_512"
+    epochs: int = 5
+    eval_every: int = 1
+    device: str = "cuda"
+    sample_count: int = 512
+    validation_fraction: float = .2
+    split_seed: int = 13
+    log_every_steps: int = 50
+
+    def __post_init__(self):
+        super().__post_init__()
+        for name, minimum in (("sample_count", 2), ("split_seed", 0), ("log_every_steps", 1)):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise ValueError(f"{name} must be an integer >= {minimum}.")
+        if isinstance(self.validation_fraction, bool) or not isinstance(self.validation_fraction, (int, float)) or not (
+            math.isfinite(self.validation_fraction) and 0 < self.validation_fraction < 1
+        ):
+            raise ValueError("validation_fraction must lie strictly between zero and one.")
+        if self.eval_every != 1:
+            raise ValueError("train/validation evaluates and checkpoints every epoch: eval_every must be 1.")
 
 
 @dataclass(frozen=True)
@@ -102,7 +139,7 @@ class _Frame:
     fingerprint: dict[str, str]
 
 
-def _prepare_frame(config, sample_id):
+def _prepare_frame(config, sample_id, *, require_positive=True):
     from PIL import Image
 
     root = Path(config.data_root)
@@ -115,7 +152,7 @@ def _prepare_frame(config, sample_id):
         load_kitti_labels(paths["label_2"]),
         calibration=parse_kitti_calibration_file(paths["calib"]), image_shape=shape, grid=config.grid,
     )
-    if not len(targets.centers_vehicle) or not targets.supervision_mask.any():
+    if require_positive and (not len(targets.centers_vehicle) or not targets.supervision_mask.any()):
         raise ValueError(f"{sample_id}: overfit frames must contain a supervised Car center in the ROI.")
     pillars = build_lidar_pillars(
         [load_velodyne_bin(paths["velodyne"])], grid=config.grid,
@@ -169,13 +206,19 @@ def _on_device(frame, device):
     )
 
 
-def _evaluate(model, frames, config, device):
+def _evaluate(model, frames, config, device, *, prefix="train_eval", progress=None):
     was_training = model.training
     model.eval()
     rows = []
+    skipped_ids = []
     try:
         with torch.no_grad():
-            for frame in frames:
+            for processed, frame in enumerate(frames, start=1):
+                if progress is not None:
+                    progress(processed, frame.sample_id)
+                if not frame.targets["supervision_mask"].any():
+                    skipped_ids.append(frame.sample_id)
+                    continue
                 inputs, targets = _on_device(frame, device)
                 prediction = model(**inputs)
                 loss = lidar_center_loss(prediction, **targets)
@@ -188,16 +231,19 @@ def _evaluate(model, frames, config, device):
                              **match_lidar_centers(decoded, frame.centers_xy, radius_m=config.match_radius_m)})
     finally:
         model.train(was_training)
+    if not rows:
+        raise ValueError("evaluation has no supervised frames; unknown regions are not successful predictions.")
     tp, fp, fn = (sum(row[name] for row in rows) for name in ("tp", "fp", "fn"))
-    result = {"train_eval_loss": float(np.mean([r["total"] for r in rows])),
-              "train_eval_heatmap": float(np.mean([r["heatmap"] for r in rows])),
-              "train_eval_offset": float(np.mean([r["offset"] for r in rows])),
+    result = {f"{prefix}_loss": float(np.mean([r["total"] for r in rows])),
+              f"{prefix}_heatmap": float(np.mean([r["heatmap"] for r in rows])),
+              f"{prefix}_offset": float(np.mean([r["offset"] for r in rows])),
               "tp": tp, "fp": fp, "fn": fn,
               "precision": tp / (tp + fp) if tp + fp else 0.,
-              "recall": tp / (tp + fn),
+              "recall": tp / (tp + fn) if tp + fn else None,
               "matched_mean_distance_m": sum(r["matched_distance_sum_m"] for r in rows) / tp if tp else None,
-              "per_frame": rows}
-    if not all(math.isfinite(result[name]) for name in ("train_eval_loss", "train_eval_heatmap", "train_eval_offset")):
+              "per_frame": rows, "evaluated_frames": len(rows), "skipped_ids": skipped_ids,
+              "negative_frames": sum(row["tp"] + row["fn"] == 0 for row in rows)}
+    if not all(math.isfinite(result[f"{prefix}_{name}"]) for name in ("loss", "heatmap", "offset")):
         raise ValueError("non-finite evaluation loss.")
     return result
 
@@ -231,18 +277,21 @@ def _persist(output, model, optimizer, config, fingerprints, history):
     return checkpoint
 
 
-def _read_checkpoint(path):
+def _read_checkpoint(path, *, expected_kind="lidar_center_overfit_v1"):
     payload = torch.load(path, map_location="cpu", weights_only=True)
-    if payload.get("kind") != "lidar_center_overfit_v1":
-        raise ValueError("not a LiDAR center overfit checkpoint.")
+    if payload.get("kind") not in {"lidar_center_overfit_v1", "lidar_center_trainval_v1"} or (
+        expected_kind is not None and payload["kind"] != expected_kind
+    ):
+        raise ValueError("not a LiDAR center checkpoint of the expected kind.")
     return payload
 
 
 def load_lidar_center_checkpoint(path: str | Path):
     """Load a local diagnostic checkpoint for CPU inspection, without CUDA."""
 
-    payload = _read_checkpoint(path)
-    config = LidarCenterOverfitConfig.from_mapping(payload["config"])
+    payload = _read_checkpoint(path, expected_kind=None)
+    config_type = LidarCenterOverfitConfig if payload["kind"] == "lidar_center_overfit_v1" else LidarCenterTrainConfig
+    config = config_type.from_mapping(payload["config"])
     with torch.random.fork_rng(devices=[]):
         model = LidarCenterDiagnostic(channels=config.channels).cpu().eval()
     model.load_state_dict(payload["model_state_dict"])

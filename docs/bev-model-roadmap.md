@@ -370,5 +370,9 @@ heads 3D. Aucun nouveau cycle d'optimisation de la profondeur n'est requis.
 
 Le suivi facultatif actuellement choisi prépare d'abord le
 [diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) : notebook,
-labels et objectif sont disponibles ; son runner train/validation reste à
-ajouter. Cet entraînement autonome ne devient pas un prérequis de la fusion.
+labels, mémorisation sur quatre frames et runner train/validation sont disponibles.
+Le pilote 410/102 a terminé 20 epochs CUDA ; l'epoch 9 est retenue selon la loss
+de validation, avec revue qualitative de cas correct/manqué/faux positif.
+Cet incrément prototype est clôturé ; revenir au raccord caméra/LiDAR BEV,
+sans confondre cette validation avec une qualité de détection finale.
+Cet entraînement autonome ne devient pas un prérequis de la fusion.

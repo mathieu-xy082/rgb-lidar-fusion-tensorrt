@@ -1,13 +1,15 @@
 # Workstream - Optional LiDAR center diagnostic
 
-Updated: 2026-11-03.
+Updated: 2026-11-05.
 
 Base: LiDAR encoder prototype through `2817ef3`. Current development branch:
 `ec/lidar-bev-encoder`.
 
-Status: first CPU notebook, optional Car-center objective, and local label
-preparation implemented. No supervised training run or trained LiDAR checkpoint
-exists. This head is optional, not a new requirement of the fused architecture.
+Status: prototype increment closed on 2026-11-05. Four-frame memorization,
+the 410/102 CUDA pilot and qualitative validation review are complete. Retain
+epoch 9 (`best.pt`) by minimum validation loss, not epoch 20 (`latest.pt`).
+The training/validation chain is validated, not production detection quality.
+This head remains optional, not a requirement of the fused architecture.
 
 References:
 
@@ -57,8 +59,9 @@ No extra half-cell shift is added. Targets use a fixed radius-2 Gaussian with
 unit peaks, not the size-adaptive targets of a full CenterPoint reproduction.
 Heatmap focal exponents are 2 and 4; the sum is normalized by max(Ncenters,1).
 Offset L1 averages the two coordinates at centers. Entirely unknown batches
-yield differentiable zero; the future runner must track/skip them, not report
-them as successful learning. Center collisions raise instead of overwriting.
+yield differentiable zero; the train/validation runner skips and reports them
+instead of treating them as successful learning. The overfit runner requires
+positive frames. Center collisions raise instead of overwriting.
 
 KITTI locations are bottom centers in rectified reference-camera coordinates.
 Subtract h/2 along camera y before solving `T_vehicle_to_camera` to get the
@@ -113,28 +116,164 @@ Report: ignored `results/analysis/lidar_bev/annotation_audit.json`. Class counts
 Car 1,947; Van 179; Truck 71; Pedestrian 290; Cyclist 125; Person_sitting 19;
 Tram 40; Misc 76; DontCare 1,010.
 
-## Next Increment - Not Implemented
+### 4. Four-frame memorization
 
-- [ ] Choose/document the train/validation IDs and label policy. The consecutive
-  512-frame subset is a pilot, not a full benchmark or guaranteed independent
-  scene split; do not silently claim sequence-disjoint generalization.
-- [ ] Add a runner with fixed configuration, metrics, checkpoint/resume and
-  optimizer-state device handling. Validate overfit on a few samples first.
-- [ ] Evaluate held-out center localization/precision/recall with an explicit
-  matching policy and ignored-domain handling; this is not 3D box AP.
-- [ ] Extend the notebook with trained checkpoint loading and train/val curves.
-- [ ] Profile head + optimizer memory before authorizing larger GPU runs.
+- [x] Train PFN/context/head on explicit IDs, with deterministic point selection,
+  fixed configuration, metrics, atomic checkpoints and checked Adam/BN resume.
+- [x] Add notebook `05` with opt-in subprocess training and CPU checkpoint views.
+- [x] Validate CUDA run on `000006`, `000036`, `000123`, `000366`: 200 epochs,
+  800 updates, 13/13 centers matched and no FP at score threshold 0.3/top-k 50,
+  within the masked domain and a 1 m matching radius. Mean matched XY distance
+  is 0.01026 m, loss 203.38168 to 0.67673. This is memorization, not physical
+  centimeter accuracy or generalization. Artifacts remain ignored locally.
+
+### 5. Disjoint train/validation pilot
+
+- [x] Select the first 512 sorted local KITTI image IDs, require all counterpart
+  files, and use the existing seeded splitter: 410 train / 102 validation, seed 13.
+- [x] Persist exact IDs and file hashes in `split.json` and checkpoints; reject
+  configuration, dataset or split changes on resume.
+- [x] Initialize fresh weights. `000123` and `000366` are in this validation
+  split, so the four-frame weights must not seed this experiment.
+- [x] Stream frame preparation instead of caching all padded pillars. Include
+  annotated no-Car frames as negatives; skip/report unknown supervision only.
+- [x] Evaluate both fixed splits using `eval()` and `no_grad()`, without changing
+  parameters/BN. Only train IDs reach the optimizer.
+- [x] Save latest state each epoch, plus best validation-loss weights. Embed best
+  state/history in latest so interrupted sidecars can be repaired on resume.
+- [x] Add notebook `06`: safe defaults, CUDA subprocess with the 2048 MiB guard,
+  train/validation curves and inspection restricted to saved validation IDs.
+- [x] Exercise a real eight-frame CPU smoke run (6 train / 2 validation), including
+  Car-negative frames. Check all 512 file counterparts/hashes and split disjointness.
+- [x] Complete the CUDA pilot for 20 epochs/8,200 updates and inspect curves,
+  reported peak allocation and representative validation frames. Results below.
+
+Configuration: `configs/training/kitti_lidar_center_512.json`. Explicit command:
+
+```bash
+pdm run python scripts/train_lidar_center_split.py --config configs/training/kitti_lidar_center_512.json
+```
+
+Outputs: ignored `results/training/kitti_lidar_center_512/`. `latest.pt` is for
+resume; `best.pt` is inference-only, selected by minimum `val_loss`, including
+the epoch-0 baseline. Epoch count is a total target, not additional epochs.
+The new checkpoint kind is distinct from the overfit kind; both remain loadable
+for CPU inspection. A nonempty output directory requires explicit resume.
+
+Losses are macro-averages of per-supervised-frame losses. Report train update
+loss separately from eval-mode `train_eval_loss` and `val_loss`. Precision/recall
+use score-ordered greedy one-to-one XY matching after local-max/top-k decoding
+within each frame's supervision domain. Match radius, score threshold and top-k
+are fixed in the config, not tuned per frame. Recall is null when no Car target
+exists; matched error is null when there is no TP. This is not full-box AP.
+
+### 6. Pilot results and prototype closure
+
+Local run: `results/training/kitti_lidar_center_512/`, CUDA FP32, batch 1,
+32 channels, 20 cm grid, Adam at 0.001, seed/split seed 13. All 410 training
+and 102 validation frames were evaluated; none were skipped. The split includes
+1,370 train and 345 validation Car centers, with 74 and 10 no-Car frames
+respectively. The model started fresh; the four-frame weights were not reused.
+
+Twenty epochs/8,200 updates completed in about 44 min 47 s. Reported peak
+PyTorch allocated memory was 212.40 MiB, not total device memory. This completed
+run demonstrates feasibility on this GPU, not universal driver stability,
+end-to-end real-time performance, or export readiness.
+
+| Metric | Best validation-loss epoch 9 | Final epoch 20 |
+| --- | ---: | ---: |
+| Step | 3,690 | 8,200 |
+| Train loss, eval mode | 0.97393 | 0.41241 |
+| Validation loss | **2.01414** | 3.49954 |
+| Validation precision | 71.66% | 73.38% |
+| Validation recall | 63.77% | 59.13% |
+| Validation TP / FP / FN | 220 / 87 / 125 | 204 / 74 / 141 |
+| Mean XY distance, matched centers only | 0.18851 m | 0.20163 m |
+
+Matching uses score >= 0.3, top-k 50 per frame and the inclusive 1 m radius,
+restricted to the supervision domain. Metrics depend on this operating point;
+the best loss does not imply the maximum precision or recall. Continued train
+improvement while validation loss rises is evidence of overfitting. Do not
+extend training solely because the training loss is still decreasing.
+
+Keep `checkpoints/best.pt` at epoch 9 for prototype inspection/future feature
+reuse. Keep `latest.pt` at epoch 20 only for an explicit future resume. Both
+checkpoint states were checked finite on CPU. Best-checkpoint SHA-256:
+
+```text
+eac8f0d39edce3b1b44706936cc8aaf2d88c2dc5d040245c93994455fb5daf5f
+```
+
+Qualitative review confirmed by the developer using the epoch-9 checkpoint:
+
+| Validation position | KITTI ID | Observation in the evaluated domain |
+| --- | --- | --- |
+| 0 | `000009` | One center found, no FP/FN; XY distance 0.13303 m |
+| 28 | `000148` | One annotated target missed; no decoded prediction |
+| 79 | `000388` | One FP without a matching annotated Car center |
+
+These examples deliberately include success and failure; they are not an
+exhaustive failure analysis. RGB was a visual reference, never a LiDAR-branch
+input. An FP is defined relative to annotations/domain, not proof of the
+physical absence of any vehicle in the entire scene.
+
+Exit decision: the independently trainable LiDAR branch and its disjoint
+validation workflow are sufficient for this prototype increment. No extra
+optimization of the auxiliary head is required before returning to camera/LiDAR
+BEV integration. Fusion, the shared BEV backbone, full 3D heads and deployment
+remain separate work. Preserve measurement counts/masks when reusing learned
+features; a high activation does not become a new measurement.
+
+## Deferred Quality Work
+
+These are future evaluation improvements, not blockers for prototype closure:
+
+- [ ] Check sequence/scene grouping or acquire appropriate mapping before claiming
+  scene-disjoint generalization. A seeded random frame split is not sufficient.
+- [ ] Keep an independent test set for final estimates after model selection;
+  best-checkpoint validation metrics are not unbiased test results.
+- [ ] Broaden the FP/FN analysis, improve the precision/recall operating point
+  and profile the fused model when its architecture is defined.
 
 ## Validation
 
-Local suite: 560 passed, one CUDA-only skip. Tests cover label sentinels and
+Initial validation (2026-11-03): 560 passed, one CUDA-only skip. Tests cover label sentinels and
 malformed rows, center/corner transforms independent of P2 translation,
 visibility/ignore masks, collisions, loss values and masked gradients,
 metric decoding, target-independent encoder inputs, immutable inference state,
 ZIP selection/conflict safety, audit failure, and notebook safe defaults/state.
 All notebook code cells were executed on CPU with the two default real frames;
 figures were rendered outside Git. No GPU probe, network action from the
-notebook, optimizer step or trained checkpoint was produced.
+notebook, optimizer step or trained checkpoint was produced at that initial stage.
+
+Train/validation tests additionally cover reproducible disjoint splits,
+validation exclusion from optimizer steps, no-grad/BN immutability, negative
+frames, unknown-region skipping, bounded live-frame memory, best/latest selection,
+exact CPU resume, changed-file/config refusal, sidecar repair, and failed CUDA
+preflight without allocation or retry. Notebook code is validated with default
+training disabled and a separate real CPU smoke checkpoint; no full 512-frame
+training result is claimed by these development checks.
+
+Pre-pilot development regression check: 631 passed, one CUDA-only skip, two existing
+notebook-state checks deselected after confirming that committed notebook `04`
+already contains outputs/execution counts and `RUN_ANNOTATION_AUDIT=True`.
+They fail on that pre-existing state, not the new runner. Tests ran in a copy
+using Git versions of the locally executed `03`/`05`; those working notebooks
+were not edited or cleared. The real eight-frame CPU run and notebook `06`
+default/smoke-checkpoint cells completed, with curves and a validation frame
+rendered and inspected outside Git. The existing 200-epoch CUDA overfit
+checkpoint still loads on CPU with the shared loader.
+
+Closure cleanup removes execution outputs/counters from versioned notebooks and
+restores opt-in flags, including the previously committed notebook `04` state.
+The complete executed `03`/`04`/`05`/`06` sessions were backed up under ignored
+`results/notebook_sessions/lidar-pilot-2026-11-05/`; datasets, metrics and trained
+checkpoints stay outside Git. Reviewed block/CUDA presets are retained with
+training disabled. Final closure regression: **633 passed, one CUDA-only skip**,
+with no deselections. All 138 local links/anchors in modified Markdown files
+were checked, SVG structure is covered by tests, and JavaScript syntax for
+the four explorers passes `node --check`. Only status captions changed in the
+explorers, not their numerical algorithms.
 
 ## References
 

@@ -1,9 +1,11 @@
 # BEV LiDAR encoder
 
-Mise à jour : 2026-11-03.
+Mise à jour : 2026-11-05.
 
 Statut : **premier encodeur fonctionnel implémenté, inspecté sur CPU et testé
-dans un diagnostic GPU borné**. Il n'est pas entraîné à la détection.
+dans un diagnostic GPU borné**. La mémorisation sur quatre frames et un pilote
+CUDA 410/102 de 20 epochs sont terminés ; la qualité n'est pas celle d'un
+détecteur de production et l'indépendance des scènes n'est pas garantie.
 Ce document distingue le contrat NumPy actuel, les choix retenus et les
 paramètres/variantes à valider. Il ne décrit ni un détecteur entraîné ni une
 reproduction complète de PointPillars.
@@ -306,12 +308,12 @@ canaux caméra `C1` pour une future concaténation.
 
 Le [workstream](workstreams/lidar-bev-encoder.md#progress) détaille les incréments.
 Les piliers, le PFN, le scatter et le contexte sont testés sur CPU, avec
-forward/backward sur une frame KITTI réelle et poids aléatoires. La suite
-complète passe à 528 tests réussis et un test CUDA ignoré. L'inspection conjointe
+forward/backward sur une frame KITTI réelle et poids aléatoires. À ce stade
+initial, la suite passait à 528 tests réussis et un test CUDA ignoré. L'inspection conjointe
 à 20 cm et un diagnostic GPU séparé sont consignés dans le
 [workstream](workstreams/lidar-bev-encoder.md#4-scope-inspection-compatibility-and-resources).
-La revue visuelle par le développeur reste à faire ; aucun entraînement LiDAR
-n'est effectué.
+Ce contrôle initial sans entraînement ne doit pas être confondu avec le
+pilote supervisé et la revue développeur décrits dans le diagnostic Car ci-dessous.
 Les premiers critères sont géométriques et logiciels : cellules attendues,
 bords, séparation des batches, padding, cas vides, valeurs finies, backward et
 alignement caméra/LiDAR sur une grille non carrée pour détecter les transpositions.
@@ -345,8 +347,15 @@ la loss finale pourra entraîner les deux branches.
 Le PFN/contexte existant ne change pas. Les cibles proviennent de `label_2`,
 avec conversion bottom-center caméra vers centre géométrique LiDAR et masques
 conservateurs pour le hors-champ/DontCare. Les 512 labels locaux sont préparés
-et audités ; les poids du notebook restent aléatoires. Le runner train/validation
-et le chargement de checkpoints LiDAR entraînés sont le prochain incrément.
+et audités ; les poids du notebook `04` restent aléatoires. Le notebook `05`
+permet le surapprentissage de quatre frames, validé sur CUDA à 200 epochs.
+Le notebook `06` et son runner utilisent un split fixe 410/102, des métriques
+séparées et des checkpoints latest/best. Le pilote de 20 epochs est terminé :
+`best.pt` retient l'epoch 9, avec précision 71,66% et rappel 63,77% au seuil 0,3
+dans le domaine annoté. Les cas correct/manqué/faux positif ont été inspectés.
+Le [bilan de clôture](workstreams/lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure)
+valide la chaîne train/validation du prototype, sans exiger plus d'optimisation
+de cette head facultative avant de reprendre le raccord caméra/LiDAR BEV.
 
 ## Références
 

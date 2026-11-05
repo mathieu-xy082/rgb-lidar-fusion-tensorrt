@@ -17,13 +17,13 @@ Les volumes représentent des features, pas des tranches de hauteur physique.
 
 ## Diagnostic actuel et architecture cible
 
-Le dépôt contient maintenant `LidarCenterDiagnostic`, une composition du PFN, du scatter, du contexte dilaté et d’une **head facultative de centres Car**. Le notebook `04_lidar_bev_analysis.ipynb`, le parsing des labels KITTI, les cibles, la loss masquée et le décodage accompagnent ce diagnostic. Aucun entraînement LiDAR n’est déclaré réalisé dans les jalons consultés.
+Le dépôt contient `LidarCenterDiagnostic`, une composition du PFN, du scatter, du contexte dilaté et d’une **head facultative de centres Car**. Les notebooks `04`/`05`/`06` couvrent inspection, mémorisation et entraînement/validation. Le [pilote 410/102](../workstreams/lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure) a terminé 20 epochs CUDA ; l’epoch 9 est retenue selon la loss de validation. Cette fiche et ses explorateurs montrent toujours des schémas et calculs synthétiques, pas les activations du checkpoint.
 
 Il existe donc deux parcours à distinguer :
 
 | Parcours | Étapes | Statut |
 |---|---|---|
-| Diagnostic LiDAR actuel | Piliers → PFN → scatter → contexte LiDAR → head centres Car | Implémenté, testé ; non entraîné |
+| Diagnostic LiDAR actuel | Piliers → PFN → scatter → contexte LiDAR → head centres Car | Entraîné et évalué sur le pilote ; pas un détecteur 3D complet |
 | Détecteur multimodal cible | Branche LiDAR contextualisée + camera BEV → fusion et backbone BEV commun → heads 3D | Fusion, backbone commun et heads 3D à développer |
 
 **Le bloc de contexte LiDAR actuel et le futur backbone BEV commun sont deux modules distincts.** Ici, « backbone BEV » désigne le rôle de traitement spatial sur la grille. Dans l’architecture multimodale du dépôt, le backbone commun est placé après la fusion. On ne lui attribue pas une architecture multi-échelle qui n’a pas encore été choisie.
@@ -73,7 +73,7 @@ La head actuelle `LidarCenterHead` comporte deux convolutions 1×1 en parallèle
 
 Le décodeur recherche les maxima locaux, applique un seuil et une limite top-k, puis convertit cellules et offsets en coordonnées métriques. Par exemple, avec x_min=0, une résolution de 0,20 m, une ligne 10 et un offset_x=0,25 : **x = (10 + 0,25) × 0,20 = 2,05 m**. On n’ajoute pas un demi-pixel : l’offset décrit déjà la position dans la cellule.
 
-Pendant un futur entraînement, une focal loss sur la heatmap et une L1 sur les offsets des centres superviseront ce diagnostic. Les cellules ignorées ne sont pas des négatifs implicites ; les labels n’entrent pas dans les features de l’encodeur. La disponibilité d’une loss et d’un backward testé ne signifie pas qu’un apprentissage a déjà eu lieu.
+Pendant l’entraînement, une focal loss sur la heatmap et une L1 sur les offsets des centres supervisent ce diagnostic. Les cellules ignorées ne sont pas des négatifs implicites ; les labels n’entrent pas dans les features de l’encodeur. La disponibilité d’une loss et d’un backward testé ne suffit pas à démontrer la qualité : les métriques et limites du pilote sont consignées séparément.
 
 **Pourquoi cette petite head ?** Elle permet de préparer un diagnostic d’apprentissage de localisation de centres sur la branche LiDAR seule. Elle reste facultative : la future head finale pourra entraîner les branches via la fusion sans exiger un détecteur LiDAR intermédiaire.
 

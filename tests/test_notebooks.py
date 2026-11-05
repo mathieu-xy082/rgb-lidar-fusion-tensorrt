@@ -13,6 +13,7 @@ NOTEBOOK_NAMES = (
     "03_camera_depth_training_analysis.ipynb",
     "04_lidar_bev_analysis.ipynb",
     "05_lidar_center_overfit.ipynb",
+    "06_lidar_center_training_analysis.ipynb",
 )
 
 
@@ -100,7 +101,24 @@ def test_lidar_overfit_notebook_keeps_training_opt_in_and_separate_process():
         if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
         and node.targets[0].id in {"RUN_OVERFIT", "RESUME_EXISTING", "DEVICE", "EPOCHS"}
     }
-    assert defaults == {"RUN_OVERFIT": False, "RESUME_EXISTING": False, "DEVICE": "cpu", "EPOCHS": 100}
+    assert defaults == {"RUN_OVERFIT": False, "RESUME_EXISTING": False, "DEVICE": "cuda", "EPOCHS": 200}
     assert "subprocess.Popen" in cells["train-overfit"]
     assert "process.terminate()" in cells["train-overfit"]
     assert "process.kill()" in cells["train-overfit"]
+
+
+def test_lidar_trainval_notebook_keeps_training_opt_in_and_inspection_in_validation():
+    path = Path(__file__).resolve().parents[1] / "notebooks/06_lidar_center_training_analysis.ipynb"
+    notebook = json.loads(path.read_text())
+    cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
+    defaults = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse(cells["parameters"]).body
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in {"RUN_TRAINING", "RESUME_EXISTING", "DEVICE", "EPOCHS"}
+    }
+    assert defaults == {"RUN_TRAINING": False, "RESUME_EXISTING": False, "DEVICE": "cuda", "EPOCHS": 20}
+    assert "subprocess.Popen" in cells["train-split"] and "process.terminate()" in cells["train-split"]
+    assert "process.kill()" in cells["train-split"]
+    assert "saved_split['validation_ids'][VALIDATION_SAMPLE_POSITION]" in cells["inspect-validation"]
+    assert "assert sample_id not in saved_split['train_ids']" in cells["inspect-validation"]

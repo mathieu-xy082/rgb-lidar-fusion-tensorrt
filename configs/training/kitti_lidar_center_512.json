@@ -1,0 +1,27 @@
+{
+  "data_root": "data/kitti/training",
+  "output_dir": "results/training/kitti_lidar_center_512",
+  "sample_count": 512,
+  "validation_fraction": 0.2,
+  "split_seed": 13,
+  "grid": {
+    "x_range_m": [0.0, 50.0],
+    "y_range_m": [-25.0, 25.0],
+    "z_range_m": [-3.0, 3.0],
+    "resolution_m": 0.2
+  },
+  "epochs": 5,
+  "eval_every": 1,
+  "learning_rate": 0.001,
+  "seed": 13,
+  "channels": 32,
+  "max_points_per_pillar": 64,
+  "cpu_threads": 2,
+  "device": "cuda",
+  "minimum_free_memory_mib": 2048,
+  "score_threshold": 0.3,
+  "top_k": 50,
+  "match_radius_m": 1.0,
+  "max_grad_norm": 10.0,
+  "log_every_steps": 50
+}

@@ -88,7 +88,7 @@
 <text x="35" y="610" font-size="20" fill="#17283f" font-weight="bold">32 canaux fixés par configuration ; leurs valeurs dépendent des poids et des entrées.</text>
 <text x="35" y="646" font-size="17" fill="#17283f">Pas de pooling spatial ni de couches fully connected dans ce chemin. Les deux blocs sont résiduels.</text>
 <text x="35" y="676" font-size="17" fill="#53647b">À venir : fusion avec camera BEV → backbone commun → head 3D complète (architecture non figée).</text>
-<text x="35" y="708" font-size="15" fill="#53647b">Volumes schématiques non à l’échelle ; diagnostic LiDAR implémenté mais non entraîné.</text>
+<text x="35" y="708" font-size="15" fill="#53647b">Volumes schématiques non à l’échelle ; aucun checkpoint illustré.</text>
 </g></svg><p>La grille 250×250 reste constante ; les volumes sont schématiques et non à l’échelle. Chaque carte porte une feature, pas une tranche verticale de la scène.</p></section>
 <section class="panel"><h2>Relier les opérateurs dans le réseau</h2><div id="tensorFigure"><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="870" viewBox="0 0 1120 870" role="img" aria-labelledby="title desc"><title id="title">Convolutions sur les tenseurs BEV</title><desc id="desc">Un noyau par canal d’entrée et de sortie calcule une somme sur les canaux et l’espace. L’addition résiduelle conserve les dimensions. Deux têtes 1x1 prédisent centres et offsets.</desc><defs><marker id="a" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L9 4L0 8" fill="#53647b"/></marker></defs><rect width="1120" height="870" fill="#f4f7fb"/><g font-family="Arial,sans-serif" fill="#17283f">
 <text x="36" y="42" font-size="14" fill="#235ce0" font-weight="bold">DES OPÉRATEURS AUX CALCULS</text>

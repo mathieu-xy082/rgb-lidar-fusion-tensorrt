@@ -33,8 +33,9 @@ Le socle implémenté couvre :
 Le lift BEV est un prototype PyTorch fonctionnel, relu et inspecté, clôturé pour
 ce premier périmètre ; ce n'est pas une détection 3D ni un module validé temps réel.
 Le point cloud brut dispose aussi d'un premier PFN/scatter et contexte BEV ;
-la fusion et les têtes de détection 3D restent à développer. Voir le
-[workstream du lift](docs/workstreams/camera-depth-bev-lift.md).
+la fusion et les têtes de détection 3D restent à développer. Le
+[contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
+formalise le prochain incrément, sans module de fusion implémenté à ce stade.
 
 L'état détaillé et les critères de sortie sont suivis dans
 [docs/milestones.md](docs/milestones.md).
@@ -97,7 +98,8 @@ La conception complète est décrite dans
 camera-depth qui prépare le lift est détaillé dans
 [docs/bev-cam-depth-backbone.md](docs/bev-cam-depth-backbone.md).
 La [conception de l'encodeur LiDAR](docs/bev-lidar-encoder.md) précise le
-chantier en cours : piliers de 20 cm, PFN/scatter et premier contexte spatial
+socle intégré dans main depuis la release 1.3.0 : piliers de 20 cm,
+PFN/scatter et premier contexte spatial
 avant fusion sont implémentés, inspectés sur une grille commune de 20 cm et
 testés dans un premier diagnostic GPU. Cela ne valide ni la détection ni le
 temps réel de la chaîne complète. Commandes et limites dans le

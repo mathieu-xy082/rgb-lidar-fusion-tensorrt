@@ -2,14 +2,15 @@
 
 Updated: 2026-11-05.
 
-Base: LiDAR encoder prototype through `2817ef3`. Current development branch:
-`ec/lidar-bev-encoder`.
+Base: LiDAR encoder prototype through `2817ef3`. Implementation branch:
+`ec/lidar-bev-encoder`, integrated into main in release 1.3.0.
 
 Status: prototype increment closed on 2026-11-05. Four-frame memorization,
 the 410/102 CUDA pilot and qualitative validation review are complete. Retain
 epoch 9 (`best.pt`) by minimum validation loss, not epoch 20 (`latest.pt`).
 The training/validation chain is validated, not production detection quality.
 This head remains optional, not a requirement of the fused architecture.
+Next: [BEV fusion backbone](bev-fusion-backbone.md).
 
 References:
 

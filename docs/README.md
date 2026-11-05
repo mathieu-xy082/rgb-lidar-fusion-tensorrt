@@ -16,8 +16,9 @@ Pour comprendre le projet dans son état actuel :
 4. approfondir le
    [backbone camera-depth](bev-cam-depth-backbone.md), premier sous-système de
    cette architecture ;
-5. lire le [design de l'encodeur LiDAR BEV](bev-lidar-encoder.md) pour le
-   prochain chantier et ses choix encore à valider ;
+5. lire le [design de l'encodeur LiDAR BEV](bev-lidar-encoder.md), intégré dans
+   main depuis la release 1.3.0, puis le
+   [contrat du chantier de fusion BEV](workstreams/bev-fusion-backbone.md#fusion-contract) ;
 6. suivre l'[onboarding pratique](onboarding/README.md) pour exécuter le dépôt.
 
 ## Statuts
@@ -37,9 +38,10 @@ Pour comprendre le projet dans son état actuel :
 | [BEV camera-depth backbone](bev-cam-depth-backbone.md) | V1 et premier raccord BEV clôturés | Justification du holdout et [contrats techniques du lift](bev-cam-depth-backbone.md#prerequis-du-raccord-bev) |
 | [Camera-depth workstream](workstreams/camera-depth-backbone.md) | Prototype clôturé | Pilotes 512 frames, validation croisée, inspection de 000366, limites et historique GPU |
 | [Camera-depth BEV lift](workstreams/camera-depth-bev-lift.md) | Intégré dans main, release 1.2.0 | Raccord et backward testés ; trois variantes BEV inspectées sur 000000 |
-| [BEV LiDAR encoder](bev-lidar-encoder.md) | Premier encodeur fonctionnel, diagnostic de mémorisation validé | Contrats NumPy/Torch, contexte, inspection conjointe 20 cm et diagnostic GPU borné |
-| [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | Étapes 1 à 4 initialement validées ; revue développeur à faire | Résultats CPU/GPU, seuil LiDAR 2 Gio et limites avant fusion/détection |
-| [Diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) | Incrément prototype clôturé : pilote 410/102, 20 epochs CUDA | Best epoch 9, revue TP/FN/FP et limites ; chaîne train/validation validée, pas un détecteur de production |
+| [BEV LiDAR encoder](bev-lidar-encoder.md) | Intégré dans main, release 1.3.0 | Contrats NumPy/Torch, contexte, inspection conjointe 20 cm et diagnostic GPU borné |
+| [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | Prototype intégré dans main, release 1.3.0 | Résultats CPU/GPU, seuil LiDAR 2 Gio et limites avant fusion/détection |
+| [Diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) | Prototype intégré dans main, release 1.3.0 | Pilote 410/102, 20 epochs CUDA, best epoch 9 et revue TP/FN/FP ; pas un détecteur de production |
+| [BEV fusion backbone](workstreams/bev-fusion-backbone.md) | Contrat défini ; implémentation à venir | Grille commune, features/supports, fusion 66 vers 32 canaux et validation par incréments |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 
 ## Guides techniques

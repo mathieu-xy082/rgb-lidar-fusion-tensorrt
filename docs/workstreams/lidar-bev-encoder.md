@@ -4,9 +4,10 @@ Branch: `ec/lidar-bev-encoder`
 
 Parent branch: `main` (camera-depth BEV lift / release 1.2.0).
 
-Updated: 2026-11-03.
+Updated: 2026-11-05.
 
-Status: scopes 1 to 4 implemented and initially validated: raw XYZI grouping, masked
+Status: prototype integrated into main in release 1.3.0. Scopes 1 to 4
+implemented and initially validated: raw XYZI grouping, masked
 PFN, stride-1 scatter, and residual dilated pre-fusion context, preserving
 measurement evidence. A small multi-resolution reference was compared on CPU.
 Joint camera/LiDAR inspection at 20 cm and a bounded LiDAR-only GPU diagnostic
@@ -16,6 +17,7 @@ No fusion or full 3D detector is implemented. The subsequent optional
 [center diagnostic](lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure)
 now records trained weights and a completed 410/102 pilot; the encoder-only
 experiments below remain historical random-weight measurements.
+The next workstream is the [shared BEV fusion backbone](bev-fusion-backbone.md).
 
 References:
 

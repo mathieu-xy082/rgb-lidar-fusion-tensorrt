@@ -1,0 +1,295 @@
+# Workstream - BEV fusion backbone
+
+Branch: `ec/bev-fusion-backbone`
+
+Parent branch: `main` after release 1.3.0.
+
+Updated: 2026-11-05.
+
+Status: increment 1 is documented. Fusion modules, the shared backbone,
+multimodal training and its notebook are **not implemented yet**. Existing
+camera and LiDAR encoders/checkpoints remain unchanged.
+
+References:
+
+- [target architecture](../bev-model-roadmap.md);
+- [camera lift and geometry](camera-depth-bev-lift.md);
+- [LiDAR encoder design](../bev-lidar-encoder.md);
+- [closed LiDAR center pilot](lidar-center-diagnostic.md#6-pilot-results-and-prototype-closure);
+- [project milestones](../milestones.md).
+
+## Scope
+
+1. Formalize the aligned BEV inputs, support/evidence and output contract.
+2. Implement feature fusion independently of both encoders and detection.
+3. Add a lightweight shared multi-scale BEV backbone.
+4. Assemble the multimodal model with explicit preprocessing/checkpoint policies.
+5. Inspect representations and validate four-frame memorization in a notebook.
+6. Run a disjoint 512-frame pilot and compare against a matched LiDAR-only baseline.
+
+The optional Car-center/XY-offset head supplies an existing diagnostic loss;
+it is not the final 3D detector. Size, height, yaw, velocity, additional classes,
+auxiliary YOLO supervision, temporal fusion, ONNX/TensorRT export and a
+real-time deployment claim stay outside this increment.
+
+## Fusion contract
+
+This section specifies the first implementation, not an API already available
+in Python. The current `CameraBEVFeatures`, `LidarBEVFeatures`,
+`BEVGridConfig` and encoder APIs remain the integration points.
+
+### Geometry and sample identity
+
+Both branches must represent the **same frame**, in the same batch order,
+Velodyne frame and metric grid. KITTI axes are x forward, y left, z up;
+this is not an implicit ROS base_link, world or gravity-aligned frame.
+
+The initial grid is:
+
+```text
+x_range_m = [0, 50)
+y_range_m = [-25, 25)
+z_range_m = [-3, 3)
+resolution_m = 0.20
+(Hbev, Wbev) = (250, 250)
+```
+
+Rows increase along x, columns along y. Cell `(row, col)` has center:
+
+```text
+x = x_min + (row + 0.5) * resolution
+y = y_min + (col + 0.5) * resolution
+```
+
+Preserve half-open bounds, height filtering relative to the LiDAR origin and
+the existing floating-point border guards. The camera lift must be recomputed
+on this grid, not resized from a previous 0.5 m BEV image.
+
+Current BEV feature containers do not store their grid. The future fusion
+boundary must therefore receive explicit camera and LiDAR `BEVGridConfig`
+values and reject differences in XYZ bounds or resolution, even for equal
+tensor shapes. The assembly layer must associate them with the actual
+preprocessing and sample IDs; tensor shapes alone cannot prove calibration,
+frame identity or synchronization. No silent transpose, crop or interpolation.
+
+### Encoder inputs and lift policy
+
+The image-space contract stays `rgb[B,3,H,W]` plus
+`lidar_maps[B,8,H,W]`, concatenated into 11 channels by the camera backbone.
+The eight LiDAR channels remain ordered as:
+
+| Index | Content |
+| --- | --- |
+| 0 | Sparse camera-z depth divided by `max_depth_m` |
+| 1, 2, 3 | Sparse vehicle x, y, z divided by the same scale |
+| 4 | Sparse LiDAR intensity |
+| 5 | Sparse point-presence mask |
+| 6 | Splatted camera-z depth, with the same normalization |
+| 7 | Heuristic splat confidence |
+
+Splatting propagates **depth only**, with a local confidence score; XYZ,
+intensity and the original point mask remain sparse. It does not guarantee
+depth at every pixel. The scale is explicit and must match the camera
+checkpoint, currently 80 m in the pilots; it is not the BEV ROI extent.
+
+For the first assembled model, choose `source="splatted"` in
+`prepare_camera_depth_support` and `weight_by_splat_confidence=True` in
+`lift_camera_features_to_bev`. Start with `min_splat_confidence=0.0` (the
+existing policy still requires finite confidence strictly greater than zero),
+and `0 < camera_z <= max_depth_m`, followed by the common XYZ grid filter.
+Record these settings in the future run/checkpoint configuration. Full resized
+P2 and `T_vehicle_to_camera` remain explicit geometry inputs, not CNN channels.
+
+The LiDAR branch independently receives the same frame's raw XYZI cloud,
+without camera-FOV filtering, then its existing pillars/PFN/scatter/context.
+Its default cap stays 64 retained points per pillar and its feature width 32.
+The two feature paths share LiDAR information; they are not statistically
+independent sensors. Camera features currently learned depth, not explicit
+object semantics. A fusion benefit must be measured, not assumed.
+
+Dense predicted depth is a later alternative, not an automatic fallback.
+It requires an explicit support policy and does not inherit splat confidence
+as learned uncertainty. No held-out targets or annotations enter the lift.
+
+### BEV inputs and evidence
+
+For a non-empty batch, use `B >= 1` and a shared positive spatial shape:
+
+| Input | Shape / type | Meaning |
+| --- | --- | --- |
+| `camera_bev.features` | `[B,Ccam,Hbev,Wbev]`, float | Aggregated camera decoder features; default Ccam=32 |
+| `camera_bev.pixel_count` | `[B,1,Hbev,Wbev]`, int64 | Number of accepted image pixels per cell |
+| `camera_bev.weight_sum` | `[B,1,Hbev,Wbev]`, float | Sum of accepted splat weights in the selected policy |
+| `lidar_bev.features` | `[B,Clidar,Hbev,Wbev]`, float | Features **after** `LidarBEVContext`; default Clidar=32 |
+| `lidar_bev.point_count` | `[B,1,Hbev,Wbev]`, int64 | Raw accepted points **before** the per-pillar cap |
+
+The fusion boundary will validate matching batch/spatial sizes, explicit grid
+equality, configured channel widths, finite features, non-negative finite
+evidence and consistent camera count/mass support. All tensors must already
+share the module's device; features and floating evidence share its
+float32/float64 dtype. No implicit transfer or dtype conversion, except casting
+the derived boolean masks for concatenation. Start training with batch 1 FP32;
+float64 is for numerical tests, not the proposed GPU training configuration.
+
+Derive two distinct boolean maps:
+
+```text
+camera_support = camera_bev.pixel_count > 0
+lidar_observed_mask = lidar_bev.point_count > 0
+```
+
+Camera support describes accepted projected/splatted image contributions, not
+independent LiDAR measurements or a camera-FOV/free-space mask. `weight_sum` is
+an aggregation mass, not a calibrated BEV probability; many splatted pixels
+may originate from one raw return. LiDAR observation means direct raw support,
+not traversability, free space or object presence.
+
+An unsupported camera cell has zero lifted features. LiDAR context can remain
+non-zero in an unobserved cell: **do not multiply contextualized LiDAR features
+by `lidar_observed_mask`**. Both masks remain evidence even when downstream
+convolutions propagate features into other cells. Zero evidence never creates
+a negative training label by itself.
+
+Empty-support samples with a valid batch/grid are allowed; an entirely empty
+batch is rejected at this new boundary without changing the existing LiDAR
+encoder's empty-batch contract. Zero-valued branch bundles permit controlled
+absence tests, not a claim of trained sensor-failure robustness. No NaN/Inf is
+silently promoted to a valid feature, and neither input bundle is mutated.
+
+### Concatenation and output
+
+Keep a fixed concatenation order along the channel dimension:
+
+```text
+Fcat = concat(Fcamera, Flidar_context,
+              float(camera_support), float(lidar_observed_mask))
+
+default: [B, 32 + 32 + 1 + 1, Hbev, Wbev] = [B, 66, 250, 250]
+Ffusion = Conv1x1(Fcat)  # default 66 -> 32, stride 1, bias=False
+Fshared = SharedBEVBackbone(Ffusion)  # default [B, 32, 250, 250]
+```
+
+The first projection is linear, with no normalization, activation, attention,
+learned gate or confidence multiplier. It mixes channels **within each cell**;
+the shared backbone adds spatial context. Its output is a learned feature
+vector, not a set of class scores, heights or detections. Channel widths may
+be configured explicitly; defaults give the 66-to-32 contract above.
+
+The planned output bundles features with the unchanged grid, camera
+pixel counts/weight sums, LiDAR pre-cap counts and their separate derived
+support masks. Preserve evidence snapshots independently of the learned
+activation field; do not reduce both supports to one ambiguous "valid" flag
+or erase fused/context features outside measured cells. The camera's
+image-space `pixel_mask` can remain available for inspection but is not an
+extra BEV channel. No new public class/signature is introduced in increment 1.
+
+Gradients must reach both input feature maps and the trainable fusion/shared
+parameters. When encoders are unfrozen, they may reach camera decoder/encoder
+and PFN/context parameters. Existing floor/scatter placement does **not**
+provide coordinate gradients to train depth or calibration; with splatted
+depth and a feature-only objective, `depth_head` is not on the loss path.
+Counts and boolean evidence are not learned uncertainty or gradient targets.
+
+## Progress
+
+### 1. Scope: formalize the fusion contract
+
+- [x] Fix axes, half-open ROI, 20 cm grid, batch/sample alignment and grid checks.
+- [x] Preserve RGB/enriched inputs and select splatted, confidence-weighted lift.
+- [x] Distinguish camera support, LiDAR observations and contextual activations.
+- [x] Specify concatenation, 1x1 projection, output evidence and gradient limits.
+- [x] Define incremental validation, compatibility and non-goals below.
+- [x] Link this workstream from the README, documentation index and roadmap.
+
+Exit criterion: a reviewable contract consistent with existing interfaces,
+without model changes, checkpoint migration or a training run. Implementation
+and behavioral tests belong to the unchecked increments below.
+
+### 2. Scope: implement the fusion block
+
+- [ ] Add explicit grid-checked fusion and an output bundle preserving evidence.
+- [ ] Implement the ordered concatenation and configurable bias-free 1x1 projection.
+- [ ] Test channel order with controlled weights, no mutation, device/dtype and
+  malformed-grid rejection (including equal shapes with different metric bounds).
+- [ ] Test camera-only, LiDAR-only, zero-support cells/samples, batch separation,
+  and preservation of LiDAR context outside direct observations.
+- [ ] Test finite non-zero gradients to both feature branches and projection.
+
+Exit criterion: a separately testable fusion module; no encoder or detector needed.
+
+### 3. Scope: implement shared spatial context
+
+- [ ] Specify a small three-scale residual backbone; widths 32/64/96 are a
+  starting candidate, not a finalized or benchmarked architecture.
+- [ ] Define down/up sampling, cell-center alignment, normalization and padding
+  before implementation; restoring tensor shape alone does not prove alignment.
+- [ ] Preserve stride-1 output on odd/non-square grids; inspect controlled
+  impulse/gradient support and account for ROI borders without wraparound.
+- [ ] Preserve evidence and test forward/backward, resource use and a wider
+  theoretical context than the existing 19-cell LiDAR block.
+
+Exit criterion: aligned shared features with tested spatial dependencies, not
+a claim that larger receptive fields automatically improve object detection.
+
+### 4. Scope: assemble the multimodal model
+
+- [ ] Compose existing camera features/lift and LiDAR encoding with the new modules.
+- [ ] Preserve old standalone state dictionaries; explicitly load camera and
+  PFN/context weights without requiring the old auxiliary head.
+- [ ] Audit checkpoint provenance, preprocessing, sample IDs and train/validation
+  membership for **both** encoders before reusing pretrained weights.
+- [ ] Add the existing center head/loss/decoder as a diagnostic consumer, keeping
+  KITTI labels and supervision masks out of feature construction.
+- [ ] Define a new multimodal checkpoint kind, configuration, resume/optimizer
+  policy and a synthetic end-to-end backward test without changing old runners.
+
+Exit criterion: RGB + enriched maps + calibration + raw cloud -> shared BEV ->
+diagnostic centers, with explicit evidence and reproducible weight loading.
+
+### 5. Scope: inspect and memorize four frames
+
+- [ ] Add a notebook with training opt-in, CPU inspection and child-process
+  GPU training/cleanup, reusing the existing notebook safety pattern.
+- [ ] Inspect camera/LiDAR support, separate feature maps, fused features and targets.
+- [ ] Freeze both encoders initially (`eval()` plus disabled parameter gradients,
+  including fixed PFN BatchNorm statistics); train fusion/backbone/diagnostic head.
+- [ ] Validate four-frame memorization, finite metrics and peak GPU memory at
+  batch 1; do not lower existing camera/GPU guards to make a run start.
+- [ ] If needed, change the training schedule explicitly and record it rather
+  than silently unfreezing encoders; no automatic retry after a CUDA failure.
+
+Exit criterion: an inspectable small optimization run and a measured resource
+budget, not validation quality. Discard these fitted weights before the pilot.
+
+### 6. Scope: disjoint pilot and comparison
+
+- [ ] Reuse the saved 410/102 frame IDs; validate dataset/checkpoint hashes and
+  ensure no supervised or depth pretraining used the pilot validation frames.
+- [ ] Use complete available inputs for the center diagnostic by default; depth
+  holdout is not required by this loss. Keep any corruption experiment explicit.
+- [ ] Compare matched LiDAR-only versus fused runs with the same shared-backbone
+  and head design, initial shared/head weights, split, schedule and evaluation.
+  Zero the camera feature/support block for the baseline, not the raw LiDAR.
+- [ ] Report the baseline separately from the older LiDAR-only pilot, whose
+  architecture has no shared backbone; it does not isolate fusion's contribution.
+- [ ] Reuse Car annotations, ignored-domain policy, score/top-k and XY matching;
+  report losses, TP/FP/FN, precision/recall and distance over matched centers only.
+- [ ] Save latest/best, inspect validation successes and failures, record GPU
+  memory/timing scope and optionally evaluate a gradual encoder-unfreezing stage.
+
+Exit criterion: a reproducible train/validation workflow and an honest
+comparison, including a neutral/negative result if fusion does not help. The
+random frame split is not a scene-independent test set; selected validation
+scores are not unbiased test results or full 3D AP. If actual LiDAR returns are
+removed in a later corruption test, remove them **before both** pillar building
+and image projection/splatting to avoid leaking the same returns through the
+other branch. A deliberate branch-only ablation is a different experiment.
+
+## Validation record
+
+2026-11-05, increment 1: existing feature containers, geometry/support policy,
+encoder composition and diagnostic APIs were read to establish this contract.
+No fusion implementation, training, GPU execution or new model-quality result
+is claimed. Documentary validation: 95 links/anchors checked across the nine
+changed Markdown files; regression suite: 633 passed, one CUDA-only test skipped,
+no exclusions. Implementation evidence will be added increment by increment.

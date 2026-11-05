@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-11-03.
+Mise à jour : 2026-11-05.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -111,21 +111,27 @@ Inspection reproductible : `scripts/inspect_camera_bev.py`. Voir le
 Architecture de référence :
 [bev-model-roadmap.md](bev-model-roadmap.md).
 
-## Prochaines étapes
+## Bilan LiDAR v1.3.0
 
-### Chantier en cours : encodeur LiDAR BEV
+La branche `ec/lidar-bev-encoder` est intégrée dans main et publiée dans la
+release 1.3.0. Les contrôles ci-dessous retracent ses incréments successifs :
+les mesures à poids aléatoires précèdent le pilote supervisé, sans le remplacer.
+
+### Encodeur LiDAR BEV
 
 Le [design LiDAR](bev-lidar-encoder.md) retient des piliers de 20 cm et un
-contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra sera recalculé
-sur la même grille ; pour la ROI initiale proposée, elle passe de 100 x 100
-à 250 x 250 cellules. Le PFN, le scatter et le premier bloc de contexte dilaté
-sont implémentés et testés sur CPU, sans détection apprise à ce stade.
+contexte pré-fusion visé d'environ 3,8 x 3,8 m. Le lift caméra est recalculé
+sur la même grille pour l'inspection conjointe : 250 x 250 cellules,
+contre 100 x 100 dans les anciens artefacts à 0,50 m. Le PFN, le scatter et le
+premier bloc de contexte dilaté sont implémentés et testés sur CPU.
+Les premiers contrôles ci-dessous
+n'utilisaient pas encore de supervision objet.
 
 La construction déterministe des piliers est implémentée sans réseau neuronal :
 les compteurs avant sélection, masques, indices source et features des points
 retenus sont explicites. Validation du 2026-11-03 : 415 tests réussis et un test
-CUDA ignoré, plus un contrôle CPU de la frame KITTI `000000`. Aucun entraînement
-LiDAR ni nouveau checkpoint n'a été produit.
+CUDA ignoré, plus un contrôle CPU de la frame KITTI `000000`. Ce contrôle
+initial n'avait produit ni entraînement LiDAR ni nouveau checkpoint.
 
 Le PFN à 32 canaux et le scatter sont maintenant testés : 472 tests réussis,
 un test CUDA ignoré. Padding exclu de BatchNorm/max, politique explicite pour
@@ -185,18 +191,35 @@ sans revendication de détecteur final. Prochaine action : revenir au raccord
 caméra/LiDAR BEV. Optimiser davantage cette head reste facultatif.
 Suivi : [diagnostic centre LiDAR](workstreams/lidar-center-diagnostic.md).
 
+## Prochaines étapes
+
+### Chantier en cours : fusion et backbone BEV commun
+
+Le [workstream de fusion](workstreams/bev-fusion-backbone.md) part de la release
+1.3.0, sur `ec/bev-fusion-backbone`. Le premier incrément documentaire est
+terminé : même grille de 20 cm et mêmes frames, features caméra/LiDAR à
+32 canaux, deux masques de support distincts, projection 1x1 de 66 vers 32.
+Le lift initial utilise la profondeur splattée pondérée ; compteurs et masse
+restent des métadonnées séparées. Aucun module de fusion n'est encore implémenté.
+
+Incréments suivants : bloc de fusion testé isolément, petit backbone commun
+multi-échelle, assemblage préservant les anciens checkpoints, notebook et
+mémorisation quatre frames, puis pilote 410/102 avec comparaison LiDAR seul.
+La head centre/offset existante sert de diagnostic, pas de head 3D finale.
+La provenance des checkpoints et l'absence de fuite train/validation devront
+être vérifiées avant tout préentraînement réutilisé.
+
 ### Ordre des incréments
 
-1. Relire et stabiliser le premier encodeur du point cloud de type PointPillars
-   vers `lidar_bev`, son contexte spatial et ses diagnostics.
-2. Fusionner `camera_bev` et `lidar_bev` dans un backbone BEV commun.
-3. Ajouter des heads CenterPoint-like : centre, offset, hauteur, dimensions,
+1. Fusionner `camera_bev` et `lidar_bev`, ajouter le backbone BEV commun et
+   valider le raccord avec le diagnostic centre existant.
+2. Ajouter des heads CenterPoint-like complètes : centre, offset, hauteur, dimensions,
    orientation, classe et éventuellement vitesse.
-4. Évaluer une head YOLO-like auxiliaire sans en faire un prérequis bloquant de
+3. Évaluer une head YOLO-like auxiliaire sans en faire un prérequis bloquant de
    la détection 3D.
-5. Définir les losses multi-tâches, le parsing des annotations KITTI 3D et les
-   métriques de détection.
-6. Exporter le modèle entraîné vers ONNX puis TensorRT et mesurer latence,
+4. Étendre les cibles et le parsing KITTI existants, définir les losses
+   multi-tâches et les métriques de détection 3D.
+5. Exporter le modèle entraîné vers ONNX puis TensorRT et mesurer latence,
    mémoire et précision.
 
 ## Hors périmètre immédiat

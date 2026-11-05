@@ -5,6 +5,14 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- Document the first shared BEV fusion contract and six implementation
+  increments: aligned 20 cm grids, camera/LiDAR feature and evidence policies,
+  ordered 66-to-32 fusion, checkpoint/split safeguards and diagnostic validation.
+  Link the new workstream and mark the LiDAR prototype integrated in 1.3.0;
+  fusion code and multimodal training are not implemented yet.
+
 ### Fixed
 
 - Install PDM 2.29.4 with its locked dependency set in both CI jobs, avoiding

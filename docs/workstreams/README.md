@@ -6,27 +6,26 @@ devenir une source de vérité générale.
 
 ## En cours
 
-- [LiDAR BEV encoder](lidar-bev-encoder.md) : construction des piliers de 20 cm
-  et PFN/scatter/contexte dilaté implémentés et testés sur CPU, avec masques,
-  compteurs, backward et champ réceptif de 19 cellules vérifié. Une référence
-  multi-résolution est comparée sur CPU. Inspection conjointe 20 cm et premier
-  diagnostic GPU borné terminés ; revue visuelle développeur, plusieurs scènes
-  et benchmarking de déploiement restent à faire. Les choix durables
-  et les variantes proposées sont distingués dans le [design](../bev-lidar-encoder.md).
+- [BEV fusion backbone](bev-fusion-backbone.md) : branche
+  `ec/bev-fusion-backbone`, après la release 1.3.0. Premier incrément
+  documentaire : grille commune, features, supports, concaténation et sortie
+  définis. Fusion, backbone commun, assemblage et entraînement restent à
+  implémenter ; la head centre existante servira de diagnostic facultatif.
 
-Ce chantier précède la fusion et les heads 3D. Voir les
+Ce chantier raccorde les deux branches avant les heads 3D finales. Voir les
 [milestones](../milestones.md).
 
-## Clôturés - sur la branche LiDAR
+## Clôturés - intégrés dans main
 
+- [LiDAR BEV encoder](lidar-bev-encoder.md) : piliers de 20 cm,
+  PFN/scatter/contexte dilaté, inspection conjointe et diagnostic GPU borné ;
+  intégré dans main pour la release 1.3.0. Les mesures initiales restent
+  historiques ; le temps réel et le benchmarking de déploiement ne sont pas validés.
 - [Diagnostic LiDAR centre facultatif](lidar-center-diagnostic.md) : inspection
   `04`, mémorisation quatre frames avec `05`, pilote disjoint 410/102 avec `06`
   terminé sur CUDA à 20 epochs. Incrément prototype clôturé après revue des
   courbes et de cas TP/FN/FP ; retenir l'epoch 9 selon la loss de validation.
-  Cette head ne bloque pas la future fusion BEV ; intégration dans main à venir.
-
-## Clôturés - intégrés dans main
-
+  Cette head ne bloque pas la fusion BEV ; intégrée dans main pour la release 1.3.0.
 - [Camera-depth BEV lift](camera-depth-bev-lift.md) : accès aux features
   implémenté sans modification du contrat de profondeur ni des checkpoints ;
   géométrie métrique, sélection du support, raccord à la grille BEV et backward

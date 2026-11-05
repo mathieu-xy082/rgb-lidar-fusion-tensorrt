@@ -12,6 +12,19 @@ This repository keeps the default environment deliberately small so geometry, pr
 
 The dataset layer remains NumPy-first. PyTorch conversion happens through the model/training adapter when the `ml` group is installed.
 
+### CI tooling
+
+Both CI jobs install `pdm[locked]==2.29.4`, then check dependency consistency
+and import PDM's HTTP/cache client before running project commands. The
+`locked` extra pins PDM's own dependency set, including `hishel==1.4.0`;
+installing only `pdm==2.29.4` can select incompatible Hishel 2.x and fail with
+`AttributeError: module 'hishel' has no attribute 'SyncSqliteStorage'`.
+
+This tooling environment is separate from the project's `.venv` and
+`pdm.lock`. Fixing it does not require changing the model dependencies,
+regenerating the project lockfile, or clearing the project cache. The
+older-lockfile warning is not the cause of this import failure.
+
 ### `dev` group
 
 - `pytest` — unit and smoke validation.

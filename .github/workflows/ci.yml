@@ -43,7 +43,10 @@ jobs:
 
       - name: Install PDM
         run: |
-          python -m pip install --upgrade pip pdm==2.29.4
+          # Freeze PDM's own dependencies too; hishel 2.x breaks its cache API.
+          python -m pip install --upgrade pip "pdm[locked]==2.29.4"
+          python -m pip check
+          python -c "from pdm.models.session import PDMPyPIClient"
           pdm --version
 
       - name: Check lockfile
@@ -73,7 +76,10 @@ jobs:
 
       - name: Install PDM
         run: |
-          python -m pip install --upgrade pip pdm==2.29.4
+          # Freeze PDM's own dependencies too; hishel 2.x breaks its cache API.
+          python -m pip install --upgrade pip "pdm[locked]==2.29.4"
+          python -m pip check
+          python -c "from pdm.models.session import PDMPyPIClient"
           pdm --version
 
       - name: Install project dependencies

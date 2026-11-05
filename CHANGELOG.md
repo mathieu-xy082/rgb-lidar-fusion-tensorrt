@@ -4,6 +4,14 @@ All notable changes to `rgb-lidar-fusion-tensorrt` will be documented in this fi
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+
+- Install PDM 2.29.4 with its locked dependency set in both CI jobs, avoiding
+  the incompatible Hishel 2.x cache API. Check tooling dependencies and import
+  the HTTP/cache client before installing project dependencies; no project
+  dependency or lockfile changes are required.
+
 ## [1.3.0] - 2026-11-05 - Merge branch 'ec/lidar-bev-encoder' into main
 ### Added
 

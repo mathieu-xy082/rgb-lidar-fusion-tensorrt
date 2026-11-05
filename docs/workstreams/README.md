@@ -7,10 +7,11 @@ devenir une source de vérité générale.
 ## En cours
 
 - [BEV fusion backbone](bev-fusion-backbone.md) : branche
-  `ec/bev-fusion-backbone`, après la release 1.3.0. Premier incrément
-  documentaire : grille commune, features, supports, concaténation et sortie
-  définis. Fusion, backbone commun, assemblage et entraînement restent à
-  implémenter ; la head centre existante servira de diagnostic facultatif.
+  `ec/bev-fusion-backbone`, après la release 1.3.0. Contrat défini et fusion
+  cellule par cellule implémentée/testée sur CPU : concaténation des features
+  et supports, projection 1x1, compteurs préservés et backward.
+  Backbone spatial commun, assemblage et entraînement restent à implémenter ;
+  la head centre existante servira de diagnostic facultatif.
 
 Ce chantier raccorde les deux branches avant les heads 3D finales. Voir les
 [milestones](../milestones.md).

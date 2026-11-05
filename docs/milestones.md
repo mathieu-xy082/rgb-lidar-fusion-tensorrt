@@ -29,6 +29,7 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Premier contexte LiDAR BEV | Deux blocs résiduels dilatés, support 19x19 vérifié, grille/mesures conservées ; comparaison multi-résolution CPU |
 | Inspection conjointe et diagnostic LiDAR | Caméra/LiDAR sur grille 20 cm, couverture hors FOV préservée ; premier forward/backward GPU batch 1 et pic mémoire mesurés |
 | Diagnostic centre LiDAR | Incrément prototype clôturé : mémorisation quatre frames, pilote 410/102 de 20 epochs CUDA, best epoch 9 et revue TP/FN/FP |
+| Premier bloc de fusion BEV | Grilles explicites, concaténation features/supports, projection 1x1, compteurs conservés et backward CPU ; sans backbone spatial commun ni assemblage multimodal |
 
 ## Bilan camera-depth v1
 
@@ -200,10 +201,12 @@ Le [workstream de fusion](workstreams/bev-fusion-backbone.md) part de la release
 terminé : même grille de 20 cm et mêmes frames, features caméra/LiDAR à
 32 canaux, deux masques de support distincts, projection 1x1 de 66 vers 32.
 Le lift initial utilise la profondeur splattée pondérée ; compteurs et masse
-restent des métadonnées séparées. Aucun module de fusion n'est encore implémenté.
+restent des métadonnées séparées. Le bloc de fusion cellule par cellule est
+maintenant implémenté : `BEVFeatureFusion` et sa sortie `FusedBEVFeatures`, avec
+81 tests CPU. Les deux encodeurs ne sont pas encore assemblés en modèle multimodal.
 
-Incréments suivants : bloc de fusion testé isolément, petit backbone commun
-multi-échelle, assemblage préservant les anciens checkpoints, notebook et
+Incréments suivants : petit backbone commun multi-échelle, assemblage
+préservant les anciens checkpoints, notebook et
 mémorisation quatre frames, puis pilote 410/102 avec comparaison LiDAR seul.
 La head centre/offset existante sert de diagnostic, pas de head 3D finale.
 La provenance des checkpoints et l'absence de fuite train/validation devront

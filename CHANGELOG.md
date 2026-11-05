@@ -7,11 +7,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Add cell-local `BEVFeatureFusion`: explicit metric-grid checks, ordered
+  camera/contextual-LiDAR/support concatenation and a configurable bias-free
+  1x1 projection (66 to 32 by default). `FusedBEVFeatures` preserves separate
+  count/mass snapshots and support masks; 81 CPU tests cover contracts,
+  branch-absence controls and gradients, including existing lift/PFN/context.
+  No shared spatial backbone, assembled multimodal model or new training yet.
 - Document the first shared BEV fusion contract and six implementation
   increments: aligned 20 cm grids, camera/LiDAR feature and evidence policies,
   ordered 66-to-32 fusion, checkpoint/split safeguards and diagnostic validation.
   Link the new workstream and mark the LiDAR prototype integrated in 1.3.0;
-  fusion code and multimodal training are not implemented yet.
+  the contract-only increment preceded fusion code; multimodal training remains planned.
 
 ### Fixed
 

@@ -6,9 +6,10 @@ Parent branch: `main` after release 1.3.0.
 
 Updated: 2026-11-05.
 
-Status: increment 1 is documented. Fusion modules, the shared backbone,
-multimodal training and its notebook are **not implemented yet**. Existing
-camera and LiDAR encoders/checkpoints remain unchanged.
+Status: increments 1 and 2 are complete: the contract is documented and the
+cell-local feature fusion is implemented and CPU-tested. The shared spatial
+backbone, multimodal model/runner and its notebook are **not implemented yet**.
+Existing camera and LiDAR encoders/checkpoints remain unchanged.
 
 References:
 
@@ -34,8 +35,9 @@ real-time deployment claim stay outside this increment.
 
 ## Fusion contract
 
-This section specifies the first implementation, not an API already available
-in Python. The current `CameraBEVFeatures`, `LidarBEVFeatures`,
+This section specifies the first implementation. `BEVFeatureFusion` now
+implements the cell-local part; the shared spatial backbone and encoder
+assembly remain planned. Existing `CameraBEVFeatures`, `LidarBEVFeatures`,
 `BEVGridConfig` and encoder APIs remain the integration points.
 
 ### Geometry and sample identity
@@ -65,9 +67,9 @@ Preserve half-open bounds, height filtering relative to the LiDAR origin and
 the existing floating-point border guards. The camera lift must be recomputed
 on this grid, not resized from a previous 0.5 m BEV image.
 
-Current BEV feature containers do not store their grid. The future fusion
-boundary must therefore receive explicit camera and LiDAR `BEVGridConfig`
-values and reject differences in XYZ bounds or resolution, even for equal
+Existing camera/LiDAR BEV feature containers do not store their grid. The fusion
+boundary therefore receives explicit camera and LiDAR `BEVGridConfig`
+values and rejects differences in XYZ bounds or resolution, even for equal
 tensor shapes. The assembly layer must associate them with the actual
 preprocessing and sample IDs; tensor shapes alone cannot prove calibration,
 frame identity or synchronization. No silent transpose, crop or interpolation.
@@ -123,7 +125,7 @@ For a non-empty batch, use `B >= 1` and a shared positive spatial shape:
 | `lidar_bev.features` | `[B,Clidar,Hbev,Wbev]`, float | Features **after** `LidarBEVContext`; default Clidar=32 |
 | `lidar_bev.point_count` | `[B,1,Hbev,Wbev]`, int64 | Raw accepted points **before** the per-pillar cap |
 
-The fusion boundary will validate matching batch/spatial sizes, explicit grid
+The fusion boundary validates matching batch/spatial sizes, explicit grid
 equality, configured channel widths, finite features, non-negative finite
 evidence and consistent camera count/mass support. All tensors must already
 share the module's device; features and floating evidence share its
@@ -175,13 +177,14 @@ the shared backbone adds spatial context. Its output is a learned feature
 vector, not a set of class scores, heights or detections. Channel widths may
 be configured explicitly; defaults give the 66-to-32 contract above.
 
-The planned output bundles features with the unchanged grid, camera
-pixel counts/weight sums, LiDAR pre-cap counts and their separate derived
-support masks. Preserve evidence snapshots independently of the learned
+The implemented `FusedBEVFeatures` output bundles features with the unchanged
+grid, camera pixel counts/weight sums, LiDAR pre-cap counts and their separate
+derived support masks. Preserve evidence snapshots independently of the learned
 activation field; do not reduce both supports to one ambiguous "valid" flag
 or erase fused/context features outside measured cells. The camera's
 image-space `pixel_mask` can remain available for inspection but is not an
-extra BEV channel. No new public class/signature is introduced in increment 1.
+extra BEV channel. These classes were added in increment 2; increment 1 was
+documentary only.
 
 Gradients must reach both input feature maps and the trainable fusion/shared
 parameters. When encoders are unfrozen, they may reach camera decoder/encoder
@@ -203,19 +206,53 @@ Counts and boolean evidence are not learned uncertainty or gradient targets.
 
 Exit criterion: a reviewable contract consistent with existing interfaces,
 without model changes, checkpoint migration or a training run. Implementation
-and behavioral tests belong to the unchecked increments below.
+and behavioral tests are recorded with the corresponding increments below.
 
 ### 2. Scope: implement the fusion block
 
-- [ ] Add explicit grid-checked fusion and an output bundle preserving evidence.
-- [ ] Implement the ordered concatenation and configurable bias-free 1x1 projection.
-- [ ] Test channel order with controlled weights, no mutation, device/dtype and
+- [x] Add explicit grid-checked fusion and an output bundle preserving evidence.
+- [x] Implement the ordered concatenation and configurable bias-free 1x1 projection.
+- [x] Test channel order with controlled weights, no mutation, device/dtype and
   malformed-grid rejection (including equal shapes with different metric bounds).
-- [ ] Test camera-only, LiDAR-only, zero-support cells/samples, batch separation,
+- [x] Test camera-only, LiDAR-only, zero-support cells/samples, batch separation,
   and preservation of LiDAR context outside direct observations.
-- [ ] Test finite non-zero gradients to both feature branches and projection.
+- [x] Test finite non-zero gradients to both feature branches and projection.
 
 Exit criterion: a separately testable fusion module; no encoder or detector needed.
+
+Implemented in `rgb_lidar_fusion.bev_fusion`:
+
+```python
+from rgb_lidar_fusion.bev_fusion import BEVFeatureFusion
+
+fusion = BEVFeatureFusion()  # camera=32, LiDAR=32, output=32
+fused = fusion(
+    camera_bev,
+    lidar_context_bev,
+    camera_grid=camera_grid,
+    lidar_grid=lidar_grid,
+)
+# fused.features: [B, 32, Hbev, Wbev]
+# fused.camera_support / fused.lidar_observed_mask: bool [B, 1, Hbev, Wbev]
+```
+
+The only learned layer is `projection`, a bias-free 1x1 convolution with 2,112
+parameters at default widths. Count/mass maps are cloned into the output, while
+feature gradients are retained. Inconsistent camera count/mass support and
+non-zero camera features outside its support are rejected, not silently repaired.
+Tiny positive aggregation masses remain accepted; their magnitude is not an
+additional multiplier at fusion. LiDAR context is kept even where **both**
+support maps are false. The image-space camera `pixel_mask` is not consumed.
+
+CPU validation: 81 fusion tests cover the contract, signed linear outputs,
+odd/non-square/full-size grid shapes, count/mass snapshots, branch-absence
+controls, double-precision gradcheck and malformed inputs. A synthetic weighted
+lift plus the existing PFN/scatter/context connects to the new fusion with finite
+non-zero gradients to image features, point features and encoder/fusion weights.
+This is not the assembled multimodal model, an optimizer run or GPU validation.
+The full regression suite passed with 714 tests and one CUDA-only skip; 81
+links/anchors were checked across the seven Markdown files updated in this
+increment. Existing notebook execution state and checkpoint schemas are unchanged.
 
 ### 3. Scope: implement shared spatial context
 

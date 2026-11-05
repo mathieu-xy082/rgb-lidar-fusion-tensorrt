@@ -16,6 +16,29 @@ References:
 - [BEV fusion source-weight policy](bev-fusion-backbone.md#weight-provenance-and-checkpoint-policy);
 - [milestones](../milestones.md).
 
+## Resume note - 2026-11-05
+
+Developer decision: **do not reuse weights for fusion if doing so requires a
+legacy/unverified-provenance exception**. The API escape hatch documented below
+is not the chosen project workflow; do not enable `allow_legacy_camera=True`.
+
+When work resumes:
+
+1. Reintegrate this fix into `ec/bev-fusion-backbone` after checking branch state.
+2. Prepare a fresh camera-depth training run from random initialization, using
+   the corrected runner, a new output directory and the agreed common KITTI
+   train/validation membership. Record IDs, hashes and protocol from the start;
+   do not resume old camera weights or manufacture a retrospective manifest.
+3. Recheck the existing LiDAR checkpoint against that same dataset/split and
+   preprocessing. Reuse it only if the ordinary audit passes without exception;
+   otherwise rerun the required LiDAR training too.
+4. Use only accepted, traced encoder checkpoints for the upcoming fusion
+   runner/notebook and four-frame diagnostic. Keep old pilots as historical
+   artifacts, not as an exception-based fusion initialization.
+
+No training is started by this note. Run parameters, GPU preflight and execution
+will be reviewed together after resuming; no further action is required now.
+
 ## Problem and interpretation
 
 A seeded random frame split is a normal experimental baseline. The gap was

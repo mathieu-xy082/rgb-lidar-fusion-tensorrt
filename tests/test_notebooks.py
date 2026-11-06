@@ -63,6 +63,26 @@ def test_training_notebook_keeps_safe_defaults_and_gpu_cache_cleanup() -> None:
     }
     assert defaults == dict.fromkeys(flags, False)
 
+    memory_assignment = next(
+        node for node in ast.parse(cells["parameters"]).body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "MINIMUM_FREE_GPU_MEMORY_MIB"
+    )
+    assert ast.literal_eval(memory_assignment.value) == 2048
+
+    namespace = {"ROOT": Path("/project")}
+    output_assignment = next(
+        node for node in ast.parse(cells["parameters"]).body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "RUN_OUTPUT_DIR"
+    )
+    exec(compile(ast.Module(body=[output_assignment], type_ignores=[]), "parameters", "exec"), namespace)
+    assert namespace["RUN_OUTPUT_DIR"] == (
+        namespace["ROOT"] / "results/training/kitti_camera_depth_block_dropout_512_provenance"
+    )
+
     preflight_call = next(
         node for node in ast.walk(ast.parse(cells["gpu-preflight"]))
         if isinstance(node, ast.Call)

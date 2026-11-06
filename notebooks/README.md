@@ -48,7 +48,16 @@ high (for example after a traceback), restart the kernel and rerun setup before
 training. Never run the cleanup concurrently with training.
 
 In notebook `03`, the reviewed parameters select the 512-frame spatial-block pilot on CUDA with a
-batch size of 1. To continue an interrupted run, set `RESUME_EXISTING = True`;
+batch size of 1, five epochs and a new output directory:
+`results/training/kitti_camera_depth_block_dropout_512_provenance`.
+Its preflight requires at least 2048 MiB (2 GiB) of free GPU memory; passing
+this threshold does not guarantee that training will fit in memory.
+Keep `RESUME_EXISTING = False` for its first launch: the model starts from random
+weights and records IDs, hashes and protocol in `split.json` and `camera_depth_v2`
+checkpoints. Historical checkpoints without a manifest must not initialize this
+run or the upcoming fusion experiment. The opt-in holdout comparison still points
+to the two historical runs, not this new run.
+To continue this new run after an interruption, set `RESUME_EXISTING = True`;
 `EPOCHS` is the total target epoch count, including epochs already completed.
 Metrics and run metadata are persisted after every completed camera-depth epoch.
 
@@ -70,8 +79,10 @@ and writes the four metric rows to
 normalization, input mode, training settings, epoch, and step must match.
 Evaluation batch size can differ from training batch size.
 
-Sample prediction plots use the saved checkpoint configuration to reconstruct
-the validation split and holdout mode. Spatial regions appear in red on RGB.
+Sample prediction plots use the recorded validation indices and verify current
+data for manifest-backed checkpoints. Historical checkpoints reconstruct the
+split from configuration with an explicit unverified-provenance warning.
+The holdout mode comes from the saved configuration; spatial regions appear in red on RGB.
 
 ## LiDAR BEV Notebook
 

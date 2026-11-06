@@ -1,6 +1,6 @@
 # Workstream - Camera-depth data provenance
 
-Updated: 2026-11-05.
+Updated: 2026-11-06.
 
 Branch: `fix/camera-depth-provenance`, based on `ec/bev-fusion-backbone`
 at `7719e37`. Return this fix to the fusion branch before its training notebook;
@@ -38,6 +38,35 @@ When work resumes:
 
 No training is started by this note. Run parameters, GPU preflight and execution
 will be reviewed together after resuming; no further action is required now.
+
+## Restart preparation - 2026-11-06
+
+- [x] Fix merged into `ec/bev-fusion-backbone` at `0cb0393`.
+- [x] Compared the camera configuration's actual ordered 512 IDs and seeded
+  410/102 partition with the saved LiDAR split: source/train/validation IDs match.
+- [x] Checked all four input-file hashes per frame against the LiDAR manifest;
+  current local files match. The LiDAR `best.pt` embeds the same split (epoch 9).
+  This is a preliminary data check, not the full encoder warm-start audit.
+- [x] Prepared notebook `03` for a fresh enriched spatial-block run: 320x1024,
+  batch 1, five epochs, seed/split seed 13. New output directory:
+  `results/training/kitti_camera_depth_block_dropout_512_provenance` (absent at
+  preparation time). Training and resume remain disabled by default.
+- [x] At developer request, set notebook `03`'s free-memory preflight threshold
+  to 2048 MiB (2 GiB); the shared utility default is unchanged. This gate is not
+  a guarantee of sufficient memory throughout training.
+- [x] GPU preflight passed and the developer launched the fresh camera run.
+  Epoch 2 was recorded at step 820: validation MAE 2.488615 m, RMSE 4.848676 m,
+  identical to the historical spatial-block pilot at that epoch. Completion of
+  the five-epoch run is still pending; resume with the same directory and
+  `RESUME_EXISTING=True`, keeping `EPOCHS=5` as the total target.
+- [ ] Inspect its recorded manifest, validation metrics and predictions.
+- [ ] Run the complete ordinary encoder audit with the new camera checkpoint
+  and LiDAR `best.pt` before fusion initialization; retrain LiDAR if required.
+
+No training or GPU preflight was launched by the preparation itself; the
+developer subsequently started the run as recorded above. The checks
+describe local data at preparation time, not independent scenes or guaranteed
+future file contents. Historical checkpoints remain untouched.
 
 ## Problem and interpretation
 

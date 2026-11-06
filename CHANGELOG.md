@@ -35,6 +35,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Record ordered camera-depth IDs, train/validation membership, triplet SHA-256
+  and effective protocol in new atomic `camera_depth_v2` checkpoints/split.json.
+  Check resumes before device initialization and verify sample reads; use saved
+  membership in notebook analysis/comparison. Keep legacy checkpoints readable
+  but unverified, disallow verified resume and require an explicit exception
+  for BEV warm starts. Historical files/results are not retroactively certified.
+  Include `fix/**` pushes in CI so the dedicated correction branch is validated.
 - Install PDM 2.29.4 with its locked dependency set in both CI jobs, avoiding
   the incompatible Hishel 2.x cache API. Check tooling dependencies and import
   the HTTP/cache client before installing project dependencies; no project

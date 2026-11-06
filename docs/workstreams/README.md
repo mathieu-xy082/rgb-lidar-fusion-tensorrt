@@ -15,6 +15,11 @@ devenir une source de vérité générale.
   adaptateur CPU, head centre existante et checkpoints/audit distincts.
   Le runner, le notebook et les expériences d'entraînement restent à faire.
 
+- [Camera-depth data provenance](camera-depth-provenance.md) : correctif sur
+  `fix/camera-depth-provenance`, dérivée de la branche de fusion : manifeste IDs/empreintes/protocole,
+  reprise vérifiée et utilisation explicite des anciens poids non vérifiables.
+  Aucun ancien checkpoint réécrit ni nouvel entraînement KITTI lancé.
+
 Ce chantier raccorde les deux branches avant les heads 3D finales. Voir les
 [milestones](../milestones.md).
 

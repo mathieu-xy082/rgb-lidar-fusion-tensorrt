@@ -42,6 +42,7 @@ Pour comprendre le projet dans son état actuel :
 | [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | Prototype intégré dans main, release 1.3.0 | Résultats CPU/GPU, seuil LiDAR 2 Gio et limites avant fusion/détection |
 | [Diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) | Prototype intégré dans main, release 1.3.0 | Pilote 410/102, 20 epochs CUDA, best epoch 9 et revue TP/FN/FP ; pas un détecteur de production |
 | [BEV fusion backbone](workstreams/bev-fusion-backbone.md) | Diagnostic multimodal assemblé et testé sur CPU ; entraînement à venir | Fusion, pyramide 32/64/96, adaptateur CPU, audit des poids et checkpoints distincts |
+| [Camera-depth data provenance](workstreams/camera-depth-provenance.md) | Correctif sur `fix/camera-depth-provenance`, dérivée de la fusion | Manifestes des nouveaux runs/reprises ; provenance historique non certifiable et exception legacy explicite |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 
 ## Guides techniques

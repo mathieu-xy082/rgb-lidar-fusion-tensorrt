@@ -11,6 +11,9 @@ five-epoch random/block runs, cross-evaluation, and a qualitative held-out
 prediction review are complete. This does not establish reliable dense depth
 or production readiness. The first geometric BEV lift is also complete in its
 [dedicated workstream](camera-depth-bev-lift.md).
+A later [data-provenance follow-up](camera-depth-provenance.md) records IDs,
+file hashes and protocol for new runs and guards resume. Historical pilot
+checkpoints remain readable but do not acquire retrospective verification.
 
 Related documents:
 

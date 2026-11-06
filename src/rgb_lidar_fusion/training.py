@@ -13,6 +13,10 @@ import numpy as np
 
 from .baseline_model import BaselineFusionModel, LIDAR_CHANNELS_BY_MODE
 from .camera_depth_model import CameraDepthModel, masked_depth_loss
+from .camera_depth_manifest import (
+    CAMERA_DEPTH_CHECKPOINT_KIND, VerifiedCameraDepthDataset, build_camera_depth_manifest,
+    read_camera_depth_resume, write_camera_depth_manifest,
+)
 from .dataset import KittiObjectDepthDataset
 from .lidar_splatting import SplattingConfig
 from .model_batch import (
@@ -605,22 +609,25 @@ def save_checkpoint(
     epoch: int,
     step: int,
     config: dict[str, Any],
+    data_manifest: dict[str, Any] | None = None,
 ) -> None:
     """Save model/optimizer state outside Git-controlled source paths."""
 
     import torch
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "epoch": epoch,
-            "step": step,
-            "config": config,
-        },
-        path,
-    )
+    payload = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch": epoch,
+        "step": step,
+        "config": config,
+    }
+    if data_manifest is not None:
+        payload.update(kind=CAMERA_DEPTH_CHECKPOINT_KIND, data_manifest=data_manifest)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(payload, temporary)
+    temporary.replace(path)
 
 
 def load_checkpoint(*, path: Path, model, optimizer, device) -> tuple[int, int]:
@@ -812,9 +819,6 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
     validate_camera_depth_training_config(config)
     seed = int(config.get("seed", 0))
     requested_device = str(config.get("device", "auto"))
-    set_deterministic_seed(seed)
-    device = select_device(requested_device)
-    device_diagnostic = describe_device_selection(requested_device)
     epochs = int(config.get("epochs", 1))
     batch_size = int(config.get("batch_size", 2))
     learning_rate = float(config.get("learning_rate", 1e-3))
@@ -835,6 +839,11 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         str(config.get("output_dir", "results/training/kitti_camera_depth"))
     )
     checkpoint_path = output_dir / "checkpoints" / "latest.pt"
+    resume_from = config.get("resume_from")
+    if not resume_from and output_dir.exists() and any(output_dir.iterdir()):
+        raise ValueError("camera output_dir is not empty; choose a new directory or explicitly resume.")
+    if resume_from and Path(str(resume_from)).resolve() != checkpoint_path.resolve():
+        raise ValueError("camera resume_from must be this output directory's latest.pt.")
     splatting_config = SplattingConfig(
         radius_px=int(config.get("splat_radius_px", 2)),
         sigma_px=float(config.get("splat_sigma_px", 1.0)),
@@ -845,24 +854,46 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
         max_depth_m=max_depth_m,
         sample_limit=sample_count,
     )
-    train_indices, validation_indices = split_dataset_indices(
-        len(dataset),
-        validation_fraction=validation_fraction,
-        seed=split_seed,
-    )
+    protocol = {
+        "dataset": "kitti_camera_depth", "height": height, "width": width,
+        "max_depth_m": max_depth_m, "lidar_mode": lidar_mode, "seed": seed,
+        "batch_size": batch_size, "learning_rate": learning_rate, "smooth_l1_beta": beta,
+        "splat_radius_px": splatting_config.radius_px, "splat_sigma_px": splatting_config.sigma_px,
+        "splat_conflict_strategy": splatting_config.conflict_strategy,
+        "holdout_fraction": holdout_fraction, "holdout_options": holdout_options,
+        "split_seed": split_seed, "validation_fraction": validation_fraction,
+        "validation_holdout_seed": validation_holdout_seed,
+    }
+    resume_payload = None
+    if resume_from:
+        resume_payload = read_camera_depth_resume(
+            resume_from, dataset=dataset, protocol=protocol, epochs=epochs,
+        )
+        data_manifest = resume_payload["data_manifest"]
+        train_indices = data_manifest["train_indices"]
+        validation_indices = data_manifest["validation_indices"]
+    else:
+        train_indices, validation_indices = split_dataset_indices(
+            len(dataset), validation_fraction=validation_fraction, seed=split_seed,
+        )
+        data_manifest = build_camera_depth_manifest(
+            dataset, train_indices=train_indices, validation_indices=validation_indices, protocol=protocol,
+        )
+    write_camera_depth_manifest(output_dir / "split.json", data_manifest)
+    dataset = VerifiedCameraDepthDataset(dataset, data_manifest)
 
+    # All data/protocol checks precede seeding CUDA, selecting a device or allocating a model.
+    set_deterministic_seed(seed)
+    device = select_device(requested_device)
+    device_diagnostic = describe_device_selection(requested_device)
     model = CameraDepthModel(lidar_mode=lidar_mode).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     start_epoch = 0
     step = 0
-    resume_from = config.get("resume_from")
-    if resume_from:
-        start_epoch, step = load_checkpoint(
-            path=Path(str(resume_from)),
-            model=model,
-            optimizer=optimizer,
-            device=device,
-        )
+    if resume_payload is not None:
+        model.load_state_dict(resume_payload["model_state_dict"])
+        optimizer.load_state_dict(resume_payload["optimizer_state_dict"])
+        start_epoch, step = resume_payload["epoch"], resume_payload["step"]
 
     metrics: list[EpochMetrics] = []
     for epoch in range(start_epoch, epochs):
@@ -948,6 +979,7 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
             epoch=epoch + 1,
             step=step,
             config=config,
+            data_manifest=data_manifest,
         )
         # Persist each completed epoch before the next CUDA work can fail.
         write_metrics(
@@ -964,6 +996,10 @@ def run_kitti_camera_depth_training(config: dict[str, Any]) -> TrainingRunResult
             start_epoch=start_epoch,
             epochs_completed=epoch + 1,
             split_metadata={
+                "manifest_file": "split.json",
+                "source_ids": data_manifest["source_ids"],
+                "train_ids": data_manifest["train_ids"],
+                "validation_ids": data_manifest["validation_ids"],
                 "seed": split_seed,
                 "holdout_seed": validation_holdout_seed,
                 "validation_fraction": validation_fraction,

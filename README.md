@@ -41,6 +41,10 @@ valident le chemin complet ; aucun entraînement multimodal KITTI n'a encore
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
 
+Les nouveaux runs caméra enregistrent IDs, empreintes des données et protocole
+dans leurs checkpoints. La [politique de provenance](docs/workstreams/camera-depth-provenance.md)
+précise les contrôles de reprise et les limites des anciens poids.
+
 L'état détaillé et les critères de sortie sont suivis dans
 [docs/milestones.md](docs/milestones.md).
 

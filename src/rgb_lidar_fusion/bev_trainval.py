@@ -27,8 +27,9 @@ def _protocol(config):
     return {key: value for key, value in config.serialized().items() if key not in mutable}
 
 
-def _read_resume(path, *, config, variant, split):
-    model, payload = load_bev_fusion_checkpoint(path)
+def validate_bev_pilot_resume(payload, *, config, variant, split):
+    """Validate saved pilot semantics; shared by resume and CPU analysis."""
+
     metadata = payload.get("training_metadata", {})
     if metadata.get("task") != TASK or metadata.get("variant") != variant:
         raise ValueError("resume task/variant differs; overfit or other-variant checkpoints are not pilot resumes.")
@@ -65,6 +66,11 @@ def _read_resume(path, *, config, variant, split):
             or not isinstance(initialization.get("new_blocks_sha256"), str)
             or len(initialization["new_blocks_sha256"]) != 64):
         raise ValueError("pilot initialization record is missing or incompatible.")
+
+
+def _read_resume(path, *, config, variant, split):
+    model, payload = load_bev_fusion_checkpoint(path)
+    validate_bev_pilot_resume(payload, config=config, variant=variant, split=split)
     return model, payload
 
 

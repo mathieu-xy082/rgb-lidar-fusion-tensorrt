@@ -17,8 +17,8 @@ devenir une source de vérité générale.
   encodeurs gelés et lancement GPU explicite. Mémorisation CUDA validée :
   15 TP, aucun FP/FN ; pic alloué PyTorch 1512,6 MiB. Le pilote disjoint a
   maintenant son protocole, son audit d'initialisation appariée et son runner
-  streaming 410/102 avec latest/best et reprise. Notebook, runs réels et
-  comparaison restent à faire.
+  streaming 410/102 avec latest/best et reprise. Le notebook `08` et les
+  contrôles de comparaison sont disponibles ; runs réels et bilan restent à faire.
 
 - [Camera-depth data provenance](camera-depth-provenance.md) : correctif intégré
   dans la branche de fusion, nouveau run cinq epochs tracé et inspecté.

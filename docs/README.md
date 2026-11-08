@@ -41,7 +41,7 @@ Pour comprendre le projet dans son état actuel :
 | [BEV LiDAR encoder](bev-lidar-encoder.md) | Intégré dans main, release 1.3.0 | Contrats NumPy/Torch, contexte, inspection conjointe 20 cm et diagnostic GPU borné |
 | [LiDAR BEV workstream](workstreams/lidar-bev-encoder.md) | Prototype intégré dans main, release 1.3.0 | Résultats CPU/GPU, seuil LiDAR 2 Gio et limites avant fusion/détection |
 | [Diagnostic LiDAR centre](workstreams/lidar-center-diagnostic.md) | Prototype intégré dans main, release 1.3.0 | Pilote 410/102, 20 epochs CUDA, best epoch 9 et revue TP/FN/FP ; pas un détecteur de production |
-| [BEV fusion backbone](workstreams/bev-fusion-backbone.md) | Mémorisation CUDA validée ; protocole, initialisation appariée et runner 410/102 prêts | 15 TP sans FP/FN ; streaming, reprise et latest/best ; notebook et comparaison à venir |
+| [BEV fusion backbone](workstreams/bev-fusion-backbone.md) | Mémorisation CUDA validée ; runner et notebook 410/102 prêts | Streaming, reprise, latest/best et comparaison contrôlée ; runs réels et bilan à effectuer |
 | [Camera-depth data provenance](workstreams/camera-depth-provenance.md) | Correctif intégré, nouveau run cinq epochs vérifié et inspecté | Manifestes des nouveaux runs/reprises ; sources de fusion auditées sans exception legacy |
 | [Milestones](milestones.md) | Actuel | État vivant du projet et ordre des prochains incréments |
 

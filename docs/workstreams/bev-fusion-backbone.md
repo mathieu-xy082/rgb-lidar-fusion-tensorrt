@@ -12,7 +12,9 @@ implemented and CPU-tested. Increment 5 is closed: the 200-epoch CUDA
 memorization run finds all 15 centers, with frozen encoders and measured memory.
 Increment 6a prepares matched, fresh CPU starts on the canonical 410/102 split;
 6b adds the streaming pilot runner and per-epoch latest/best checkpoints.
-The pilot notebook, real 512-frame runs and comparison are **still pending**. Existing
+6c adds opt-in notebook `08`, CPU validation inspection and strict matched-run
+comparison tooling. Real 512-frame runs, their comparison and qualitative
+validation are **still pending**. Existing
 standalone encoder architectures/weight keys remain unchanged; the subsequent
 [camera provenance fix](camera-depth-provenance.md) strengthens its runner and analysis.
 
@@ -602,14 +604,16 @@ latency. These fitted fusion/shared/head weights must not initialize the pilot.
   ensure no supervised or depth pretraining used the pilot validation frames.
 - [x] Implement a streaming runner for each variant, with training-only updates,
   both-split evaluation, strict resume, progress and latest/best persistence.
+- [x] Add an opt-in pilot notebook, partial curves, validation-only inspection
+  and matched-comparison guards with PNG/JSON exports.
 - [x] Use complete available inputs for the center diagnostic by default; depth
   holdout is not required by this loss. Keep any corruption experiment explicit.
 - [ ] Compare matched LiDAR-only versus fused runs with the same shared-backbone
   and head design, initial shared/head weights, split, schedule and evaluation.
   Zero the camera feature/support block for the baseline, not the raw LiDAR.
-- [ ] Report the baseline separately from the older LiDAR-only pilot, whose
+- [x] Keep comparison tooling separate from the older LiDAR-only pilot, whose
   architecture has no shared backbone; it does not isolate fusion's contribution.
-- [ ] Reuse Car annotations, ignored-domain policy, score/top-k and XY matching;
+- [x] Reuse Car annotations, ignored-domain policy, score/top-k and XY matching;
   report losses, TP/FP/FN, precision/recall and distance over matched centers only.
 - [ ] Save latest/best, inspect validation successes and failures, record GPU
   memory/timing scope and optionally evaluate a gradual encoder-unfreezing stage.
@@ -719,9 +723,59 @@ Regression: **936 passed, one CUDA-only skip**, without test exclusions, in an
 exported validation copy containing these source changes and clean versioned
 notebooks. Developer execution state in notebooks `03` and `07` was untouched.
 
-Remaining increment: **6c**, opt-in notebook, matched comparison and validation
-inspection, then the actual two ten-epoch runs. Do not relaunch notebook `07`
+#### 6c. Notebook and controlled analysis
+
+[Notebook 08](../../notebooks/08_bev_fusion_training_analysis.ipynb) exposes
+one selected variant, ten total epochs and the common pilot config. Training,
+resume and final comparison are disabled by default. Setup/audit are CPU-only;
+CUDA is confined to an explicit child process with the existing guard. The
+notebook writes its resolved configuration to an analysis-side launch JSON
+and passes that file to the CLI, including notebook overrides. The child uses
+the current repository's `src`, streams a sibling training JSONL, and is
+terminated/killed and waited on after interruption. No automatic two-run GPU
+launch or silent resume occurs. Both GPU variants must run sequentially.
+
+`bev_pilot_analysis` uses authoritative latest/resume checkpoints for completed
+history and the embedded best snapshot, not potentially stale metrics sidecars.
+Resume and analysis share `validate_bev_pilot_resume`. Analysis verifies live
+dataset hashes by default, recorded evaluation domains, finite metrics/counts
+and ratio consistency; source encoder files need not remain present. An explicit
+offline-file-check option labels that limitation in numeric reports and does
+not relax source provenance or comparison compatibility. Validation inspection
+always verifies current files and chooses only a saved validation position.
+
+Curves cover train/validation loss, validation precision/recall, TP/FP/FN and
+mean matched XY error, with None distances represented as missing values.
+A single or partial run can be viewed. Two runs can be overlaid only with
+matching learning/preprocessing/evaluation protocol, split/bytes, source
+checkpoint hashes, initial new-block hashes and software/precision policy.
+Final comparison additionally requires both agreed budgets completed with the
+same optimizer-step count. It distinguishes final same-budget scores from
+each run's independently selected minimum-validation-loss checkpoint (including
+epoch 0). It never substitutes the older no-shared-backbone LiDAR experiment.
+
+The notebook exports `training_curves.png`, `comparison.json` and validation
+PNGs under `results/analysis/bev_fusion/kitti_bev_fusion_pilot_512/`. Prediction
+filenames and titles identify variant, best/latest choice, actual weight epoch
+and sample ID. In the LiDAR-only control, camera panels are intentionally empty.
+Compare successes, false positives and missed centers; matched-distance error
+alone is not meaningful when the sets of detected objects differ.
+
+Synthetic CPU tests exercise analysis refusal cases, real figure/PNG exports,
+both notebook audit paths, a real CPU training child with overridden settings,
+and interrupt/failure cleanup. No real pilot training or GPU computation was
+launched during notebook implementation. The actual two ten-epoch runs and
+their qualitative/quantitative comparison remain next; do not relaunch `07`
 as a substitute for the disjoint pilot.
+
+Validation: **959 passed, one CUDA-only skip**, without exclusions, on an
+exported copy with clean versioned notebooks. The real setup/parameters/audit
+cells also pass on local KITTI with 410/102 IDs and matching initial hashes,
+without training. Synthetic exported curves/validation PNGs render correctly.
+Developer execution state in notebooks `03` and `07` was not modified.
+After the separate headless-visualization CI fix, the exact prepared notebook
+commit passes **960 tests, one CUDA-only skip**, including the new optional
+Matplotlib regression; visualization tests execute with Matplotlib installed.
 
 Exit criterion: a reproducible train/validation workflow and an honest
 comparison, including a neutral/negative result if fusion does not help. The

@@ -40,7 +40,8 @@ valident le chemin complet. Le notebook `07` a validé la mémorisation CUDA de
 quatre frames du train : 15 centres retrouvés sans FP/FN, encodeurs gelés.
 Le pilote 410/102 dispose de sa configuration, d'un audit d'initialisation
 appariée et d'un runner par variante avec reprise et checkpoints latest/best.
-Son notebook, les runs réels et la comparaison LiDAR seul/fusion restent à faire.
+Le notebook `08` ajoute le lancement explicite, les courbes et les contrôles de
+comparaison. Les runs réels et leur analyse LiDAR seul/fusion restent à faire.
 Les heads 3D complètes restent à développer. Le
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
@@ -89,7 +90,9 @@ configuration de modèle est `configs/bev_fusion.json`. Le preset du diagnostic
 est `configs/training/kitti_bev_fusion_overfit.json` ; le
 [notebook 07](notebooks/07_bev_fusion_overfit.ipynb) permet l'inspection CPU puis
 un lancement explicite en sous-processus. Le pilote disjoint dispose du runner
-`scripts/train_bev_pilot.py` ; son notebook et ses expériences restent à faire.
+`scripts/train_bev_pilot.py` et du
+[notebook 08](notebooks/08_bev_fusion_training_analysis.ipynb) ; les expériences
+et leur comparaison restent à effectuer.
 
 ### Architecture cible
 

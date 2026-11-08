@@ -20,6 +20,9 @@ Notebooks disponibles, dans l'ordre recommandé :
 7. `07_bev_fusion_overfit.ipynb` — audited camera/LiDAR warm start, CPU inspection
    of supports/features and optional four-train-frame fusion memorization in a
    guarded CUDA subprocess. Encoders stay frozen; this is not validation quality.
+8. `08_bev_fusion_training_analysis.ipynb` — matched 410/102 LiDAR-only/fusion
+   pilot, opt-in one-variant child process, curves, guarded comparison and CPU
+   inspection of saved validation IDs, with PNG/JSON exports.
 
 Keep notebooks lightweight; move reusable code into `src/rgb_lidar_fusion/`.
 
@@ -64,11 +67,52 @@ memorization check, not generalization or camera benefit. The next pilot's
 protocol and fresh matched-start audit are in `bev_pilot` and
 `configs/training/kitti_bev_fusion_pilot.json`. The streaming runner is
 `scripts/train_bev_pilot.py`, with an explicit `--variant lidar_only` or
-`--variant fusion`; its training notebook is not yet available. The shared
+`--variant fusion`; notebook `08` now pilots these runs. The shared
 budget is 10 epochs per variant, with complete inputs and frozen encoders.
 Latest/best checkpoints are separate under each variant's directory; only
 latest can resume Adam. Do not extend `07` to learn the 512 frames or reuse
 its fitted weights. Do not launch both GPU variants concurrently.
+
+## Matched BEV Pilot Notebook
+
+Notebook `08` reads `configs/training/kitti_bev_fusion_pilot.json` and defaults
+to `VARIANT='lidar_only'`, `EPOCHS=10`, `DEVICE='cuda'`, with `RUN_TRAINING=False`,
+`RESUME_EXISTING=False` and `RUN_COMPARISON=False`. GPU work occurs only in the
+training child process. Audits, curves and validation inspection stay on CPU.
+
+1. Execute setup, parameters and audit. Expect 410 train / 102 validation,
+   overlap zero and identical fresh-block hashes. No training is started.
+2. Set `RUN_TRAINING=True`, rerun parameters, then the training cell. The child
+   receives the exact resolved configuration, saved outside the variant's output
+   directory. Follow phases/processed counts in the cell or the sibling JSONL.
+3. After completion, disable training before inspection. To resume an interrupted
+   variant, keep that variant/output root, enable `RESUME_EXISTING=True` and keep
+   `EPOCHS` as the total target. Only its `latest.pt` resumes Adam.
+4. Train `VARIANT='fusion'` separately with the same protocol/budget and
+   `RESUME_EXISTING=False` for its first launch. Never use `07`'s fitted weights.
+5. Set `RUN_TRAINING=False` and `RUN_COMPARISON=True` after both runs finish.
+   Curves can show partial runs, but the final comparison refuses incomplete or
+   incompatible budgets, source weights, initialization, split or evaluation.
+6. Change `VALIDATION_SAMPLE_POSITION` and `INSPECT_SELECTION` (`best`/`latest`)
+   to inspect saved validation IDs only. Best is selected by validation loss,
+   possibly at epoch 0; it is not necessarily the final epoch.
+
+Artifacts are ignored beneath
+`results/analysis/bev_fusion/kitti_bev_fusion_pilot_512/`: `training_curves.png`,
+`comparison.json`, effective launch configs, and validation PNGs named with
+variant, selection, actual weight epoch and sample ID. Training logs are:
+
+```bash
+tail -f results/training/kitti_bev_fusion_pilot_512_lidar_only.jsonl
+tail -f results/training/kitti_bev_fusion_pilot_512_fusion.jsonl
+```
+
+The notebook reads authoritative latest checkpoints, not potentially stale
+metrics sidecars. Comparison reports both equal-budget final scores and each
+run's independently selected best scores. It does not reuse the older LiDAR
+pilot without a shared backbone as the control. Center error concerns matched
+objects only; always also examine TP/FP/FN and precision/recall. Validation used
+for selection is not an unbiased or scene-independent test set, nor full 3D AP.
 
 Install and launch from the repository root:
 

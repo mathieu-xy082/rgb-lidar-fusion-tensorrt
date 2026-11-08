@@ -222,7 +222,9 @@ alloué PyTorch de 1512,6 MiB. Cela valide la mémorisation, pas la généralisa
 Le pilote 410/102 dispose de sa configuration commune et d'un audit CPU des
 deux initialisations neuves, avec mêmes poids des nouveaux blocs. Le runner
 streaming, la reprise et les checkpoints latest/best sont testés sur CPU.
-Son notebook et la comparaison réelle LiDAR seul/fusion restent à faire.
+Le notebook `08` permet maintenant le lancement explicite, les courbes,
+la comparaison contrôlée et l'inspection CPU de validation avec exports.
+Les deux runs réels et leur bilan LiDAR seul/fusion restent à faire.
 La head centre/offset existante sert de diagnostic, pas de head 3D finale.
 Le [correctif de provenance caméra](workstreams/camera-depth-provenance.md)
 est intégré. Le nouveau run caméra de cinq epochs a été vérifié et inspecté ;

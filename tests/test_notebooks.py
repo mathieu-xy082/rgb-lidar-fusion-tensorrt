@@ -15,6 +15,7 @@ NOTEBOOK_NAMES = (
     "05_lidar_center_overfit.ipynb",
     "06_lidar_center_training_analysis.ipynb",
     "07_bev_fusion_overfit.ipynb",
+    "08_bev_fusion_training_analysis.ipynb",
 )
 
 
@@ -161,3 +162,23 @@ def test_bev_overfit_notebook_keeps_training_opt_in_and_child_process_cleanup():
     assert "allow_legacy_camera" not in cells["audit-inspect"]
     assert "initialize_bev_fusion_encoders" in cells["audit-inspect"]
     assert "training_metadata" in cells["inspect-checkpoint"]
+
+
+def test_bev_pilot_notebook_keeps_training_and_comparison_opt_in():
+    path = Path(__file__).resolve().parents[1] / "notebooks/08_bev_fusion_training_analysis.ipynb"
+    cells = {c["id"]: "".join(c["source"]) for c in json.loads(path.read_text())["cells"]}
+    flags = {"RUN_TRAINING", "RESUME_EXISTING", "RUN_COMPARISON", "DEVICE", "EPOCHS", "VARIANT"}
+    defaults = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse(cells["parameters"]).body
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in flags
+    }
+    assert defaults == {"RUN_TRAINING": False, "RESUME_EXISTING": False, "RUN_COMPARISON": False,
+                        "DEVICE": "cuda", "EPOCHS": 10, "VARIANT": "lidar_only"}
+    assert "subprocess.Popen" in cells["train-pilot"]
+    assert "process.terminate()" in cells["train-pilot"] and "process.kill()" in cells["train-pilot"]
+    assert "config.serialized()" in cells["train-pilot"]
+    assert "LAUNCH_CONFIG_PATH" in cells["train-pilot"]
+    assert "analyze_bev_pilot_validation" in cells["inspect-validation"]
+    assert "compare_bev_pilot_runs" in cells["compare-runs"]

@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Add opt-in pilot notebook `08`: one GPU child at a time, resolved launch
+  configs, CPU audits, partial curves and validation-only PNG inspection.
+  Add strict matched-run comparison with equal completed budgets, source/data/
+  initialization/protocol guards, final-versus-best summaries and JSON exports.
+  CPU tests include real subprocess execution/cleanup; real pilot runs remain pending.
 - Prepare the matched BEV pilot with a single protocol, canonical saved split,
   strict source audits and identical fresh fusion/shared/head state hashes for
   LiDAR-only and fusion variants. Add a CPU-only audit CLI. Record the completed four-frame CUDA control: 15 TP,
@@ -15,7 +20,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both-split evaluation, valid negatives/unknown reporting, strict pilot resume
   and atomic latest/best snapshots with sidecar recovery. Verify native targets,
   frozen encoders, exact CPU resume and guarded CUDA refusal; real pilot GPU
-  runs and the comparison notebook remain pending.
+  runs remain pending.
 - Add an audited frozen-encoder BEV fusion four-frame runner, CLI, CPU feature
   inspection and opt-in notebook `07`. Restrict memorization to saved training
   IDs; record task/schedule/source provenance, stream batch progress and resume

@@ -17,8 +17,46 @@ Notebooks disponibles, dans l'ordre recommandé :
    checkpoint inspection and center metrics on the same training frames.
 6. `06_lidar_center_training_analysis.ipynb` — separate 410/102 train/validation
    pilot, CUDA subprocess, saved split, best/latest checkpoints and held-out views.
+7. `07_bev_fusion_overfit.ipynb` — audited camera/LiDAR warm start, CPU inspection
+   of supports/features and optional four-train-frame fusion memorization in a
+   guarded CUDA subprocess. Encoders stay frozen; this is not validation quality.
 
 Keep notebooks lightweight; move reusable code into `src/rgb_lidar_fusion/`.
+
+## BEV Fusion Notebook
+
+Notebook `07` first audits the fresh traced camera weights, LiDAR `best.pt`,
+input hashes and common 410/102 membership. The four diagnostic IDs are
+`000006`, `000036`, `000052`, `000060`, all in training, with 15 Car centers.
+Complete inputs are used; there is no depth holdout. CPU plots show separate
+camera/LiDAR evidence, four feature RMS maps, targets and decoded centers.
+Camera, PFN and LiDAR context stay frozen, including PFN BatchNorm statistics.
+Inspection cells also save 150 dpi PNGs beneath
+`results/analysis/bev_fusion/<output-directory-name>/`, with printed paths:
+`initial_<sample_id>.png` before learning and
+`epoch_<four-digit-epoch>_<sample_id>.png` for the saved checkpoint. These
+ignored artifacts are separate from the training output directory and remain
+available without retaining notebook outputs.
+
+Start with setup, parameters and CPU inspection only. Training remains disabled
+with `RUN_OVERFIT=False`. Once inspected, explicitly choose `RUN_OVERFIT=True`
+and rerun parameters/training. The notebook proposes 200 epochs, batch 1, CUDA
+in a child process with the existing 2048 MiB free-memory gate. The JSON preset
+defaults to CPU/100 epochs. Each batch is logged; evaluations/checkpoints are
+saved at 0, 1, every 5 epochs and the final epoch. Interrupt stops and waits for
+the child, releasing its GPU resources when it exits; there is no retry/fallback.
+
+Follow the JSONL in another terminal:
+
+```bash
+tail -f results/training/kitti_bev_fusion_overfit_4_cuda.jsonl
+```
+
+Resume only the fused run with `RESUME_EXISTING=True`, keeping `EPOCHS` as the
+total target. Checkpoint metadata states memorization scope and records source
+audits, actual four-frame IDs, matching settings and resource measurements.
+RMS is not object confidence; a low loss without TP/recall is not memorization
+success. Discard these fitted weights before the later disjoint comparison.
 
 Install and launch from the repository root:
 

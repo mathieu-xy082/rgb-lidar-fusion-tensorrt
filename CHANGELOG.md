@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Add an audited frozen-encoder BEV fusion four-frame runner, CLI, CPU feature
+  inspection and opt-in notebook `07`. Restrict memorization to saved training
+  IDs; record task/schedule/source provenance, stream batch progress and resume
+  fused Adam checkpoints. CPU tests and one real-KITTI epoch pass; GPU
+  memorization/peak-memory validation and the disjoint comparison remain pending.
 - Assemble `BEVFusionDiagnostic` with existing camera/lift and LiDAR encoders,
   fusion/shared backbone and the optional-by-use center head. Add target-free
   CPU batch preparation, explicit frozen encoder/BN policy and a model JSON.

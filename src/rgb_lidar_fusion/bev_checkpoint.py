@@ -206,6 +206,7 @@ def _check_optimizer(model, optimizer):
 def save_bev_fusion_checkpoint(
     path: str | Path, *, model: BEVFusionDiagnostic, split: dict, epoch: int, step: int,
     optimizer=None, pretraining: dict | None = None, metrics: list[dict] | None = None,
+    training_metadata: dict | None = None,
 ) -> None:
     """Atomic new-kind checkpoint; optimizer present means resumable, otherwise inference."""
 
@@ -227,6 +228,8 @@ def save_bev_fusion_checkpoint(
     }
     if optimizer is not None:
         payload["optimizer_state_dict"] = optimizer.state_dict()
+    if training_metadata is not None:
+        payload["training_metadata"] = json.loads(json.dumps(training_metadata, allow_nan=False))
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")

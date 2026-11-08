@@ -13,12 +13,14 @@ devenir une source de vérité générale.
   résiduel à trois échelles implémenté : alignement et champ 39/43 cellules
   contrôlés, mesure CPU reproductible. Diagnostic multimodal assemblé avec
   adaptateur CPU, head centre existante et checkpoints/audit distincts.
-  Le runner, le notebook et les expériences d'entraînement restent à faire.
+  Runner quatre frames et notebook `07` disponibles, avec inspection CPU,
+  encodeurs gelés et lancement GPU explicite ; smoke KITTI CPU d'une époque
+  passé. Mémorisation GPU et pilote disjoint restent à valider.
 
-- [Camera-depth data provenance](camera-depth-provenance.md) : correctif sur
-  `fix/camera-depth-provenance`, dérivée de la branche de fusion : manifeste IDs/empreintes/protocole,
-  reprise vérifiée et utilisation explicite des anciens poids non vérifiables.
-  Aucun ancien checkpoint réécrit ni nouvel entraînement KITTI lancé.
+- [Camera-depth data provenance](camera-depth-provenance.md) : correctif intégré
+  dans la branche de fusion, nouveau run cinq epochs tracé et inspecté.
+  Audit ordinaire caméra/LiDAR passé sans exception ; aucun ancien checkpoint
+  réécrit ou utilisé via l'exception legacy.
 
 Ce chantier raccorde les deux branches avant les heads 3D finales. Voir les
 [milestones](../milestones.md).

@@ -1,0 +1,19 @@
+{
+  "data_root": "data/kitti/training",
+  "output_dir": "results/training/kitti_bev_fusion_overfit_4",
+  "split_path": "results/training/kitti_lidar_center_512/split.json",
+  "camera_checkpoint": "results/training/kitti_camera_depth_block_dropout_512_provenance/checkpoints/latest.pt",
+  "lidar_checkpoint": "results/training/kitti_lidar_center_512/checkpoints/best.pt",
+  "sample_ids": ["000006", "000036", "000052", "000060"],
+  "epochs": 100,
+  "eval_every": 5,
+  "learning_rate": 0.001,
+  "seed": 13,
+  "cpu_threads": 2,
+  "device": "cpu",
+  "minimum_free_memory_mib": 2048,
+  "score_threshold": 0.3,
+  "top_k": 50,
+  "match_radius_m": 1.0,
+  "max_grad_norm": 10.0
+}

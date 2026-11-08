@@ -214,17 +214,16 @@ adaptateur CPU, encodeurs gelés par défaut, audit des poids et nouveau format
 de checkpoint. Les tests vérifient le backward et une reprise Adam synthétique ;
 ils ne constituent pas un entraînement multimodal KITTI.
 
-Incréments suivants : runner/notebook et mémorisation quatre frames, puis
-pilote 410/102 avec comparaison LiDAR seul.
+Le runner quatre frames et le notebook `07` sont disponibles : encodeurs gelés,
+inspection CPU, logs par batch, GPU en sous-processus et reprise contrôlée.
+Les quatre IDs viennent uniquement du train commun. Un smoke KITTI CPU d'une
+époque passe ; la mémorisation GPU et son budget mémoire restent à vérifier.
+L'incrément suivant sera le pilote 410/102 avec comparaison LiDAR seul.
 La head centre/offset existante sert de diagnostic, pas de head 3D finale.
-Le premier audit CPU des sources locales passe avec le split 410/102. Le
-checkpoint caméra historique n'ayant pas enregistré d'IDs/empreintes, sa
-correspondance d'IDs doit être déclarée et cette limite reste consignée ;
-ne pas présenter cet audit comme une preuve indépendante du contenu historique.
 Le [correctif de provenance caméra](workstreams/camera-depth-provenance.md)
-enregistre ces informations pour les nouveaux runs et impose une reprise
-vérifiée. La réutilisation legacy est désormais refusée par défaut et requiert
-une exception explicite ; les anciens checkpoints ne sont pas réécrits.
+est intégré. Le nouveau run caméra de cinq epochs a été vérifié et inspecté ;
+l'audit complet passe avec LiDAR `best.pt` et le split 410/102, sans exception
+legacy ni réentraînement LiDAR. Les anciens checkpoints restent historiques.
 
 ### Ordre des incréments
 

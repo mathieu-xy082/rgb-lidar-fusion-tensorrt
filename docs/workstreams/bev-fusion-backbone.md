@@ -4,12 +4,14 @@ Branch: `ec/bev-fusion-backbone`
 
 Parent branch: `main` after release 1.3.0.
 
-Updated: 2026-11-05.
+Updated: 2026-11-08.
 
 Status: increments 1 to 4 are complete: contract, feature fusion, shared
 three-scale backbone, assembled center diagnostic and checkpoint helpers are
-implemented and CPU-tested. The multimodal training runner/notebook and the
-four-frame/512-frame experiments are **not implemented/run yet**. Existing
+implemented and CPU-tested. Increment 5 now has an audited overfit runner,
+CPU inspection and notebook `07`; a real-KITTI one-epoch CPU smoke test passes.
+GPU memorization/resource validation and the 512-frame experiments are
+**still pending**. Existing
 standalone encoder architectures/weight keys remain unchanged; the subsequent
 [camera provenance fix](camera-depth-provenance.md) strengthens its runner and analysis.
 
@@ -452,8 +454,9 @@ therefore fusion/backbone/diagnostic-head training, not silent full fine-tuning.
 payload containing config, full model weights, split/hashes, counters, audit
 report, metrics and trainable parameter names. Supplying Adam creates a
 `purpose="resume"` checkpoint; omitting it creates `purpose="inference"`.
-The future runner will manage latest/best selection; these helpers do not
-select an epoch or implement a training loop.
+The overfit runner now manages `latest.pt` at evaluation points; best/validation
+selection belongs to the future disjoint pilot. These helpers do not select
+an epoch or implement a training loop.
 
 `load_bev_fusion_checkpoint` returns a CPU/eval model and payload using
 `weights_only=True`, without requiring the original encoder checkpoint files
@@ -486,25 +489,83 @@ The current 512-frame manifest passed file-hash checks and both source train
 sets were disjoint from target validation under the declared camera mapping.
 This audit performed no real-frame forward, GPU execution, optimizer update,
 checkpoint write or new detection-quality measurement. Legacy camera provenance
-remains limited as stated above. The four-frame/notebook experiment is next.
+remains limited as stated above. This is the historical assembly audit, not the
+source policy for current training: the new traced camera run has since passed
+the ordinary audit with LiDAR `best.pt`, without exception. See the
+[verified handoff](camera-depth-provenance.md#verified-run-and-handoff---2026-11-08).
 Initial assembly delivery: **850 tests passed, one CUDA-only skip**, no exclusions;
 81 links/anchors checked across the seven updated Markdown files. Existing
 notebooks, data, source checkpoint files and standalone APIs were not modified.
 
 ### 5. Scope: inspect and memorize four frames
 
-- [ ] Add a notebook with training opt-in, CPU inspection and child-process
+- [x] Add a notebook with training opt-in, CPU inspection and child-process
   GPU training/cleanup, reusing the existing notebook safety pattern.
-- [ ] Inspect camera/LiDAR support, separate feature maps, fused features and targets.
-- [ ] Freeze both encoders initially (`eval()` plus disabled parameter gradients,
+- [x] Inspect camera/LiDAR support, separate feature maps, fused features and targets.
+- [x] Freeze both encoders initially (`eval()` plus disabled parameter gradients,
   including fixed PFN BatchNorm statistics); train fusion/backbone/diagnostic head.
 - [ ] Validate four-frame memorization, finite metrics and peak GPU memory at
-  batch 1; do not lower existing camera/GPU guards to make a run start.
+  batch 1; retain the current explicitly chosen 2048 MiB preflight guard rather
+  than lowering it further to make a run start. This threshold is not a memory guarantee.
 - [ ] If needed, change the training schedule explicitly and record it rather
   than silently unfreezing encoders; no automatic retry after a CUDA failure.
 
 Exit criterion: an inspectable small optimization run and a measured resource
 budget, not validation quality. Discard these fitted weights before the pilot.
+
+Delivery and execution:
+
+- `bev_training.BEVFusionOverfitConfig` keeps model/preprocessing separate from
+  schedule and source paths. The CPU preset is
+  `configs/training/kitti_bev_fusion_overfit.json`; CLI:
+  `scripts/train_bev_fusion_overfit.py`. One to four explicit saved train IDs are
+  allowed: defaults `000006`, `000036`, `000052`, `000060` (4/6/4/1 Car centers).
+  The old four-frame LiDAR selection is not reused because it included pilot
+  validation IDs. Every selected frame must have supervised Car centers/points.
+- Fresh runs require normal source audits and `recorded_at_training` camera
+  provenance; no legacy exception is exposed. Both encoders/BN remain frozen.
+  Complete raw scans feed pillars and image splatting, without depth holdout.
+  Native-resolution calibration/labels determine targets, independently of the
+  resized RGB input. CPU inputs/targets are cached as a verified four-frame snapshot.
+- `bev_analysis` and [notebook 07](../../notebooks/07_bev_fusion_overfit.ipynb)
+  show camera count/mass, LiDAR pre-cap counts, the annotated domain,
+  camera/LiDAR/fused/shared RMS maps, targets and decoded centers. RMS panels
+  have independent scales and are not semantic confidence. CPU inspection
+  preserves model state/mode; all notebook outputs are empty in version control.
+- The notebook defaults to 200 epochs, batch 1, CUDA only in a guarded child
+  process, with `RUN_OVERFIT=False`. It streams batch/epoch/evaluation JSONL
+  to the cell and a sibling `.jsonl` file. Interrupt terminates/kills and waits
+  for the child. There is no fallback or automatic CUDA retry.
+- Evaluations/checkpoints occur at epochs 0, 1, each `eval_every` (default 5),
+  and the final epoch. `latest.pt` embeds task/schedule, audited sources, full
+  canonical split and actual four-frame learning/evaluation membership. Resume
+  checks task/protocol/data before device selection; model placement precedes
+  Adam loading. It restores only the fused run, never source heads/optimizers,
+  and does not require reopening encoder checkpoint files. Sidecars are repaired
+  from the embedded history. Epoch count is the total target on resume.
+- `grad_norm` in step events is the finite norm **before** clipping; the
+  optimizer uses gradients clipped to `max_grad_norm` (default 10).
+- Resource metadata records runner wall time and PyTorch peak allocated/reserved
+  memory on CUDA, not inference latency or whole-device VRAM. CPU peaks are null.
+  Source files and the historical notebook `03` execution state are untouched.
+
+Local validation on 2026-11-08: audited real inputs and rendered the initial
+`000006` figure. A separate one-epoch CPU smoke run completed four updates in
+about 16.4 seconds including audit/preparation/evaluation. Mean training-frame
+evaluation loss decreased from 77.170 to 5.569, but TP=0/FP=0/FN=15 at epoch 1:
+this verifies optimization/checkpoint execution, **not successful memorization**.
+Artifacts are ignored under `results/training/kitti_bev_fusion_overfit_4_cpu_smoke`
+and `results/analysis/bev_fusion/overfit_initial_000006.png`. No GPU run was started.
+
+Regression on the local worktree: 897 passed, one CUDA-only skip, two failures
+from the pre-existing executed notebook `03` (saved outputs/counters and resume
+flag). Its developer-owned execution state was not changed. New tests cover
+strict membership/provenance, frozen weights/BN, exact CPU resume, subprocess
+CLI execution and notebook interrupt/terminate/kill/logging behavior.
+Pre-training commit validation: **899 passed, one CUDA-only skip**, without
+exclusions, on an exported index snapshot with clean versioned notebooks.
+The developer's notebook `03` remains untouched and outside this commit;
+the executed `07` was backed up locally before clearing its outputs.
 
 ### 6. Scope: disjoint pilot and comparison
 

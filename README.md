@@ -36,8 +36,10 @@ Le point cloud brut dispose aussi d'un premier PFN/scatter et contexte BEV.
 Le bloc de fusion et le backbone commun multi-échelle sont raccordés aux deux
 encodeurs dans `BEVFusionDiagnostic`, avec une head centre/offset de diagnostic,
 des contrôles de provenance et un format de checkpoint distinct. Les tests CPU
-valident le chemin complet ; aucun entraînement multimodal KITTI n'a encore
-été lancé et les heads 3D complètes restent à développer. Le
+valident le chemin complet. Le runner et le notebook `07` préparent une
+mémorisation multimodale sur quatre frames du train, encodeurs gelés ; un smoke
+test KITTI CPU d'une époque passe, mais la mémorisation GPU reste à vérifier.
+Les heads 3D complètes restent à développer. Le
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
 
@@ -81,8 +83,10 @@ utile à la future branche caméra BEV.
 
 Le diagnostic multimodal dispose maintenant d'un adaptateur CPU pour les
 entrées RGB/enriched et les piliers, et expose quatre représentations BEV. Sa
-configuration de modèle est `configs/bev_fusion.json` ; le runner et le notebook
-d'entraînement seront ajoutés dans l'incrément suivant.
+configuration de modèle est `configs/bev_fusion.json`. Le preset du diagnostic
+est `configs/training/kitti_bev_fusion_overfit.json` ; le
+[notebook 07](notebooks/07_bev_fusion_overfit.ipynb) permet l'inspection CPU puis
+un lancement explicite en sous-processus. Le pilote disjoint reste à développer.
 
 ### Architecture cible
 

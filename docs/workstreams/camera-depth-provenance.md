@@ -1,6 +1,6 @@
 # Workstream - Camera-depth data provenance
 
-Updated: 2026-11-06.
+Updated: 2026-11-08.
 
 Branch: `fix/camera-depth-provenance`, based on `ec/bev-fusion-backbone`
 at `7719e37`. Return this fix to the fusion branch before its training notebook;
@@ -67,6 +67,27 @@ No training or GPU preflight was launched by the preparation itself; the
 developer subsequently started the run as recorded above. The checks
 describe local data at preparation time, not independent scenes or guaranteed
 future file contents. Historical checkpoints remain untouched.
+
+## Verified run and handoff - 2026-11-08
+
+The developer completed all five epochs (step 2050) in the new `_provenance`
+directory and confirmed qualitative validation inspection. Final validation
+MAE is 2.117143 m and RMSE 4.224814 m, with all recorded epoch metrics identical
+to the historical spatial-block run. This is reproducibility, not independent
+scene validation or a retroactive certification of the old checkpoint.
+
+- [x] Checkpoint kind is `camera_depth_v2`; its manifest matches `split.json`
+  and current local input bytes, with the same canonical 410/102 membership.
+- [x] Full ordinary `initialize_bev_fusion_encoders` audit passes with this
+  camera checkpoint and the LiDAR epoch-9 `best.pt`, without any exception.
+  No LiDAR retraining is needed for this handoff.
+- [x] Developer confirmed the qualitative inspection; the fusion four-frame
+  runner/notebook can now consume these accepted sources.
+
+Camera checkpoint SHA-256:
+`7b1b966f116cea7f3b6ce0f2bd8bbc8d977b1fbc961ab4cdc3e3f4eb5fc1f274`.
+The older restart checklist above records preparation history; this handoff
+supersedes its pending training/inspection/audit items.
 
 ## Problem and interpretation
 

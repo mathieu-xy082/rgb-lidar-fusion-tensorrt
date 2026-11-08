@@ -4,19 +4,18 @@ Branch: `ec/bev-fusion-backbone`
 
 Parent branch: `main` after release 1.3.0.
 
-Updated: 2026-11-08.
+Updated: 2026-11-09.
 
-Status: increments 1 to 4 are complete: contract, feature fusion, shared
-three-scale backbone, assembled center diagnostic and checkpoint helpers are
-implemented and CPU-tested. Increment 5 is closed: the 200-epoch CUDA
-memorization run finds all 15 centers, with frozen encoders and measured memory.
-Increment 6a prepares matched, fresh CPU starts on the canonical 410/102 split;
-6b adds the streaming pilot runner and per-epoch latest/best checkpoints.
-6c adds opt-in notebook `08`, CPU validation inspection and strict matched-run
-comparison tooling. Real 512-frame runs, their comparison and qualitative
-validation are **still pending**. Existing
-standalone encoder architectures/weight keys remain unchanged; the subsequent
-[camera provenance fix](camera-depth-provenance.md) strengthens its runner and analysis.
+Status: **prototype closed for Car-center detection**. All six increments are
+complete: contracts, fusion/shared backbone, assembled model, four-frame
+memorization and matched CUDA pilots on the saved 410/102 split. Both variants
+completed ten epochs / 4100 updates, with inspected validation predictions and
+a verified comparison; see [results and closure](#6d-results-and-prototype-closure).
+This is the first complete learned-and-evaluated camera/LiDAR BEV chain, trained
+in stages with frozen pretrained encoders during the pilot, not joint
+end-to-end optimization or a full 3D detector. A global camera gain is not
+established. Existing standalone encoder architectures/weight keys are unchanged.
+The branch still needs integration review before merging into main.
 
 References:
 
@@ -608,15 +607,15 @@ latency. These fitted fusion/shared/head weights must not initialize the pilot.
   and matched-comparison guards with PNG/JSON exports.
 - [x] Use complete available inputs for the center diagnostic by default; depth
   holdout is not required by this loss. Keep any corruption experiment explicit.
-- [ ] Compare matched LiDAR-only versus fused runs with the same shared-backbone
+- [x] Compare matched LiDAR-only versus fused runs with the same shared-backbone
   and head design, initial shared/head weights, split, schedule and evaluation.
   Zero the camera feature/support block for the baseline, not the raw LiDAR.
 - [x] Keep comparison tooling separate from the older LiDAR-only pilot, whose
   architecture has no shared backbone; it does not isolate fusion's contribution.
 - [x] Reuse Car annotations, ignored-domain policy, score/top-k and XY matching;
   report losses, TP/FP/FN, precision/recall and distance over matched centers only.
-- [ ] Save latest/best, inspect validation successes and failures, record GPU
-  memory/timing scope and optionally evaluate a gradual encoder-unfreezing stage.
+- [x] Save latest/best, inspect validation predictions and record GPU memory/time.
+  Encoder unfreezing remains an optional follow-up, not a closure requirement.
 
 #### 6a. Matched protocol and CPU preparation
 
@@ -718,7 +717,8 @@ exactly match the native diagnostic. The ignored data-only report is
 tests cover both variants, exact continuous/resumed state, train-only updates,
 immutable evaluation/frozen encoders, empty clouds, negatives/unknowns, mutation
 checks, best-state recovery and refusals before CUDA. No real 512-frame
-optimization or GPU training was launched.
+optimization or GPU training was launched during runner implementation;
+the later completed pilots are recorded in 6d below.
 Regression: **936 passed, one CUDA-only skip**, without test exclusions, in an
 exported validation copy containing these source changes and clean versioned
 notebooks. Developer execution state in notebooks `03` and `07` was untouched.
@@ -764,8 +764,8 @@ alone is not meaningful when the sets of detected objects differ.
 Synthetic CPU tests exercise analysis refusal cases, real figure/PNG exports,
 both notebook audit paths, a real CPU training child with overridden settings,
 and interrupt/failure cleanup. No real pilot training or GPU computation was
-launched during notebook implementation. The actual two ten-epoch runs and
-their qualitative/quantitative comparison remain next; do not relaunch `07`
+launched during notebook implementation; the subsequent actual two ten-epoch
+runs and their comparison are recorded in 6d below. Do not relaunch `07`
 as a substitute for the disjoint pilot.
 
 Validation: **959 passed, one CUDA-only skip**, without exclusions, on an
@@ -776,6 +776,116 @@ Developer execution state in notebooks `03` and `07` was not modified.
 After the separate headless-visualization CI fix, the exact prepared notebook
 commit passes **960 tests, one CUDA-only skip**, including the new optional
 Matplotlib regression; visualization tests execute with Matplotlib installed.
+
+#### 6d. Results and prototype closure
+
+Recorded on 2026-11-09 after both CUDA pilots completed. The learning chain is:
+RGB/enriched LiDAR -> pretrained camera features -> calibrated, splatted-depth
+lift, alongside raw XYZI -> pretrained PFN/context; then trainable fusion,
+shared BEV backbone and Car-center/XY-offset head. Encoder learning happened
+earlier in separate tasks. The lift uses splatted camera-z and heuristic
+confidence, **not the camera head's dense predicted depth**. During the pilot
+the encoders/BN remain frozen; only the final three blocks learn together.
+
+Common protocol: 512 KITTI frames, saved 410 train / 102 validation partition,
+345 accepted validation Car centers, 20 cm grid, image 320x1024, batch 1, FP32,
+ten total epochs / 4100 updates per variant, Adam learning rate 0.001, seed 13.
+No depth holdout or four-frame warm start. Matching uses masked annotated
+domains, local-maximum decoding, threshold 0.3, top-k 50 and score-ordered
+one-to-one XY matching within 1 m. All 102 validation frames were evaluated;
+none were skipped. Both variants share the same new-block initial hash from 6a.
+
+The ordinary comparison passes with current file hashes, identical saved split,
+source checkpoints, initialization, schedule and evaluation policy. Both latest
+histories equal their metrics sidecars; best files equal their embedded best
+snapshots. Camera/PFN/context parameters **and buffers exactly equal their
+source states in all four checkpoints**, including PFN BatchNorm statistics.
+
+**Selected checkpoints: minimum validation loss, independently per variant.**
+
+| Validation metric | LiDAR-only best | Fusion best |
+| --- | --- | --- |
+| Epoch / step | 9 / 3690 | 6 / 2460 |
+| Loss | 2.039628 | 2.097990 |
+| TP / FP / FN | 226 / 118 / 119 | 218 / 79 / 127 |
+| Precision | 65.70% | 73.40% |
+| Recall | 65.51% | 63.19% |
+| Mean matched XY distance | 0.201428 m | 0.192371 m |
+
+Fusion produces 39 fewer false positives (about 33%) and higher precision, but
+misses eight additional cars. Its selected validation loss is slightly worse.
+These are selected checkpoints under the predefined loss criterion, not an
+after-the-fact choice of the nicest precision/recall epoch.
+
+**Final checkpoints: same ten-epoch budget.**
+
+| Validation metric | LiDAR-only epoch 10 | Fusion epoch 10 |
+| --- | --- | --- |
+| Loss | 2.086789 | 2.275058 |
+| TP / FP / FN | 225 / 91 / 120 | 236 / 106 / 109 |
+| Precision | 71.20% | 69.01% |
+| Recall | 65.22% | 68.41% |
+| Mean matched XY distance | 0.208799 m | 0.199846 m |
+
+At the final epoch fusion recovers eleven additional cars, but adds fifteen
+false positives. Thus the observed precision/recall trade-off depends on the
+checkpoint; **there is no demonstrated global improvement or universal FP
+reduction**. Matched-distance means concern different matched object sets and
+must not be read as a standalone localization win. Thresholds were not retuned.
+
+The developer inspected saved validation predictions and compared the selected
+models at validation position 50, actual KITTI ID `000250`. Both selected models
+give 3 TP / 0 FP / 0 FN on that frame; it illustrates a successful detection,
+not a per-frame FP improvement. The broader FP reduction above comes from the
+complete selected-checkpoint totals. This is a qualitative check, not an
+exhaustive error taxonomy or proof that all misses are difficult cases.
+
+| Resource scope | LiDAR-only | Fusion |
+| --- | --- | --- |
+| Recorded runner wall time | about 5669 s (1 h 34 min) | about 6993 s (1 h 56 min) |
+| PyTorch peak allocated | 254.8 MiB | 1524.0 MiB |
+| PyTorch peak reserved | 812.0 MiB | 2144.0 MiB |
+
+Wall time includes audit, streaming preprocessing, training and both-split
+evaluation. Allocator peaks exclude other GPU consumers. These are neither
+inference latency nor a real-time deployment benchmark. Both runs completed
+with the existing 2048 MiB preflight and no lowered guard.
+
+Artifacts remain ignored locally under
+`results/training/kitti_bev_fusion_pilot_512/{lidar_only,fusion}/` and
+`results/analysis/bev_fusion/kitti_bev_fusion_pilot_512/` (comparison JSON,
+curves and validation PNGs). Logs are sibling `*_lidar_only.jsonl` and
+`*_fusion.jsonl` files under `results/training/`. No dataset, weights, exported
+PNGs or executed notebook outputs are part of the documentation commit.
+
+Checkpoint SHA-256, relative to the training root above:
+
+| Checkpoint | SHA-256 |
+| --- | --- |
+| `lidar_only/checkpoints/latest.pt` | `e3e19cb2966e1092762f147940ca88b07553dde5f8958632ce0eef646a7f623b` |
+| `lidar_only/checkpoints/best.pt` | `ee5942fcea65bd62c1d18c01545856ee03158a0ac35c4fff888615c4aec01177` |
+| `fusion/checkpoints/latest.pt` | `7e996177762f3e77203be2113f1d2aa642a63655d1c7d41acb003ae75b19570e` |
+| `fusion/checkpoints/best.pt` | `dae76a267d34bfd359ba78e469ace45f9a94d43052abf73bea1c26cfb26df905` |
+
+Accepted encoder sources remain camera-depth `latest.pt` (epoch 5,
+SHA-256 `7b1b966f116cea7f3b6ce0f2bd8bbc8d977b1fbc961ab4cdc3e3f4eb5fc1f274`)
+and LiDAR-center `best.pt` (epoch 9,
+SHA-256 `eac8f0d39edce3b1b44706936cc8aaf2d88c2dc5d040245c93994455fb5daf5f`).
+
+**Conclusion and resume note.** The first multimodal center-detection prototype
+is learned, assembled and evaluated through a reproducible staged workflow.
+The goal was to put the project's components in place, not to exhaust training
+quality. This closes the current workstream scope without another training run.
+It does not establish scene independence, multi-seed significance, calibrated
+uncertainty, full 3D boxes/classes/velocity, joint encoder fine-tuning, ONNX/TRT
+deployment or real-time readiness. Both branches also reuse the same LiDAR
+information and are not independent evidence sources.
+
+At the next session, review/stabilize `ec/bev-fusion-backbone` before the next
+architecture increment. Then specify full 3D targets/heads/losses/evaluation.
+Further error analysis, PR curves, multiple seeds, larger/scene-disjoint data
+and gradual unfreezing are optional follow-ups, not hidden remaining tasks for
+this prototype closure. Do not rerun training merely to recover notebook plots.
 
 Exit criterion: a reproducible train/validation workflow and an honest
 comparison, including a neutral/negative result if fusion does not help. The
@@ -793,3 +903,10 @@ No fusion implementation, training, GPU execution or new model-quality result
 is claimed. Documentary validation: 95 links/anchors checked across the nine
 changed Markdown files; regression suite: 633 passed, one CUDA-only test skipped,
 no exclusions. Implementation evidence will be added increment by increment.
+
+2026-11-09, prototype closure: compared both completed pilots with live dataset
+verification; checked metrics sidecars, best snapshots, source-state equality
+for frozen encoders/buffers and four checkpoint SHA-256 hashes. Checked 99
+local links/anchors across the eight updated Markdown files. Documentation-only
+change: the code test suite was not rerun; no notebook execution state, data,
+model weights or generated figures were included in the commit.

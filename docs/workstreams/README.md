@@ -18,7 +18,11 @@ devenir une source de vérité générale.
   15 TP, aucun FP/FN ; pic alloué PyTorch 1512,6 MiB. Le pilote disjoint a
   maintenant son protocole, son audit d'initialisation appariée et son runner
   streaming 410/102 avec latest/best et reprise. Le notebook `08` et les
-  contrôles de comparaison sont disponibles ; runs réels et bilan restent à faire.
+  contrôles de comparaison sont disponibles. Les deux runs CUDA de dix epochs
+  sont terminés, comparés et inspectés : premier prototype multimodal de centres
+  clôturé sur la branche. Le best fusion réduit les FP mais aussi le rappel ;
+  aucun gain global n'est établi. Voir le [bilan](bev-fusion-backbone.md#6d-results-and-prototype-closure).
+  La relecture d'intégration dans main reste à faire, pas un nouvel entraînement.
 
 - [Camera-depth data provenance](camera-depth-provenance.md) : correctif intégré
   dans la branche de fusion, nouveau run cinq epochs tracé et inspecté.

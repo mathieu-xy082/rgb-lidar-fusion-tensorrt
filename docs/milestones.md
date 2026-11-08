@@ -1,6 +1,6 @@
 # Milestones
 
-Mise à jour : 2026-11-05.
+Mise à jour : 2026-11-09.
 
 Ce document est la source de vérité sur l'avancement du projet. Les détails de
 branches et les comptes rendus d'expériences restent dans les workstreams.
@@ -31,7 +31,8 @@ branches et les comptes rendus d'expériences restent dans les workstreams.
 | Diagnostic centre LiDAR | Incrément prototype clôturé : mémorisation quatre frames, pilote 410/102 de 20 epochs CUDA, best epoch 9 et revue TP/FN/FP |
 | Premier bloc de fusion BEV | Grilles explicites, concaténation features/supports, projection 1x1, compteurs conservés et backward CPU ; sans backbone spatial commun ni assemblage multimodal |
 | Premier backbone BEV commun | Pyramide résiduelle 32/64/96, sortie stride 1 alignée, champ théorique 39/43 cellules, backward et mesure CPU ; sans assemblage aux encodeurs ni entraînement |
-| Assemblage multimodal BEV | Adaptateur CPU, encodeurs/lift/fusion/backbone/head centre raccordés, backward synthétique, audit des sources et checkpoints distincts ; sans entraînement KITTI multimodal |
+| Assemblage multimodal BEV | Adaptateur CPU, encodeurs/lift/fusion/backbone/head centre raccordés, backward, audit des sources et checkpoints distincts |
+| Premier prototype multimodal appris et évalué | Apprentissage par étapes, encodeurs gelés dans le pilote ; contrôle quatre frames puis deux runs CUDA de dix epochs / 4100 updates sur 410 train / 102 validation ; comparaison et inspection terminées, pas de gain global établi |
 
 ## Bilan camera-depth v1
 
@@ -194,9 +195,9 @@ sans revendication de détecteur final. Prochaine action : revenir au raccord
 caméra/LiDAR BEV. Optimiser davantage cette head reste facultatif.
 Suivi : [diagnostic centre LiDAR](workstreams/lidar-center-diagnostic.md).
 
-## Prochaines étapes
+## Bilan fusion BEV
 
-### Chantier en cours : fusion et backbone BEV commun
+### Prototype centres clôturé sur la branche
 
 Le [workstream de fusion](workstreams/bev-fusion-backbone.md) part de la release
 1.3.0, sur `ec/bev-fusion-backbone`. Le premier incrément documentaire est
@@ -222,19 +223,38 @@ alloué PyTorch de 1512,6 MiB. Cela valide la mémorisation, pas la généralisa
 Le pilote 410/102 dispose de sa configuration commune et d'un audit CPU des
 deux initialisations neuves, avec mêmes poids des nouveaux blocs. Le runner
 streaming, la reprise et les checkpoints latest/best sont testés sur CPU.
-Le notebook `08` permet maintenant le lancement explicite, les courbes,
-la comparaison contrôlée et l'inspection CPU de validation avec exports.
-Les deux runs réels et leur bilan LiDAR seul/fusion restent à faire.
+Le notebook `08` a permis deux runs CUDA de dix epochs / 4100 mises à jour
+chacun, avec comparaison contrôlée et inspection de validation. Les encodeurs
+et buffers sont vérifiés inchangés. Les checkpoints best, choisis par la loss
+de validation, sont à l'epoch 9 pour LiDAR seul et 6 pour fusion :
+
+| Validation best | LiDAR seul | Fusion |
+|---|---|---|
+| TP / FP / FN | 226 / 118 / 119 | 218 / 79 / 127 |
+| Précision / rappel | 65,70 % / 65,51 % | 73,40 % / 63,19 % |
+| Loss | 2,039628 | 2,097990 |
+
+La fusion sélectionnée réduit les FP d'environ 33 %, mais manque huit voitures
+de plus. À epoch 10 égale, elle retrouve onze voitures supplémentaires avec
+quinze FP supplémentaires. Ce bilan contrasté clôture le prototype d'assemblage
+et d'apprentissage, sans démontrer un gain global ni un détecteur 3D complet.
+L'apprentissage est par étapes, pas une optimisation conjointe de tous les poids.
+Le [bilan détaillé](workstreams/bev-fusion-backbone.md#6d-results-and-prototype-closure)
+conserve métriques finales/best, empreintes, mémoire et temps mesurés. Le split
+reste disjoint par frame, non garanti indépendant par scène ; la validation
+sert aussi à sélectionner les checkpoints.
 La head centre/offset existante sert de diagnostic, pas de head 3D finale.
 Le [correctif de provenance caméra](workstreams/camera-depth-provenance.md)
 est intégré. Le nouveau run caméra de cinq epochs a été vérifié et inspecté ;
 l'audit complet passe avec LiDAR `best.pt` et le split 410/102, sans exception
 legacy ni réentraînement LiDAR. Les anciens checkpoints restent historiques.
 
+## Prochaines étapes
+
 ### Ordre des incréments
 
-1. Fusionner `camera_bev` et `lidar_bev`, ajouter le backbone BEV commun et
-   valider le raccord avec le diagnostic centre existant.
+1. Relire et stabiliser `ec/bev-fusion-backbone` dans main, avec ce bilan
+   et les limites explicites ; aucun nouvel entraînement requis pour cette clôture.
 2. Ajouter des heads CenterPoint-like complètes : centre, offset, hauteur, dimensions,
    orientation, classe et éventuellement vitesse.
 3. Évaluer une head YOLO-like auxiliaire sans en faire un prérequis bloquant de

@@ -7,11 +7,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 ### Added
 
+- Record the first complete camera/LiDAR BEV center prototype learned and
+  evaluated in stages: two matched ten-epoch CUDA pilots, frozen encoder/buffer
+  verification, selected/final metrics, checkpoint hashes and resource scope.
+  Selected fusion reduces FP with lower recall; no global gain, joint training,
+  full 3D detector or deployment claim. Close the workstream scope and record
+  integration review as the next step; keep session outputs and weights unversioned.
 - Add opt-in pilot notebook `08`: one GPU child at a time, resolved launch
   configs, CPU audits, partial curves and validation-only PNG inspection.
   Add strict matched-run comparison with equal completed budgets, source/data/
   initialization/protocol guards, final-versus-best summaries and JSON exports.
-  CPU tests include real subprocess execution/cleanup; real pilot runs remain pending.
+  CPU tests include real subprocess execution/cleanup.
 - Prepare the matched BEV pilot with a single protocol, canonical saved split,
   strict source audits and identical fresh fusion/shared/head state hashes for
   LiDAR-only and fusion variants. Add a CPU-only audit CLI. Record the completed four-frame CUDA control: 15 TP,
@@ -19,20 +25,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Add the streaming per-variant BEV pilot runner/CLI: train-only updates,
   both-split evaluation, valid negatives/unknown reporting, strict pilot resume
   and atomic latest/best snapshots with sidecar recovery. Verify native targets,
-  frozen encoders, exact CPU resume and guarded CUDA refusal; real pilot GPU
-  runs remain pending.
+  frozen encoders, exact CPU resume and guarded CUDA refusal.
 - Add an audited frozen-encoder BEV fusion four-frame runner, CLI, CPU feature
   inspection and opt-in notebook `07`. Restrict memorization to saved training
   IDs; record task/schedule/source provenance, stream batch progress and resume
-  fused Adam checkpoints. CPU tests and one real-KITTI epoch pass; GPU
-  memorization/peak-memory validation and the disjoint comparison remain pending.
+  fused Adam checkpoints. CPU checks and the later 200-epoch CUDA control pass,
+  memorizing all 15 centers; matched-pilot results are recorded above.
 - Assemble `BEVFusionDiagnostic` with existing camera/lift and LiDAR encoders,
   fusion/shared backbone and the optional-by-use center head. Add target-free
   CPU batch preparation, explicit frozen encoder/BN policy and a model JSON.
   Add audited encoder-only warm starts and distinct `bev_fusion_center_v1`
   inference/resume helpers, including strict split/hash/config checks. Synthetic
   CPU backward/Adam resume and a read-only local weight audit pass; legacy
-  camera ID/hash provenance remains explicitly limited. No KITTI multimodal run.
+  camera provenance remains unverified, while the pilot uses a fresh traced source.
 - Add `SharedBEVBackbone`: three-scale residual context at widths 32/64/96,
   aligned stride-1 output through explicit transposed-convolution sizes and
   unchanged evidence snapshots. Controlled CPU tests verify the phase-dependent
@@ -44,13 +49,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   1x1 projection (66 to 32 by default). `FusedBEVFeatures` preserves separate
   count/mass snapshots and support masks; 81 CPU tests cover contracts,
   branch-absence controls and gradients, including existing lift/PFN/context.
-  The spatial backbone and model assembly are separate components; no new
-  multimodal training-quality result is claimed.
+  The spatial backbone and model assembly are separate components.
 - Document the first shared BEV fusion contract and six implementation
   increments: aligned 20 cm grids, camera/LiDAR feature and evidence policies,
   ordered 66-to-32 fusion, checkpoint/split safeguards and diagnostic validation.
   Link the new workstream and mark the LiDAR prototype integrated in 1.3.0;
-  the contract-only increment preceded fusion code; multimodal training remains planned.
+  the contract-only increment preceded fusion code.
 
 ### Fixed
 

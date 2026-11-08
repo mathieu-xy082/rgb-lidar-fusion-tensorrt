@@ -40,8 +40,13 @@ valident le chemin complet. Le notebook `07` a validé la mémorisation CUDA de
 quatre frames du train : 15 centres retrouvés sans FP/FN, encodeurs gelés.
 Le pilote 410/102 dispose de sa configuration, d'un audit d'initialisation
 appariée et d'un runner par variante avec reprise et checkpoints latest/best.
-Le notebook `08` ajoute le lancement explicite, les courbes et les contrôles de
-comparaison. Les runs réels et leur analyse LiDAR seul/fusion restent à faire.
+Le notebook `08` a permis deux runs CUDA de dix époques sur le split 410/102,
+avec comparaison contrôlée et inspection de validation. Ce premier prototype
+multimodal de localisation de centres est appris et évalué par étapes, sans
+entraînement conjoint des encodeurs. Le bilan est contrasté : moins de faux
+positifs pour le checkpoint fusion sélectionné, mais pas de gain global établi.
+Les [résultats et limites](docs/workstreams/bev-fusion-backbone.md#6d-results-and-prototype-closure)
+sont consignés ; la branche reste à relire avant intégration dans main.
 Les heads 3D complètes restent à développer. Le
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
@@ -91,8 +96,8 @@ est `configs/training/kitti_bev_fusion_overfit.json` ; le
 [notebook 07](notebooks/07_bev_fusion_overfit.ipynb) permet l'inspection CPU puis
 un lancement explicite en sous-processus. Le pilote disjoint dispose du runner
 `scripts/train_bev_pilot.py` et du
-[notebook 08](notebooks/08_bev_fusion_training_analysis.ipynb) ; les expériences
-et leur comparaison restent à effectuer.
+[notebook 08](notebooks/08_bev_fusion_training_analysis.ipynb) ; le premier
+pilote comparatif est terminé, sans valider un détecteur 3D complet.
 
 ### Architecture cible
 

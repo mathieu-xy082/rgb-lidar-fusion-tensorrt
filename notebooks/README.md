@@ -114,6 +114,15 @@ pilot without a shared backbone as the control. Center error concerns matched
 objects only; always also examine TP/FP/FN and precision/recall. Validation used
 for selection is not an unbiased or scene-independent test set, nor full 3D AP.
 
+The first paired CUDA pilot is complete: ten epochs / 4100 updates per run.
+Selected checkpoints are LiDAR-only epoch 9 and fusion epoch 6; final epoch-10
+scores are reported separately. Fusion's selected model has fewer false
+positives but lower recall, not a demonstrated global improvement. The
+[workstream result record](../docs/workstreams/bev-fusion-backbone.md#6d-results-and-prototype-closure)
+preserves metrics, artifact hashes, resources and scope. Existing notebook
+outputs/launch flags are session state, not documentation to commit or a reason
+to rerun training. Use the saved checkpoints for any later inspection.
+
 Install and launch from the repository root:
 
 ```bash

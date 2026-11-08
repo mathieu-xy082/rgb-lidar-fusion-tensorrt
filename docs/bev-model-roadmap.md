@@ -2,7 +2,7 @@
 
 Date: 2026-08-05.
 
-Mise à jour : 2026-11-05.
+Mise à jour : 2026-11-09.
 
 Statut : **design de référence**. Le backbone camera-depth préalable est
 implémenté, évalué sur les pilotes random/blocs 512 frames et clôturé après
@@ -12,8 +12,11 @@ LiDAR est intégrée dans main depuis la release 1.3.0 : piliers, PFN, scatter,
 contexte spatial, inspection conjointe à 20 cm, diagnostic GPU et pilote centre
 Car 410/102 avec revue TP/FN/FP. Le contrat, le bloc de fusion cellule par
 cellule et le backbone spatial commun à trois échelles sont assemblés aux
-encodeurs et à la head centre de diagnostic, avec backward et checkpoints
-testés sur CPU. L'entraînement multimodal et les heads 3D complètes restent à développer.
+encodeurs et à la head centre de diagnostic. Le premier prototype multimodal
+est appris et évalué par étapes : mémorisation quatre frames et deux pilotes
+CUDA de dix epochs sur le split 410/102, avec encodeurs gelés pendant le pilote.
+La comparaison est contrastée, sans gain global établi. La branche reste à
+relire avant intégration ; les heads 3D complètes restent à développer.
 
 Documents liés :
 
@@ -280,15 +283,18 @@ Le [contrat de fusion](workstreams/bev-fusion-backbone.md#fusion-contract)
 fixe maintenant les deux entrées à 32 canaux sur la grille commune, deux
 masques de support distincts et une projection 1x1 de 66 vers 32 canaux.
 Compteurs de pixels, masse de splatting et comptes LiDAR pré-cap restent
-séparés des activations. Un petit backbone multi-échelle commun et la head
-centre existante permettront de valider le raccord avant les heads 3D finales.
+séparés des activations. Le backbone multi-échelle commun et la head centre
+ont validé ce premier raccord appris avant les heads 3D finales.
 Le bloc `BEVFeatureFusion` implémente cette projection, avec conservation des
 compteurs et gradients testés. `SharedBEVBackbone` apporte maintenant une
 pyramide résiduelle 32/64/96, avec retour aligné à la grille initiale et un champ
 théorique de 39/43 cellules par axe selon la phase. `BEVFusionDiagnostic`
 raccorde les encodeurs et la head centre existante, avec supports séparés,
-encodeurs gelés par défaut et chargement de poids audité ; il n'y a pas encore
-de modèle fusionné entraîné sur KITTI.
+encodeurs gelés par défaut et chargement de poids audité. Les deux pilotes
+KITTI sont terminés et comparés ; le best fusion réduit les faux positifs,
+mais perd du rappel. Voir les
+[résultats et limites](workstreams/bev-fusion-backbone.md#6d-results-and-prototype-closure).
+Ce n'est ni un entraînement conjoint de tous les poids ni une détection 3D complète.
 
 ## Phase BEV 3 - Supervision image auxiliaire
 
@@ -385,8 +391,10 @@ dans main depuis la release 1.3.0. Le pilote 410/102 et sa revue qualitative
 clôturent ce prototype, sans valider une qualité de détection finale.
 
 La branche active est `ec/bev-fusion-backbone`. Suivre son
-[workstream](workstreams/bev-fusion-backbone.md#progress) : contrat et bloc de
-fusion, backbone commun et assemblage terminés sur CPU, puis mémorisation quatre frames
-et comparaison LiDAR seul/fusion sur le split sauvegardé. Préserver les
-checkpoints existants et vérifier leurs IDs d'entraînement avant réutilisation.
-Aucun nouveau cycle d'optimisation de la profondeur ni head YOLO n'est requis.
+[workstream](workstreams/bev-fusion-backbone.md#6d-results-and-prototype-closure) :
+les six incréments sont terminés pour le prototype centres, y compris les deux
+runs CUDA et leur comparaison sur le split sauvegardé. À la reprise, relire
+et stabiliser cette branche avant de préciser les heads/cibles/losses 3D finales.
+Préserver les checkpoints et manifestes ; ne pas relancer les pilotes pour
+reconstituer des sorties de notebook. Aucun nouveau cycle d'optimisation de
+la profondeur ni head YOLO n'est requis pour clôturer cette étape.

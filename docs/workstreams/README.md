@@ -14,8 +14,11 @@ devenir une source de vérité générale.
   contrôlés, mesure CPU reproductible. Diagnostic multimodal assemblé avec
   adaptateur CPU, head centre existante et checkpoints/audit distincts.
   Runner quatre frames et notebook `07` disponibles, avec inspection CPU,
-  encodeurs gelés et lancement GPU explicite ; smoke KITTI CPU d'une époque
-  passé. Mémorisation GPU et pilote disjoint restent à valider.
+  encodeurs gelés et lancement GPU explicite. Mémorisation CUDA validée :
+  15 TP, aucun FP/FN ; pic alloué PyTorch 1512,6 MiB. Le pilote disjoint a
+  maintenant son protocole, son audit d'initialisation appariée et son runner
+  streaming 410/102 avec latest/best et reprise. Notebook, runs réels et
+  comparaison restent à faire.
 
 - [Camera-depth data provenance](camera-depth-provenance.md) : correctif intégré
   dans la branche de fusion, nouveau run cinq epochs tracé et inspecté.

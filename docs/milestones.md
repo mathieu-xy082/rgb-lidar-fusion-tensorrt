@@ -216,9 +216,13 @@ ils ne constituent pas un entraînement multimodal KITTI.
 
 Le runner quatre frames et le notebook `07` sont disponibles : encodeurs gelés,
 inspection CPU, logs par batch, GPU en sous-processus et reprise contrôlée.
-Les quatre IDs viennent uniquement du train commun. Un smoke KITTI CPU d'une
-époque passe ; la mémorisation GPU et son budget mémoire restent à vérifier.
-L'incrément suivant sera le pilote 410/102 avec comparaison LiDAR seul.
+Les quatre IDs viennent uniquement du train commun. Le run CUDA de 200 epochs
+retrouve les 15 centres sans FP/FN, avec encodeurs et buffers inchangés ; pic
+alloué PyTorch de 1512,6 MiB. Cela valide la mémorisation, pas la généralisation.
+Le pilote 410/102 dispose de sa configuration commune et d'un audit CPU des
+deux initialisations neuves, avec mêmes poids des nouveaux blocs. Le runner
+streaming, la reprise et les checkpoints latest/best sont testés sur CPU.
+Son notebook et la comparaison réelle LiDAR seul/fusion restent à faire.
 La head centre/offset existante sert de diagnostic, pas de head 3D finale.
 Le [correctif de provenance caméra](workstreams/camera-depth-provenance.md)
 est intégré. Le nouveau run caméra de cinq epochs a été vérifié et inspecté ;

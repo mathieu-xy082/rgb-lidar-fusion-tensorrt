@@ -36,9 +36,11 @@ Le point cloud brut dispose aussi d'un premier PFN/scatter et contexte BEV.
 Le bloc de fusion et le backbone commun multi-échelle sont raccordés aux deux
 encodeurs dans `BEVFusionDiagnostic`, avec une head centre/offset de diagnostic,
 des contrôles de provenance et un format de checkpoint distinct. Les tests CPU
-valident le chemin complet. Le runner et le notebook `07` préparent une
-mémorisation multimodale sur quatre frames du train, encodeurs gelés ; un smoke
-test KITTI CPU d'une époque passe, mais la mémorisation GPU reste à vérifier.
+valident le chemin complet. Le notebook `07` a validé la mémorisation CUDA de
+quatre frames du train : 15 centres retrouvés sans FP/FN, encodeurs gelés.
+Le pilote 410/102 dispose de sa configuration, d'un audit d'initialisation
+appariée et d'un runner par variante avec reprise et checkpoints latest/best.
+Son notebook, les runs réels et la comparaison LiDAR seul/fusion restent à faire.
 Les heads 3D complètes restent à développer. Le
 [contrat de fusion BEV](docs/workstreams/bev-fusion-backbone.md#fusion-contract)
 et son workstream distinguent ces étapes.
@@ -86,7 +88,8 @@ entrées RGB/enriched et les piliers, et expose quatre représentations BEV. Sa
 configuration de modèle est `configs/bev_fusion.json`. Le preset du diagnostic
 est `configs/training/kitti_bev_fusion_overfit.json` ; le
 [notebook 07](notebooks/07_bev_fusion_overfit.ipynb) permet l'inspection CPU puis
-un lancement explicite en sous-processus. Le pilote disjoint reste à développer.
+un lancement explicite en sous-processus. Le pilote disjoint dispose du runner
+`scripts/train_bev_pilot.py` ; son notebook et ses expériences restent à faire.
 
 ### Architecture cible
 

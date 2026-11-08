@@ -8,10 +8,11 @@ Updated: 2026-11-08.
 
 Status: increments 1 to 4 are complete: contract, feature fusion, shared
 three-scale backbone, assembled center diagnostic and checkpoint helpers are
-implemented and CPU-tested. Increment 5 now has an audited overfit runner,
-CPU inspection and notebook `07`; a real-KITTI one-epoch CPU smoke test passes.
-GPU memorization/resource validation and the 512-frame experiments are
-**still pending**. Existing
+implemented and CPU-tested. Increment 5 is closed: the 200-epoch CUDA
+memorization run finds all 15 centers, with frozen encoders and measured memory.
+Increment 6a prepares matched, fresh CPU starts on the canonical 410/102 split;
+6b adds the streaming pilot runner and per-epoch latest/best checkpoints.
+The pilot notebook, real 512-frame runs and comparison are **still pending**. Existing
 standalone encoder architectures/weight keys remain unchanged; the subsequent
 [camera provenance fix](camera-depth-provenance.md) strengthens its runner and analysis.
 
@@ -504,11 +505,11 @@ notebooks, data, source checkpoint files and standalone APIs were not modified.
 - [x] Inspect camera/LiDAR support, separate feature maps, fused features and targets.
 - [x] Freeze both encoders initially (`eval()` plus disabled parameter gradients,
   including fixed PFN BatchNorm statistics); train fusion/backbone/diagnostic head.
-- [ ] Validate four-frame memorization, finite metrics and peak GPU memory at
+- [x] Validate four-frame memorization, finite metrics and peak GPU memory at
   batch 1; retain the current explicitly chosen 2048 MiB preflight guard rather
   than lowering it further to make a run start. This threshold is not a memory guarantee.
-- [ ] If needed, change the training schedule explicitly and record it rather
-  than silently unfreezing encoders; no automatic retry after a CUDA failure.
+- [x] Retain the planned frozen-encoder schedule: no unfreezing, retry or
+  schedule adjustment was needed for the successful 200-epoch control.
 
 Exit criterion: an inspectable small optimization run and a measured resource
 budget, not validation quality. Discard these fitted weights before the pilot.
@@ -567,11 +568,41 @@ exclusions, on an exported index snapshot with clean versioned notebooks.
 The developer's notebook `03` remains untouched and outside this commit;
 the executed `07` was backed up locally before clearing its outputs.
 
+#### Four-frame CUDA result and closure
+
+The developer completed 200 epochs / 800 updates on the four train-only IDs
+and confirmed the before/after inspection. Final training-frame evaluation:
+
+| Metric | Result |
+| --- | --- |
+| Mean loss | 0.097967 (epoch-0 baseline 77.169659) |
+| TP / FP / FN | 15 / 0 / 0 |
+| Precision / recall | 1.0 / 1.0 |
+| Mean matched XY distance | 0.006869 m, memorized targets only |
+| Per-frame TP (`000006`, `000036`, `000052`, `000060`) | 4 / 6 / 4 / 1 |
+| PyTorch peak allocated / reserved | 1512.6 / 2144.0 MiB |
+| Runner elapsed, including preparation/evaluation | about 171 s |
+
+Checkpoint `results/training/kitti_bev_fusion_overfit_4_cuda/checkpoints/latest.pt`
+was loaded on CPU and its embedded metrics match the sidecar. All camera,
+PFN and LiDAR-context parameters and buffers exactly equal the source states,
+including PFN BatchNorm statistics. SHA-256:
+`9238de3ba45ded5216ac2be64feb69152c6f536af852532802bb4eaf0b9e96a4`.
+
+This closes increment 5's optimization/resource diagnostic. The matched error
+is not sensor accuracy, unseen-scene performance or proof of camera benefit.
+Allocator peaks exclude other GPU consumers; elapsed time is not inference
+latency. These fitted fusion/shared/head weights must not initialize the pilot.
+
 ### 6. Scope: disjoint pilot and comparison
 
-- [ ] Reuse the saved 410/102 frame IDs; validate dataset/checkpoint hashes and
+- [x] Prepare a single matched protocol and deterministic fresh initialization
+  for `lidar_only` and `fusion`, with identical new-block state hashes.
+- [x] Reuse the saved 410/102 frame IDs; validate dataset/checkpoint hashes and
   ensure no supervised or depth pretraining used the pilot validation frames.
-- [ ] Use complete available inputs for the center diagnostic by default; depth
+- [x] Implement a streaming runner for each variant, with training-only updates,
+  both-split evaluation, strict resume, progress and latest/best persistence.
+- [x] Use complete available inputs for the center diagnostic by default; depth
   holdout is not required by this loss. Keep any corruption experiment explicit.
 - [ ] Compare matched LiDAR-only versus fused runs with the same shared-backbone
   and head design, initial shared/head weights, split, schedule and evaluation.
@@ -582,6 +613,115 @@ the executed `07` was backed up locally before clearing its outputs.
   report losses, TP/FP/FN, precision/recall and distance over matched centers only.
 - [ ] Save latest/best, inspect validation successes and failures, record GPU
   memory/timing scope and optionally evaluate a gradual encoder-unfreezing stage.
+
+#### 6a. Matched protocol and CPU preparation
+
+`bev_pilot.BEVFusionPilotConfig` and
+`configs/training/kitti_bev_fusion_pilot.json` define one protocol for both runs.
+The initial budget is ten epochs for each variant, batch 1, FP32, Adam learning rate 0.001,
+seed 13, frozen encoders, unchanged 20 cm grid and center matching policy.
+The JSON remains CPU-default and launches no training. No new split is sampled:
+the saved manifest's IDs/order and every file hash are checked, and both
+encoder source partitions must equal that canonical membership exactly.
+
+`prepare_bev_fusion_pilot(config, variant=...)` constructs a fresh CPU model,
+then imports only the normally audited, traced source encoders. Source heads,
+optimizers and four-frame fusion checkpoints are not used. Both variants have
+identical model state at initialization; only `camera_enabled` differs. The
+control skips camera computation and zeroes its features/count/mass/support,
+not the raw LiDAR/context. The full fusion architecture is retained. A SHA-256
+over names/dtypes/shapes/tensor bytes records fresh fusion/backbone/head state.
+
+The read-only audit command is:
+
+```bash
+pdm run python scripts/audit_bev_pilot.py \
+  --output results/analysis/bev_fusion/pilot_preparation.json
+```
+
+Local CPU audit passes with 410 train / 102 validation IDs and recorded camera
+provenance. Both variants' initial new-block SHA-256 is
+`5259c57bca088a730750c3625548f41c20f5cf40af042647970afd55cd670b18`.
+Proposed output subdirectories are `lidar_only/` and `fusion/` beneath
+`results/training/kitti_bev_fusion_pilot_512/`. Preparation creates neither
+training directories nor optimizers, and performs no CUDA/preflight/training.
+The optional report is an audit artifact, not a training checkpoint.
+Validation: 102 targeted tests pass across pilot preparation, overfit execution
+and assembled-model/checkpoint APIs. Pilot tests cover exact paired state,
+unchanged raw LiDAR context, camera skipping/zero support, seed/hash sensitivity,
+saved membership/order/content, source partition identity, overfit-source
+refusal and CPU-only audit CLI. Executed notebooks were left untouched.
+
+#### 6b. Streaming train/validation runner
+
+`bev_data.BEVFusionFrameSource` assembles one frame at a time. Its paths and
+canonical manifest are retained, not a 512-frame decoded/padded cache. Every
+image/scan/calibration/label quartet is hashed before and after preprocessing.
+Native calibration and native image dimensions build the unchanged targets;
+labels never filter inputs. Complete scans feed image splatting and pillars.
+Empty scans are supported; missing labels are errors, never assumed negatives.
+
+`bev_trainval.run_bev_fusion_pilot` uses 6a's fresh initialization, trains only
+saved train IDs, and evaluates both splits in eval/no-grad mode at epoch 0 and
+after each completed epoch. Both encoders and BN remain frozen. Valid no-Car
+frames contribute negative supervision; wholly unknown frames are skipped and
+reported. A split without usable supervision raises, rather than reporting
+perfect scores. Epoch ordering derives from the common seed and epoch.
+
+The explicit CLI runs one variant at a time (do not run both concurrently on
+the local 4 GiB GPU):
+
+```bash
+CUDA_LAUNCH_BLOCKING=1 pdm run python scripts/train_bev_pilot.py \
+  --variant lidar_only --device cuda
+# Run fusion separately, with the same config and total epoch target:
+CUDA_LAUNCH_BLOCKING=1 pdm run python scripts/train_bev_pilot.py \
+  --variant fusion --device cuda
+```
+
+These commands start training; they were not executed during this increment.
+The agreed total target remains **10 epochs per variant**, batch 1, FP32. CUDA
+has an explicit 2048 MiB free-memory preflight, with no fallback/retry or CUDA
+cleanup after failure. JSON events identify phase, epoch, processed/total,
+optimizer steps and evaluation results; `grad_norm` is measured before clipping.
+
+Each variant writes under its own subdirectory: `metrics.json`, `split.json`,
+`pretraining.json`, `run_metadata.json`, `checkpoints/latest.pt` and `best.pt`.
+`latest.pt` carries Adam/history plus the authoritative CPU best-state snapshot;
+`best.pt` is inference-only, selected by minimum validation loss including
+epoch 0, earliest epoch on ties. Interrupted best/JSON sidecars can be repaired
+from latest even when no further epochs are requested. No live GPU weights are
+swapped while writing best. The optional `best` envelope field preserves older
+overfit/inference checkpoint compatibility and is validated on load.
+
+Resume accepts only this variant's latest pilot checkpoint. Task, variant,
+protocol, full split/current files, history and best-selection consistency are
+checked on CPU before preflight. Encoder source files are not reopened. Place
+the model first, then create/load Adam with the existing `foreach=False` policy.
+Epochs/device/CPU threads/memory guard/log interval may change; epochs are the
+total target. A new architecture, learning rate, split, or variant is not resume.
+Best checkpoints and four-frame checkpoints cannot resume this pilot.
+
+Resource metadata records current-invocation runner time and PyTorch peak
+allocated/reserved memory, not whole-device usage or inference latency.
+Checkpoint writes occur after a complete train/validation epoch, so updates
+since the last saved epoch are lost on interruption.
+
+CPU validation includes actual streaming reads of `000006` (train, 4 Cars),
+`000009` (validation, 1 Car), and `000388` (validation, no Car); all targets
+exactly match the native diagnostic. The ignored data-only report is
+`results/analysis/bev_fusion/pilot_stream_smoke.json`. Synthetic CPU runner/CLI
+tests cover both variants, exact continuous/resumed state, train-only updates,
+immutable evaluation/frozen encoders, empty clouds, negatives/unknowns, mutation
+checks, best-state recovery and refusals before CUDA. No real 512-frame
+optimization or GPU training was launched.
+Regression: **936 passed, one CUDA-only skip**, without test exclusions, in an
+exported validation copy containing these source changes and clean versioned
+notebooks. Developer execution state in notebooks `03` and `07` was untouched.
+
+Remaining increment: **6c**, opt-in notebook, matched comparison and validation
+inspection, then the actual two ten-epoch runs. Do not relaunch notebook `07`
+as a substitute for the disjoint pilot.
 
 Exit criterion: a reproducible train/validation workflow and an honest
 comparison, including a neutral/negative result if fusion does not help. The

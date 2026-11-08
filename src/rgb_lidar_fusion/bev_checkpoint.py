@@ -207,6 +207,7 @@ def save_bev_fusion_checkpoint(
     path: str | Path, *, model: BEVFusionDiagnostic, split: dict, epoch: int, step: int,
     optimizer=None, pretraining: dict | None = None, metrics: list[dict] | None = None,
     training_metadata: dict | None = None,
+    best: dict | None = None,
 ) -> None:
     """Atomic new-kind checkpoint; optimizer present means resumable, otherwise inference."""
 
@@ -230,6 +231,9 @@ def save_bev_fusion_checkpoint(
         payload["optimizer_state_dict"] = optimizer.state_dict()
     if training_metadata is not None:
         payload["training_metadata"] = json.loads(json.dumps(training_metadata, allow_nan=False))
+    if best is not None:
+        _validate_best_state(model, best, epoch=epoch, step=step)
+        payload["best"] = best
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -254,7 +258,21 @@ def load_bev_fusion_checkpoint(path: str | Path):
     if payload.get("trainable_names") != [n for n, p in model.named_parameters() if p.requires_grad]:
         raise ValueError("checkpoint trainable parameter policy differs from its configuration.")
     model.load_state_dict(payload["model_state_dict"], strict=True)
+    if "best" in payload:
+        _validate_best_state(model, payload["best"], epoch=payload["epoch"], step=payload["step"])
     return model, payload
+
+
+def _validate_best_state(model, best, *, epoch, step):
+    if not isinstance(best, dict) or any(
+        isinstance(best.get(key), bool) or not isinstance(best.get(key), int)
+        or not 0 <= best[key] <= upper for key, upper in (("epoch", epoch), ("step", step))
+    ):
+        raise ValueError("invalid best checkpoint counters.")
+    value = best.get("val_loss")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError("best checkpoint val_loss must be finite.")
+    _validate_state(model, best.get("model_state_dict", {}))
 
 
 def restore_bev_fusion_training(path: str | Path, *, model: BEVFusionDiagnostic, optimizer, split: dict) -> dict:

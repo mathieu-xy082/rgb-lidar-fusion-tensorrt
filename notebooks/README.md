@@ -58,6 +58,18 @@ audits, actual four-frame IDs, matching settings and resource measurements.
 RMS is not object confidence; a low loss without TP/recall is not memorization
 success. Discard these fitted weights before the later disjoint comparison.
 
+The completed local 200-epoch CUDA control finds all 15 centers with no FP/FN;
+the source encoder parameters/buffers remain unchanged. This closes the
+memorization check, not generalization or camera benefit. The next pilot's
+protocol and fresh matched-start audit are in `bev_pilot` and
+`configs/training/kitti_bev_fusion_pilot.json`. The streaming runner is
+`scripts/train_bev_pilot.py`, with an explicit `--variant lidar_only` or
+`--variant fusion`; its training notebook is not yet available. The shared
+budget is 10 epochs per variant, with complete inputs and frozen encoders.
+Latest/best checkpoints are separate under each variant's directory; only
+latest can resume Adam. Do not extend `07` to learn the 512 frames or reuse
+its fitted weights. Do not launch both GPU variants concurrently.
+
 Install and launch from the repository root:
 
 ```bash

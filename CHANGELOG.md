@@ -49,6 +49,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Install the existing `visualization` dependency group in GitHub validation,
+  force/check headless Agg rendering, and skip only graphics-dependent BEV
+  tests when Matplotlib is absent from a minimal local environment. Add a
+  missing-Matplotlib regression without uninstalling the local dependency.
 - Record ordered camera-depth IDs, train/validation membership, triplet SHA-256
   and effective protocol in new atomic `camera_depth_v2` checkpoints/split.json.
   Check resumes before device initialization and verify sample reads; use saved

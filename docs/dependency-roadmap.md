@@ -25,6 +25,14 @@ This tooling environment is separate from the project's `.venv` and
 regenerating the project lockfile, or clearing the project cache. The
 older-lockfile warning is not the cause of this import failure.
 
+The GitHub validation job installs `dev`, `ml` and `visualization` from the
+frozen project lockfile. It sets `MPLBACKEND=Agg` and checks the Matplotlib
+runtime before tests, so CPU rendering/PNG tests actually execute on the
+headless runner. Local minimal environments can omit `visualization`; only
+rendering-dependent tests use `pytest.importorskip`, not whole training modules.
+Notebook/Jupyter dependencies are not needed for these tests. The dependency
+lock-check job remains independent of the visualization runtime.
+
 ### `dev` group
 
 - `pytest` — unit and smoke validation.

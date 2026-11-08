@@ -56,6 +56,8 @@ jobs:
   validate:
     name: Test, smoke, and demo validation
     runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,7 +73,7 @@ jobs:
           path: |
             .pdm-cache
             .venv
-          key: pdm-${{ runner.os }}-py3.11-${{ hashFiles('pdm.lock') }}
+          key: pdm-${{ runner.os }}-py3.11-ml-vis-${{ hashFiles('pdm.lock') }}
           restore-keys: |
             pdm-${{ runner.os }}-py3.11-
 
@@ -84,7 +86,11 @@ jobs:
           pdm --version
 
       - name: Install project dependencies
-        run: pdm install -G dev -G ml --frozen-lockfile
+        run: pdm install -G dev -G ml -G visualization --frozen-lockfile
+
+      - name: Check headless visualization runtime
+        run: |
+          pdm run python -c "import matplotlib.pyplot; import matplotlib; assert matplotlib.get_backend().lower() == 'agg'; print(matplotlib.__version__, matplotlib.get_backend())"
 
       - name: Run validation suite
         run: pdm run validate

@@ -197,7 +197,7 @@ def test_preflight_failure_has_no_cuda_cleanup_or_retry(config, monkeypatch):
 
 
 def test_cpu_inspection_no_mutation_and_real_plot(config):
-    import matplotlib
+    matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -220,7 +220,7 @@ def test_cpu_inspection_no_mutation_and_real_plot(config):
 
 
 def test_notebook_cells_execute_on_cpu_and_training_is_opt_in(config):
-    import matplotlib
+    matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
